@@ -1,0 +1,192 @@
+/* ============================================================
+   ReadLynx — Design Tokens
+   Warm mountain morning (light) · Moonlit mountain evening (dark)
+   Every value used by the app lives here. No random colors.
+   ============================================================ */
+
+:root {
+  /* ---------- Typography ---------- */
+  --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+
+  --font-size-xs: 12px;
+  --font-size-sm: 13px;
+  --font-size-md: 14px;
+  --font-size-lg: 16px;
+  --font-size-xl: 20px;
+  --font-size-2xl: 24px;
+  --font-size-3xl: 32px;
+
+  --line-height-tight: 1.25;
+  --line-height-normal: 1.5;
+  --line-height-relaxed: 1.7;
+
+  /* ---------- Spacing (8px system) ---------- */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 32px;
+  --space-8: 40px;
+  --space-9: 48px;
+  --space-10: 64px;
+  --space-11: 96px;
+
+  /* ---------- Radius ---------- */
+  --radius-button: 999px;
+  --radius-pill: 999px;
+  --radius-input: 20px;
+  --radius-card: 28px;
+  --radius-sidebar: 30px;
+  --radius-dialog: 30px;
+  --radius-cover: 16px;
+  --radius-medium: 16px;
+  --radius-small: 12px;
+
+  /* ---------- Shadows (soft only) ---------- */
+  --shadow-sm: 0 8px 20px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 16px 40px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 24px 60px rgba(0, 0, 0, 0.1);
+
+  /* ---------- Glass ---------- */
+  --blur-glass: 18px;
+
+  /* ---------- Transitions ---------- */
+  --transition-fast: 150ms ease;
+  --transition-base: 250ms ease;
+  --transition-slow: 400ms ease;
+
+  /* ---------- Z-index ---------- */
+  --z-background: -1;
+  --z-base: 0;
+  --z-header: 10;
+  --z-sidebar: 20;
+  --z-overlay: 30;
+  --z-dialog: 40;
+  --z-toast: 50;
+
+  /* ---------- Layout ---------- */
+  --sidebar-width: 272px;
+  --panel-width: 320px;
+
+  /* ==========================================================
+     LIGHT THEME — calm mountain morning
+     ========================================================== */
+
+  /* Surfaces */
+  --color-bg: #f7f2ea;
+  --color-bg-secondary: #efe3d2;
+  --color-card: rgba(255, 248, 240, 0.72);
+  --color-glass: rgba(255, 250, 245, 0.58);
+  --color-hover: rgba(255, 255, 255, 0.18);
+  --color-border: rgba(255, 255, 255, 0.38);
+
+  /* Text */
+  --color-text: #322b26;
+  --color-text-secondary: #6f675e;
+  --color-text-muted: #9b9289;
+
+  /* Palette */
+  --color-primary: #5b6b50;
+  --color-olive: #737b58;
+  --color-moss: #8a8c67;
+  --color-terracotta: #b9794c;
+  --color-warm: #8c6248;
+  --color-dark: #4c382b;
+
+  /* Iconography */
+  --color-icon: #5b6b50;
+  --color-icon-inactive: #8f8b82;
+
+  /* Status */
+  --color-progress: #7a8764;
+  --color-success: #6e8965;
+  --color-success-soft: rgba(110, 137, 101, 0.14);
+  --color-warning: #c18b4d;
+
+  /* Effects */
+  --color-track: rgba(50, 43, 38, 0.1);
+  --color-glow: rgba(91, 107, 80, 0.16);
+  --color-active: rgba(115, 123, 88, 0.18);
+  --color-on-primary: #fbf7f0;
+  --color-on-cover: #fbf7f0;
+  --color-selection: rgba(138, 140, 103, 0.3);
+  --color-scroll-thumb: rgba(143, 139, 130, 0.45);
+  --color-bg-overlay: linear-gradient(
+    180deg,
+    rgba(247, 242, 234, 0.28) 0%,
+    rgba(247, 242, 234, 0.58) 100%
+  );
+
+  /* Book cover gradients */
+  --cover-forest: linear-gradient(160deg, #5b6b50 0%, #737b58 100%);
+  --cover-moss: linear-gradient(160deg, #8a8c67 0%, #5b6b50 100%);
+  --cover-terracotta: linear-gradient(160deg, #b9794c 0%, #8c6248 100%);
+  --cover-navy: linear-gradient(160deg, #435542 0%, #2c3a57 100%);
+  --cover-sand: linear-gradient(160deg, #efe3d2 0%, #cbb99b 100%);
+  --cover-moon: linear-gradient(160deg, #8fa8c7 0%, #6c839f 100%);
+}
+
+/* ==========================================================
+   DARK THEME — moonlit mountain evening
+   ========================================================== */
+html[data-theme="dark"] {
+  /* Surfaces */
+  --color-bg: #162033;
+  --color-bg-secondary: #1f2b43;
+  --color-card: rgba(26, 34, 53, 0.72);
+  --color-glass: rgba(30, 40, 62, 0.6);
+  --color-hover: rgba(255, 255, 255, 0.1);
+  --color-border: rgba(255, 255, 255, 0.08);
+
+  /* Text */
+  --color-text: #eef2f7;
+  --color-text-secondary: #c5ccd8;
+  --color-text-muted: #95a0b2;
+
+  /* Palette */
+  --color-primary: #8fa8c7;
+  --color-olive: #8a9272;
+  --color-moss: #435542;
+  --color-terracotta: #b9794c;
+  --color-warm: #8c6248;
+  --color-dark: #d9e0ee;
+
+  /* Iconography */
+  --color-icon: #d8dfea;
+  --color-icon-inactive: #7d8798;
+
+  /* Status */
+  --color-progress: #b7be91;
+  --color-success: #8daf89;
+  --color-success-soft: rgba(141, 175, 137, 0.16);
+  --color-warning: #c18b4d;
+
+  /* Effects */
+  --color-track: rgba(238, 242, 247, 0.12);
+  --color-glow: rgba(143, 168, 199, 0.18);
+  --color-active: rgba(138, 146, 114, 0.16);
+  --color-on-primary: #162033;
+  --color-on-cover: #eef2f7;
+  --color-selection: rgba(143, 168, 199, 0.3);
+  --color-scroll-thumb: rgba(125, 135, 152, 0.45);
+  --color-bg-overlay: linear-gradient(
+    180deg,
+    rgba(22, 32, 51, 0.32) 0%,
+    rgba(22, 32, 51, 0.62) 100%
+  );
+
+  /* Book cover gradients */
+  --cover-forest: linear-gradient(160deg, #435542 0%, #2c3a57 100%);
+  --cover-moss: linear-gradient(160deg, #8a9272 0%, #435542 100%);
+  --cover-terracotta: linear-gradient(160deg, #b9794c 0%, #6e4f38 100%);
+  --cover-navy: linear-gradient(160deg, #2c3a57 0%, #162033 100%);
+  --cover-sand: linear-gradient(160deg, #8a9272 0%, #435542 100%);
+  --cover-moon: linear-gradient(160deg, #8fa8c7 0%, #2c3a57 100%);
+}

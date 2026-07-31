@@ -1,0 +1,111 @@
+/* ============================================================
+   ReadLynx — Global styles
+   ============================================================ */
+
+html {
+  color-scheme: light;
+}
+
+html[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+body {
+  font-family: var(--font-sans);
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-regular);
+  line-height: var(--line-height-relaxed);
+  color: var(--color-text);
+  background-color: var(--color-bg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  transition:
+    background-color var(--transition-base) ease,
+    color var(--transition-base) ease;
+}
+
+::selection {
+  background: var(--color-selection);
+  color: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+/* ---------- Scrollbars ---------- */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-scroll-thumb);
+  border-radius: var(--radius-pill);
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-muted);
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+
+/* ---------- Background layers ---------- */
+.app-background {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-background);
+  pointer-events: none;
+}
+
+.app-background-layer {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  opacity: 0;
+  will-change: opacity;
+  transition: opacity var(--transition-slow) ease;
+}
+
+.app-background-layer--day {
+  background-image: url("../assets/backgrounds/day-background.png");
+}
+
+.app-background-layer--night {
+  background-image: url("../assets/backgrounds/night-background.png");
+}
+
+html[data-theme="light"] .app-background-layer--day,
+html[data-theme="light"] .app-background-layer--night {
+  opacity: 0;
+}
+
+html[data-theme="light"] .app-background-layer--day {
+  opacity: 1;
+}
+
+html[data-theme="dark"] .app-background-layer--day,
+html[data-theme="dark"] .app-background-layer--night {
+  opacity: 0;
+}
+
+html[data-theme="dark"] .app-background-layer--night {
+  opacity: 1;
+}
+
+.app-background-overlay {
+  position: absolute;
+  inset: 0;
+  background: var(--color-bg-overlay);
+}
