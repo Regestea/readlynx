@@ -2,13 +2,18 @@
   "name": "readlynx",
   "private": true,
   "version": "0.0.0",
+  "type": "module",
   "main": "electron/main.ts",
   "scripts": {
     "dev": "concurrently \"vite --strictPort\" \"wait-on http://localhost:5173 && cross-env NODE_OPTIONS=--import=tsx/esm electron .\"",
     "build": "vite build",
-    "start": "electron ."
+    "start": "electron .",
+    "typecheck": "tsc -b",
+    "lint": "eslint ."
   },
   "dependencies": {
+    "@fontsource/inter": "^5.3.0",
+    "lucide-react": "^1.28.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7"
   },
