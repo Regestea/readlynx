@@ -1,0 +1,58 @@
+.wrap {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.swatch {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-sm);
+  transition:
+    transform var(--transition-base) ease,
+    box-shadow var(--transition-base) ease;
+}
+
+.swatch:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.swatchActive {
+  transform: scale(1.12);
+  box-shadow:
+    var(--shadow-md),
+    0 0 0 3px var(--color-glow);
+}
+
+.swatchCheck {
+  color: var(--color-on-cover);
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35));
+}
+
+.customSwatch {
+  background: conic-gradient(
+    from 180deg,
+    #ff6b6b,
+    #ffd93d,
+    #6bcb77,
+    #4d96ff,
+    #c86bff,
+    #ff6b6b
+  );
+}
+
+.colorInput {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  margin: 0;
+  pointer-events: none;
+}

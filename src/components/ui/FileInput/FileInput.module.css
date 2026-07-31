@@ -1,0 +1,130 @@
+.wrap {
+  position: relative;
+}
+
+.input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  margin: 0;
+}
+
+.drop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-8) var(--space-6);
+  border: 2px dashed var(--color-border);
+  border-radius: var(--radius-input);
+  background: var(--color-glass);
+  transition:
+    border-color var(--transition-base) ease,
+    background-color var(--transition-base) ease,
+    box-shadow var(--transition-base) ease;
+}
+
+.drop:hover {
+  border-color: var(--color-primary);
+  background: var(--color-card);
+}
+
+.input:focus-visible + .drop {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 4px var(--color-glow);
+}
+
+.dropIcon {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  margin-bottom: var(--space-2);
+  border-radius: 50%;
+  background: var(--color-active);
+  color: var(--color-icon);
+}
+
+.dropTitle {
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+}
+
+.dropMeta {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+/* ---------- Selected file ---------- */
+
+.fileRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-medium);
+  background: var(--color-glass);
+  box-shadow: var(--shadow-sm);
+}
+
+.preview {
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
+  border-radius: 10px;
+  object-fit: cover;
+}
+
+.fileIcon {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
+  border-radius: 10px;
+  background: var(--color-active);
+  color: var(--color-icon);
+}
+
+.fileMeta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.fileName {
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fileSize {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.remove {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  color: var(--color-text-muted);
+  transition:
+    background-color var(--transition-base) ease,
+    color var(--transition-base) ease;
+}
+
+.remove:hover {
+  background: var(--color-hover);
+  color: var(--color-terracotta);
+}

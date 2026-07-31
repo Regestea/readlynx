@@ -1,0 +1,66 @@
+.wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.input {
+  width: 100%;
+  padding: 13px 44px 13px 20px;
+  background: var(--color-glass);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-input);
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-regular);
+  color: var(--color-text);
+  appearance: textfield;
+  -moz-appearance: textfield;
+  backdrop-filter: blur(var(--blur-glass));
+  -webkit-backdrop-filter: blur(var(--blur-glass));
+  box-shadow: var(--shadow-sm);
+  transition:
+    border-color var(--transition-base) ease,
+    box-shadow var(--transition-base) ease,
+    background-color var(--transition-base) ease;
+}
+
+.input::-webkit-outer-spin-button,
+.input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  background: var(--color-card);
+  box-shadow:
+    var(--shadow-sm),
+    0 0 0 4px var(--color-glow);
+}
+
+.steppers {
+  position: absolute;
+  right: 10px;
+  display: flex;
+  flex-direction: column;
+  pointer-events: none;
+}
+
+.step {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 18px;
+  border-radius: 6px;
+  color: var(--color-text-muted);
+  pointer-events: auto;
+  transition:
+    background-color var(--transition-fast) ease,
+    color var(--transition-fast) ease;
+}
+
+.step:hover {
+  background: var(--color-hover);
+  color: var(--color-primary);
+}

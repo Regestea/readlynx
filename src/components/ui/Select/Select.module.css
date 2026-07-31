@@ -1,0 +1,52 @@
+.wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.select {
+  width: 100%;
+  padding: 16px 48px 16px 20px;
+  background: var(--color-glass);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-input);
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-regular);
+  color: var(--color-text);
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+  backdrop-filter: blur(var(--blur-glass));
+  -webkit-backdrop-filter: blur(var(--blur-glass));
+  box-shadow: var(--shadow-sm);
+  transition:
+    border-color var(--transition-base) ease,
+    box-shadow var(--transition-base) ease,
+    background-color var(--transition-base) ease;
+}
+
+.select:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  background: var(--color-card);
+  box-shadow:
+    var(--shadow-sm),
+    0 0 0 4px var(--color-glow);
+}
+
+.select option {
+  background: var(--color-bg-secondary);
+  color: var(--color-text);
+}
+
+.chevron {
+  position: absolute;
+  right: 20px;
+  color: var(--color-text-muted);
+  pointer-events: none;
+  transition: color var(--transition-base) ease;
+}
+
+.wrapper:focus-within .chevron {
+  color: var(--color-primary);
+}
