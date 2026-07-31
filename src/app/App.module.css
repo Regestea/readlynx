@@ -1,0 +1,35 @@
+.shell {
+  position: relative;
+  z-index: var(--z-base);
+  display: grid;
+  grid-template-columns: var(--sidebar-width) minmax(0, 1fr) var(--panel-width);
+  gap: var(--space-6);
+  width: 100%;
+  max-width: 1920px;
+  height: 100vh;
+  margin: 0 auto;
+  padding: var(--space-6);
+}
+
+.main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  min-width: 0;
+  min-height: 0;
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: var(--space-1);
+}
+
+@media (max-width: 1380px) {
+  .shell {
+    grid-template-columns: 244px minmax(0, 1fr) 288px;
+  }
+}
