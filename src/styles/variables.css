@@ -61,6 +61,7 @@
   --transition-fast: 150ms ease;
   --transition-base: 250ms ease;
   --transition-slow: 400ms ease;
+  --transition-collapse: 600ms cubic-bezier(0.4, 0, 0.2, 1);
 
   /* ---------- Z-index ---------- */
   --z-background: -1;
@@ -73,6 +74,7 @@
 
   /* ---------- Layout ---------- */
   --sidebar-width: 272px;
+  --sidebar-width-collapsed: 80px;
   --panel-width: 320px;
 
   /* ==========================================================

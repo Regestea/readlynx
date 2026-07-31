@@ -11,6 +11,7 @@ import styles from "./App.module.css";
 
 export default function App() {
   const [activeId, setActiveId] = useState("home");
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const isHome = activeId === "home";
 
   return (
@@ -22,7 +23,12 @@ export default function App() {
       </div>
 
       <div className={styles.shell}>
-        <Sidebar activeId={activeId} onNavigate={setActiveId} />
+        <Sidebar
+          activeId={activeId}
+          onNavigate={setActiveId}
+          collapsed={sidebarCollapsed}
+          onToggle={() => setSidebarCollapsed((collapsed) => !collapsed)}
+        />
 
         <div className={styles.main}>
           <Header />

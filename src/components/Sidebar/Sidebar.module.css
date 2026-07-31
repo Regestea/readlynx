@@ -2,6 +2,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-6);
+  width: var(--sidebar-width);
   min-height: 0;
   padding: var(--space-6);
   background: var(--color-card);
@@ -10,10 +11,20 @@
   box-shadow: var(--shadow-md);
   backdrop-filter: blur(var(--blur-glass));
   -webkit-backdrop-filter: blur(var(--blur-glass));
+  overflow-x: hidden;
   overflow-y: auto;
+  will-change: width;
   transition:
+    width var(--transition-collapse),
+    padding var(--transition-collapse),
     background-color var(--transition-base) ease,
     border-color var(--transition-base) ease;
+}
+
+@media (max-width: 1380px) {
+  .sidebar {
+    width: 244px;
+  }
 }
 
 /* ---------- Brand ---------- */
@@ -101,7 +112,9 @@
   transition:
     background-color var(--transition-base) ease,
     color var(--transition-base) ease,
-    transform var(--transition-base) ease;
+    transform var(--transition-base) ease,
+    gap var(--transition-collapse),
+    padding var(--transition-collapse);
 }
 
 .navItem:hover {
@@ -142,6 +155,14 @@
   background: var(--color-terracotta);
 }
 
+/* ---------- Footer ---------- */
+
+.footer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
 /* ---------- Profile ---------- */
 
 .profile {
@@ -176,4 +197,154 @@
 .profileIcon {
   color: var(--color-icon-inactive);
   flex-shrink: 0;
+}
+
+/* ---------- Collapse toggle ---------- */
+
+.collapseToggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: 11px 16px;
+  border-radius: var(--radius-medium);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-muted);
+  transition:
+    background-color var(--transition-base) ease,
+    color var(--transition-base) ease;
+}
+
+.collapseToggle:hover {
+  background: var(--color-hover);
+  color: var(--color-text);
+}
+
+.toggleIcon {
+  transition: transform var(--transition-collapse);
+}
+
+/* ==========================================================
+   COLLAPSED — icon rail only (animated)
+   ========================================================== */
+
+/* Text that collapses to zero width while fading out */
+.brandText,
+.profileText,
+.navItemLabel,
+.collapseLabel {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  transition:
+    opacity 300ms ease,
+    max-width var(--transition-collapse);
+}
+
+.brandText {
+  max-width: 160px;
+}
+
+.profileText {
+  flex: 1 1 auto;
+  max-width: 130px;
+}
+
+.navItemLabel {
+  max-width: 130px;
+}
+
+.collapseLabel {
+  max-width: 80px;
+}
+
+.sectionLabel {
+  overflow: hidden;
+  transition:
+    max-height var(--transition-collapse),
+    opacity 300ms ease,
+    padding var(--transition-collapse),
+    margin var(--transition-collapse);
+}
+
+.profileIcon {
+  transition:
+    width var(--transition-collapse),
+    height var(--transition-collapse),
+    opacity 300ms ease;
+}
+
+.brand,
+.profile,
+.collapseToggle {
+  transition: gap var(--transition-collapse);
+}
+
+/* ---------- Collapsed state ---------- */
+
+.collapsed {
+  width: var(--sidebar-width-collapsed);
+  padding: var(--space-6) var(--space-3);
+}
+
+.collapsed .toggleIcon {
+  transform: rotate(180deg);
+}
+
+.collapsed .brandText,
+.collapsed .profileText,
+.collapsed .navItemLabel,
+.collapsed .collapseLabel {
+  max-width: 0;
+  opacity: 0;
+}
+
+.collapsed .brand,
+.collapsed .profile,
+.collapsed .collapseToggle {
+  gap: 0;
+}
+
+.collapsed .brand {
+  justify-content: center;
+  padding: var(--space-2) 0 var(--space-4);
+}
+
+.collapsed .sectionLabel {
+  max-height: 0;
+  opacity: 0;
+  padding: 0;
+  margin: 0;
+}
+
+.collapsed .navItem {
+  justify-content: center;
+  gap: 0;
+  padding: 12px 0;
+}
+
+.collapsed .navItem:hover {
+  transform: none;
+}
+
+.collapsed .activeDot {
+  display: none;
+}
+
+.collapsed .profile {
+  justify-content: center;
+  padding: var(--space-2);
+}
+
+.collapsed .profileIcon {
+  width: 0;
+  height: 0;
+  opacity: 0;
+}
+
+.collapsed .collapseToggle {
+  padding: 11px;
 }

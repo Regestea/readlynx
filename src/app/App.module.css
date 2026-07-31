@@ -2,7 +2,7 @@
   position: relative;
   z-index: var(--z-base);
   display: grid;
-  grid-template-columns: var(--sidebar-width) minmax(0, 1fr) var(--panel-width);
+  grid-template-columns: auto minmax(0, 1fr) var(--panel-width);
   gap: var(--space-6);
   width: 100%;
   max-width: 1920px;
@@ -30,6 +30,6 @@
 
 @media (max-width: 1380px) {
   .shell {
-    grid-template-columns: 244px minmax(0, 1fr) 288px;
+    grid-template-columns: auto minmax(0, 1fr) 288px;
   }
 }

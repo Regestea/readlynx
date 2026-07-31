@@ -5,6 +5,7 @@ import {
   Home,
   Library,
   NotebookPen,
+  PanelLeft,
   Settings,
   Users,
 } from "lucide-react";
@@ -48,7 +49,7 @@ function NavItem({ label, Icon, active, onClick }: NavItemProps) {
       onClick={onClick}
     >
       <Icon size={18} strokeWidth={1.8} className={styles.navIcon} aria-hidden="true" />
-      <span>{label}</span>
+      <span className={styles.navItemLabel}>{label}</span>
       {active && <span className={styles.activeDot} aria-hidden="true" />}
     </button>
   );
@@ -57,11 +58,16 @@ function NavItem({ label, Icon, active, onClick }: NavItemProps) {
 interface SidebarProps {
   activeId: string;
   onNavigate: (id: string) => void;
+  collapsed: boolean;
+  onToggle: () => void;
 }
 
-export function Sidebar({ activeId, onNavigate }: SidebarProps) {
+export function Sidebar({ activeId, onNavigate, collapsed, onToggle }: SidebarProps) {
   return (
-    <aside className={`${styles.sidebar} animate-slide-in`} aria-label="Primary">
+    <aside
+      className={`${styles.sidebar} ${collapsed ? styles.collapsed : ""}`}
+      aria-label="Primary"
+    >
       <div className={styles.brand}>
         <span className={styles.logo} aria-hidden="true">
           <BookOpen size={22} strokeWidth={1.8} />
@@ -98,13 +104,27 @@ export function Sidebar({ activeId, onNavigate }: SidebarProps) {
         </div>
       </nav>
 
-      <div className={styles.profile}>
-        <Avatar name="Avery Lane" size={40} />
-        <div className={styles.profileText}>
-          <span className={styles.profileName}>Avery Lane</span>
-          <span className={styles.profileMeta}>Reader · 42 books</span>
+      <div className={styles.footer}>
+        <div className={styles.profile}>
+          <Avatar name="Avery Lane" size={40} />
+          <div className={styles.profileText}>
+            <span className={styles.profileName}>Avery Lane</span>
+            <span className={styles.profileMeta}>Reader · 42 books</span>
+          </div>
+          <Settings size={16} strokeWidth={1.8} className={styles.profileIcon} aria-hidden="true" />
         </div>
-        <Settings size={16} strokeWidth={1.8} className={styles.profileIcon} aria-hidden="true" />
+
+        <button
+          type="button"
+          className={styles.collapseToggle}
+          onClick={onToggle}
+          aria-expanded={!collapsed}
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+        >
+          <PanelLeft size={18} strokeWidth={1.8} className={styles.toggleIcon} aria-hidden="true" />
+          <span className={styles.collapseLabel}>Collapse</span>
+        </button>
       </div>
     </aside>
   );
