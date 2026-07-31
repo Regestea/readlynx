@@ -1,0 +1,36 @@
+.linear {
+  width: 100%;
+  background: var(--color-track);
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+}
+
+.linearFill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--color-progress), var(--color-olive));
+  border-radius: inherit;
+  transition: width var(--transition-slow) ease;
+}
+
+.circularWrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.circular {
+  transform: rotate(-90deg);
+}
+
+.circularTrack {
+  fill: none;
+  stroke: var(--color-track);
+}
+
+.circularFill {
+  fill: none;
+  stroke: var(--color-progress);
+  stroke-linecap: round;
+  transition: stroke-dashoffset var(--transition-slow) ease;
+}

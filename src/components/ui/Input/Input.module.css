@@ -1,0 +1,76 @@
+.wrapper {
+  position: relative;
+  width: 100%;
+  display: flex;
+  align-items: center;
+}
+
+.leading {
+  position: absolute;
+  left: 20px;
+  display: inline-flex;
+  align-items: center;
+  color: var(--color-text-muted);
+  pointer-events: none;
+  z-index: 1;
+  transition: color var(--transition-base) ease;
+}
+
+.trailing {
+  position: absolute;
+  right: 16px;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.input {
+  width: 100%;
+  padding: 16px 20px;
+  background: var(--color-glass);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-input);
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-regular);
+  color: var(--color-text);
+  backdrop-filter: blur(var(--blur-glass));
+  -webkit-backdrop-filter: blur(var(--blur-glass));
+  box-shadow: var(--shadow-sm);
+  appearance: none;
+  transition:
+    border-color var(--transition-base) ease,
+    box-shadow var(--transition-base) ease,
+    background-color var(--transition-base) ease;
+}
+
+.input::placeholder {
+  color: var(--color-text-muted);
+  opacity: 1;
+}
+
+.input::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.withLeading {
+  padding-left: 52px;
+}
+
+.withTrailing {
+  padding-right: 64px;
+}
+
+.wrapper:focus-within .input {
+  border-color: var(--color-primary);
+  background: var(--color-card);
+  box-shadow:
+    var(--shadow-sm),
+    0 0 0 4px var(--color-glow);
+}
+
+.wrapper:focus-within .leading {
+  color: var(--color-primary);
+}

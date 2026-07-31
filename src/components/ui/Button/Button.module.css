@@ -1,0 +1,94 @@
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: 12px 24px;
+  border-radius: var(--radius-button);
+  border: 1px solid transparent;
+  font-family: inherit;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1;
+  white-space: nowrap;
+  user-select: none;
+  cursor: pointer;
+  transition:
+    transform var(--transition-base) ease,
+    box-shadow var(--transition-base) ease,
+    background-color var(--transition-base) ease,
+    border-color var(--transition-base) ease,
+    color var(--transition-base) ease,
+    filter var(--transition-base) ease;
+}
+
+.button:hover {
+  transform: translateY(-2px);
+}
+
+.button:active {
+  transform: translateY(0) scale(0.97);
+}
+
+.button:disabled {
+  opacity: 0.55;
+  cursor: default;
+  transform: none;
+}
+
+/* ---------- Variants ---------- */
+
+.primary {
+  background: linear-gradient(135deg, var(--color-primary), var(--color-olive));
+  color: var(--color-on-primary);
+  box-shadow:
+    var(--shadow-md),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+
+.primary:hover {
+  box-shadow: var(--shadow-lg);
+  filter: brightness(1.06);
+}
+
+.secondary {
+  background: var(--color-glass);
+  border-color: var(--color-border);
+  color: var(--color-text);
+  box-shadow: var(--shadow-sm);
+  backdrop-filter: blur(var(--blur-glass));
+  -webkit-backdrop-filter: blur(var(--blur-glass));
+}
+
+.secondary:hover {
+  background: var(--color-card);
+}
+
+.ghost {
+  background: transparent;
+  color: var(--color-text-secondary);
+  padding: 10px 16px;
+}
+
+.ghost:hover {
+  background: var(--color-hover);
+  color: var(--color-text);
+}
+
+.icon {
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border-radius: var(--radius-pill);
+  background: var(--color-glass);
+  border-color: var(--color-border);
+  color: var(--color-icon);
+  box-shadow: var(--shadow-sm);
+  backdrop-filter: blur(var(--blur-glass));
+  -webkit-backdrop-filter: blur(var(--blur-glass));
+}
+
+.icon:hover {
+  background: var(--color-card);
+  color: var(--color-primary);
+}
