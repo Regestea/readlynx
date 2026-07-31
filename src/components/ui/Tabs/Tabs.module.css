@@ -1,0 +1,54 @@
+.tabs {
+  display: flex;
+  flex-direction: column;
+}
+
+.tablist {
+  display: inline-flex;
+  gap: var(--space-1);
+  align-self: flex-start;
+  max-width: 100%;
+  overflow-x: auto;
+  padding: var(--space-1);
+  background: var(--color-glass);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  box-shadow: var(--shadow-sm);
+  scrollbar-width: none;
+}
+
+.tablist::-webkit-scrollbar {
+  display: none;
+}
+
+.tab {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 9px 18px;
+  border-radius: var(--radius-pill);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  transition:
+    background-color var(--transition-base) ease,
+    color var(--transition-base) ease,
+    box-shadow var(--transition-base) ease;
+}
+
+.tab:hover {
+  color: var(--color-text);
+}
+
+.tabActive {
+  background: var(--color-card);
+  color: var(--color-text);
+  font-weight: var(--font-weight-semibold);
+  box-shadow: var(--shadow-sm);
+}
+
+.panel {
+  padding-top: var(--space-5);
+  animation: fadeUp var(--transition-base) ease both;
+}
