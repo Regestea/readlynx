@@ -1,4 +1,5 @@
 .frame {
+  display: block;
   position: relative;
   width: 100%;
   border-radius: var(--radius-medium);

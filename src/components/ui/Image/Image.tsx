@@ -21,7 +21,7 @@ export function Image({ src, alt, aspectRatio = "4 / 3", className = "" }: Image
   }
 
   return (
-    <div className={`${styles.frame} ${className}`} style={{ aspectRatio }}>
+    <span className={`${styles.frame} ${className}`} style={{ aspectRatio }}>
       {src && (
         <img
           src={src}
@@ -32,11 +32,11 @@ export function Image({ src, alt, aspectRatio = "4 / 3", className = "" }: Image
         />
       )}
       {status !== "loaded" && (
-        <div className={styles.placeholder} role="img" aria-label={alt}>
+        <span className={styles.placeholder} role="img" aria-label={alt}>
           <ImageIcon size={22} strokeWidth={1.8} aria-hidden="true" />
           <span>{status === "loading" ? "Loading…" : "No image"}</span>
-        </div>
+        </span>
       )}
-    </div>
+    </span>
   );
 }
