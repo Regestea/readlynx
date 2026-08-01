@@ -5,6 +5,7 @@ export interface TableColumn<T> {
   key: string;
   header: string;
   align?: "left" | "right";
+  headerDir?: "rtl" | "ltr";
   render: (row: T) => ReactNode;
 }
 
@@ -23,6 +24,7 @@ export function Table<T>({ columns, rows }: TableProps<T>) {
               <th
                 key={column.key}
                 scope="col"
+                dir={column.headerDir}
                 className={`${styles.headCell} ${column.align === "right" ? styles.right : ""}`}
               >
                 {column.header}

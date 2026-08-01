@@ -7,6 +7,7 @@ export interface ListItemData {
   label: string;
   description?: string;
   trailing?: ReactNode;
+  dir?: "rtl" | "ltr";
 }
 
 interface ListProps {
@@ -24,7 +25,9 @@ export function List({ items }: ListProps) {
             </span>
           )}
           <div className={styles.body}>
-            <span className={styles.label}>{item.label}</span>
+            <span className={styles.label} dir={item.dir}>
+              {item.label}
+            </span>
             {item.description && <span className={styles.description}>{item.description}</span>}
           </div>
           {item.trailing && <span className={styles.trailing}>{item.trailing}</span>}
