@@ -1,0 +1,124 @@
+.host {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  color: var(--color-text);
+  font-size: var(--font-size-md);
+  line-height: var(--line-height-relaxed);
+}
+
+.h1 {
+  margin: 0;
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: -0.01em;
+  line-height: var(--line-height-tight);
+}
+
+.h2 {
+  margin: 0;
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: -0.01em;
+  line-height: var(--line-height-tight);
+}
+
+.h3 {
+  margin: 0;
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-tight);
+}
+
+.h4 {
+  margin: 0;
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semibold);
+}
+
+.p {
+  margin: 0;
+}
+
+.link {
+  color: var(--color-primary);
+  font-weight: var(--font-weight-medium);
+  text-decoration: none;
+}
+
+.link:hover {
+  text-decoration: underline;
+}
+
+.inlineCode {
+  padding: 2px 6px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-glass);
+  font-family: ui-monospace, "Cascadia Mono", "SF Mono", Consolas, Menlo, monospace;
+  font-size: 0.9em;
+}
+
+.blockquote {
+  margin: 0;
+  padding: var(--space-3) var(--space-5);
+  border-left: 3px solid var(--color-primary);
+  border-radius: 0 var(--radius-medium) var(--radius-medium) 0;
+  background: var(--color-glass);
+  color: var(--color-text-secondary);
+  font-style: italic;
+}
+
+.blockquote p {
+  margin: 0;
+}
+
+.hr {
+  height: 1px;
+  margin: 0;
+  border: none;
+  background: var(--color-border);
+}
+
+.tasks {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.taskItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-medium);
+  background: var(--color-glass);
+  border: 1px solid var(--color-border);
+}
+
+.taskBox {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  border-radius: 6px;
+  border: 1.5px solid var(--color-primary);
+  color: var(--color-on-primary);
+  background: transparent;
+}
+
+.taskBox:has(> svg) {
+  background: var(--color-primary);
+}
+
+.host :global(strong) {
+  font-weight: var(--font-weight-semibold);
+}
+
+.host :global(em) {
+  font-style: italic;
+}
