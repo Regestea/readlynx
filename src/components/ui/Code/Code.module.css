@@ -1,0 +1,26 @@
+.host {
+  width: 100%;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-medium);
+  background: var(--color-card);
+  box-shadow: var(--shadow-sm);
+  backdrop-filter: blur(var(--blur-glass));
+  -webkit-backdrop-filter: blur(var(--blur-glass));
+  overflow: auto;
+}
+
+.host :global(pre),
+.host :global(code) {
+  /* Latin stays monospace; Persian/Arabic glyphs fall through to an
+     Arabic-capable font (browser picks per-glyph from the stack). */
+  font-family:
+    ui-monospace,
+    "Cascadia Mono",
+    "SF Mono",
+    Consolas,
+    Menlo,
+    "Vazirmatn",
+    "Noto Sans Arabic",
+    "Segoe UI",
+    monospace !important;
+}

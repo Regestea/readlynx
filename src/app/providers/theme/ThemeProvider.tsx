@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useLayoutEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import type { Theme } from "../../../shared/types";
 import {
@@ -10,7 +10,9 @@ import {
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setTheme] = useState<Theme>(() => getInitialTheme());
 
-  useEffect(() => {
+  // useLayoutEffect so the data-theme attribute is applied before any
+  // child effect (e.g. Mermaid reading theme tokens) runs.
+  useLayoutEffect(() => {
     document.documentElement.dataset.theme = theme;
     try {
       localStorage.setItem(STORAGE_KEY, theme);

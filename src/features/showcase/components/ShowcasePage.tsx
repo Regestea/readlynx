@@ -18,6 +18,7 @@ import { BookCard } from "../../../components/BookCard/BookCard";
 import { Button } from "../../../components/ui/Button/Button";
 import { Card } from "../../../components/ui/Card/Card";
 import { Checkbox } from "../../../components/ui/Checkbox/Checkbox";
+import { Code } from "../../../components/ui/Code/Code";
 import { ColorSelect } from "../../../components/ui/ColorSelect/ColorSelect";
 import { FileInput } from "../../../components/ui/FileInput/FileInput";
 import { Image } from "../../../components/ui/Image/Image";
@@ -25,6 +26,7 @@ import { Input } from "../../../components/ui/Input/Input";
 import { List } from "../../../components/ui/List/List";
 import type { ListItemData } from "../../../components/ui/List/List";
 import { Modal } from "../../../components/ui/Modal/Modal";
+import { Mermaid } from "../../../components/ui/Mermaid/Mermaid";
 import { NumberInput } from "../../../components/ui/NumberInput/NumberInput";
 import { Progress } from "../../../components/ui/Progress/Progress";
 import { QuoteCard } from "../../../components/QuoteCard/QuoteCard";
@@ -99,6 +101,60 @@ const DEMO_TABS: TabItem[] = [
   { id: "highlights", label: "Highlights", icon: <Highlighter size={16} strokeWidth={1.8} />, content: <List items={HIGHLIGHT_ITEMS} /> },
   { id: "bookmarks", label: "Bookmarks", icon: <Bookmark size={16} strokeWidth={1.8} />, content: <List items={BOOKMARK_ITEMS} /> },
 ];
+
+const READING_FLOW: string = `
+graph TD
+  A[Pick a book] --> B{Genre?}
+  B -->|Fiction| C[Read aloud]
+  B -->|Nature| D[Take notes]
+  C --> E[Highlight quotes]
+  D --> E
+  E --> F[Add to collection]
+  F --> G(Finished)
+`;
+
+const SYNC_SEQUENCE: string = `
+sequenceDiagram
+  participant U as Reader
+  participant L as Library
+  participant C as Cloud
+  U->>L: Open book
+  L->>C: Fetch latest progress
+  C-->>L: Page 196 of 288
+  L-->>U: Resume reading
+`;
+
+const SAMPLE_TS_CODE: string = `
+// محاسبهی سهماهه مطالعه — reading stats for this month
+export function readingStreak(days: DayLog[]): number {
+  let streak = 0;
+  // اگر امروز هم خواندهاید، زنجیره را ادامه بدهید
+  for (const day of days) {
+    if (day.minutesRead > 0) {
+      streak += 1;
+    } else {
+      break;
+    }
+  }
+  return streak;
+}
+`;
+
+const SAMPLE_CSS_CODE: string = `
+.sidebar {
+  width: var(--sidebar-width);
+  transition: width 400ms ease;
+  backdrop-filter: blur(var(--blur-glass));
+}
+`;
+
+const SAMPLE_PERSIAN_CODE: string = `
+// خواندن روزانه — ساخته شده با عشق
+export function dailyGoal(minutes: number): string {
+  // در یک روز عالی، حداقل سی دقیقه بخوانید
+  return minutes >= 30 ? "عالی!" : "بیشتر بخوانید";
+}
+`;
 
 const TABLE_COLUMNS: TableColumn<Book>[] = [
   { key: "title", header: "Title", render: (book) => <span className={styles.cellTitle}>{book.title}</span> },
@@ -393,6 +449,23 @@ export function ShowcasePage() {
           <Select options={GENRE_OPTIONS} aria-label="Book genre" />
           <NumberInput value={goal} min={1} max={2000} step={1} onChange={setGoal} label="Total pages" />
         </Modal>
+      </Section>
+
+      {/* ---------- Mermaid ---------- */}
+      <Section title="Mermaid" description="Renders diagram source in the app theme.">
+        <div className={styles.stack}>
+          <Mermaid code={READING_FLOW} ariaLabel="Reading journey flowchart" />
+          <Mermaid code={SYNC_SEQUENCE} ariaLabel="Reading progress sync sequence" />
+        </div>
+      </Section>
+
+      {/* ---------- Code ---------- */}
+      <Section title="Code" description="Prism syntax highlighting on the glass surface, following the theme. Persian and Arabic comments render with font fallback.">
+        <div className={styles.stack}>
+          <Code code={SAMPLE_TS_CODE} language="typescript" showLineNumbers />
+          <Code code={SAMPLE_CSS_CODE} language="css" />
+          <Code code={SAMPLE_PERSIAN_CODE} language="typescript" />
+        </div>
       </Section>
 
       {/* ---------- QuoteCard ---------- */}
