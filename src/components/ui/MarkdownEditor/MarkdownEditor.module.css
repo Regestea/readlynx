@@ -1,0 +1,552 @@
+/* ============================================================
+   MarkdownEditor — Lexical WYSIWYG editor
+   ============================================================ */
+
+.root {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-medium);
+  background: var(--color-card);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+  transition: box-shadow var(--transition-base);
+}
+
+.root:focus-within {
+  box-shadow: var(--shadow-md);
+}
+
+.root.darkMode {
+  background: #162033;
+  color: #eef2f7;
+}
+
+.root.fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-dialog);
+  border-radius: 0;
+  border: none;
+}
+
+.root.focusMode .toolbar {
+  opacity: 0;
+  pointer-events: none;
+  height: 0;
+  padding: 0;
+  border-bottom: none;
+}
+
+/* ---------- Toolbar ---------- */
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-glass);
+  transition:
+    opacity var(--transition-base),
+    height var(--transition-base),
+    padding var(--transition-base);
+}
+
+.toolbarGroup {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.toolbarSpacer {
+  flex: 1;
+}
+
+.toolButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: var(--radius-small);
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition:
+    background var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.toolButton:hover:not(:disabled) {
+  background: var(--color-hover);
+  color: var(--color-text);
+}
+
+.toolButton:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.toolButtonActive {
+  background: var(--color-active);
+  color: var(--color-primary);
+}
+
+.menu {
+  position: relative;
+}
+
+.menuButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  padding: 0 var(--space-2);
+  border: none;
+  border-radius: var(--radius-small);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition:
+    background var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.menuButton:hover,
+.menuButton[aria-expanded="true"] {
+  background: var(--color-hover);
+  color: var(--color-text);
+}
+
+.menuPanel {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: var(--z-overlay);
+  min-width: 200px;
+  padding: var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-small);
+  background: var(--color-bg);
+  box-shadow: var(--shadow-md);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.menuItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-2) var(--space-2);
+  border: none;
+  border-radius: var(--radius-small);
+  background: transparent;
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-sm);
+  text-align: start;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.menuItem:hover {
+  background: var(--color-hover);
+}
+
+.menuItemIcon {
+  display: inline-flex;
+  width: 16px;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-muted);
+}
+
+.menuItemLabel {
+  flex: 1;
+}
+
+.menuItemShortcut {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+}
+
+.menuSection {
+  padding: var(--space-2);
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.menuSection:first-child {
+  border-top: none;
+}
+
+.menuSectionLabel {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.menuSelect {
+  width: 100%;
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-small);
+  background: var(--color-card);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-sm);
+}
+
+.swatchRow {
+  display: flex;
+  gap: var(--space-1);
+  flex-wrap: wrap;
+}
+
+.swatch {
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--color-border);
+  border-radius: 50%;
+  cursor: pointer;
+  transition: transform var(--transition-fast);
+}
+
+.swatch:hover {
+  transform: scale(1.15);
+}
+
+.swatchActive {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 1px;
+}
+
+.blockSelect {
+  height: 28px;
+  max-width: 150px;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-small);
+  background: var(--color-card);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-sm);
+}
+
+.hiddenInput {
+  display: none;
+}
+
+/* ---------- Editing surface ---------- */
+
+.shell {
+  flex: 1;
+  min-height: 320px;
+  overflow-y: auto;
+  position: relative;
+}
+
+.contentEditable {
+  min-height: 320px;
+  padding: var(--space-6) var(--space-7);
+  outline: none;
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-lg);
+  line-height: var(--line-height-relaxed);
+  caret-color: var(--color-primary);
+}
+
+.darkMode .contentEditable {
+  color: #eef2f7;
+}
+
+.placeholder {
+  position: absolute;
+  top: var(--space-6);
+  left: var(--space-7);
+  color: var(--color-text-muted);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-lg);
+  pointer-events: none;
+  user-select: none;
+}
+
+/* ---------- Editor content (Lexical theme) ---------- */
+
+.editorParagraph {
+  margin: 0 0 0.75em;
+}
+
+.heading1 {
+  font-size: 2em;
+  font-weight: var(--font-weight-bold);
+  margin: 0.9em 0 0.5em;
+  line-height: var(--line-height-tight);
+  color: var(--color-dark);
+}
+
+.heading2 {
+  font-size: 1.5em;
+  font-weight: var(--font-weight-semibold);
+  margin: 0.9em 0 0.5em;
+  line-height: var(--line-height-tight);
+  color: var(--color-dark);
+}
+
+.heading3 {
+  font-size: 1.25em;
+  font-weight: var(--font-weight-semibold);
+  margin: 0.9em 0 0.5em;
+  line-height: var(--line-height-tight);
+  color: var(--color-dark);
+}
+
+.heading4,
+.heading5,
+.heading6 {
+  font-size: 1.05em;
+  font-weight: var(--font-weight-semibold);
+  margin: 0.9em 0 0.5em;
+  line-height: var(--line-height-tight);
+  color: var(--color-dark);
+}
+
+.editorQuote {
+  margin: 0.9em 0;
+  padding: 0.4em 1em;
+  border-inline-start: 3px solid var(--color-moss);
+  color: var(--color-text-secondary);
+  font-style: italic;
+}
+
+.editorCode {
+  margin: 0.9em 0;
+  padding: var(--space-4);
+  border-radius: var(--radius-small);
+  background: var(--color-bg-secondary);
+  font-family: "Cascadia Code", "Fira Code", Consolas, monospace;
+  font-size: var(--font-size-sm);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-x: auto;
+}
+
+.codeHighlight {
+  color: var(--color-text);
+}
+
+.textBold {
+  font-weight: var(--font-weight-bold);
+}
+
+.textItalic {
+  font-style: italic;
+}
+
+.textUnderline {
+  text-decoration: underline;
+}
+
+.textStrikethrough {
+  text-decoration: line-through;
+}
+
+.textHighlight {
+  background: var(--color-selection);
+  border-radius: 2px;
+}
+
+.textSuperscript {
+  vertical-align: super;
+  font-size: 0.75em;
+}
+
+.textSubscript {
+  vertical-align: sub;
+  font-size: 0.75em;
+}
+
+.textCode {
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+  background: var(--color-bg-secondary);
+  font-family: "Cascadia Code", "Fira Code", Consolas, monospace;
+  font-size: 0.85em;
+}
+
+.listUl,
+.listOl {
+  margin: 0 0 0.9em;
+  padding-inline-start: 1.6em;
+}
+
+.listItem {
+  margin: 0.25em 0;
+}
+
+.nestedListItem {
+  list-style-type: none;
+}
+
+.listItemChecked,
+.listItemUnchecked {
+  list-style-type: none;
+}
+
+.listItemChecked::before,
+.listItemUnchecked::before {
+  content: "";
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  margin-inline-end: 0.5em;
+  border: 1.5px solid var(--color-primary);
+  border-radius: 4px;
+  vertical-align: -2px;
+}
+
+.listItemChecked::before {
+  background: var(--color-primary);
+  box-shadow: inset 0 0 0 3px var(--color-bg);
+}
+
+.listItemIndent {
+  margin-inline-start: 1.6em;
+}
+
+.editorLink {
+  color: var(--color-terracotta);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.editorHr {
+  border: none;
+  border-top: 1px solid var(--color-border);
+  margin: 1.2em 0;
+}
+
+/* ---------- Tables ---------- */
+
+.table {
+  border-collapse: collapse;
+  margin: 0.9em 0;
+  width: 100%;
+  max-width: 100%;
+  font-size: var(--font-size-sm);
+}
+
+.tableRow {
+  border-top: 1px solid var(--color-border);
+}
+
+.tableRow:first-child {
+  border-top: none;
+}
+
+.tableCell {
+  padding: 0.4em 0.7em;
+  border-inline-end: 1px solid var(--color-border);
+  min-width: 60px;
+  vertical-align: top;
+}
+
+.tableCell:last-child {
+  border-inline-end: none;
+}
+
+.tableCellHeader {
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-dark);
+  background: var(--color-bg-secondary);
+}
+
+.tableCellPrimary {
+  background: var(--color-bg-secondary);
+}
+
+.tableCellSecondary {
+  background: transparent;
+}
+
+/* ---------- Image decorator ---------- */
+
+.imageFigure {
+  margin: 1em 0;
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+}
+
+.image {
+  display: block;
+  border-radius: var(--radius-small);
+  cursor: pointer;
+}
+
+.imageSelected {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+  border-radius: var(--radius-small);
+}
+
+.imageResizeHandle {
+  position: absolute;
+  bottom: -6px;
+  right: -6px;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--color-bg);
+  border-radius: 50%;
+  background: var(--color-primary);
+  cursor: ew-resize;
+  padding: 0;
+}
+
+.imageCaption {
+  margin-top: var(--space-2);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  text-align: center;
+}
+
+/* ---------- EPUB export dialog ---------- */
+
+.epubList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.epubRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-small);
+  background: var(--color-card);
+}
+
+.epubPath {
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  overflow-wrap: anywhere;
+}

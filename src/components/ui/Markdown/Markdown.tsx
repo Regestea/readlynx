@@ -159,6 +159,7 @@ function taskList(node: unknown) {
   );
 }
 
+/* eslint-disable @typescript-eslint/no-unused-vars */
 const components: Components = {
   h1: ({ children, node: _node, ...props }) => (
     <h1 className={styles.h1} {...props} {...dirProps(children)}>

@@ -26,6 +26,7 @@ import { Input } from "../../../components/ui/Input/Input";
 import { List } from "../../../components/ui/List/List";
 import type { ListItemData } from "../../../components/ui/List/List";
 import { Markdown } from "../../../components/ui/Markdown/Markdown";
+import { MarkdownEditor } from "../../../components/ui/MarkdownEditor";
 import { Modal } from "../../../components/ui/Modal/Modal";
 import { Mermaid } from "../../../components/ui/Mermaid/Mermaid";
 import { NumberInput } from "../../../components/ui/NumberInput/NumberInput";
@@ -156,6 +157,37 @@ export function dailyGoal(minutes: number): string {
   return minutes >= 30 ? "عالی!" : "بیشتر بخوانید";
 }
 `;
+
+const EDITOR_SAMPLE_MARKDOWN: string = `# Mountain Journal
+
+A WYSIWYG editor on top of **Lexical** — this document is converted from Markdown when the page loads.
+
+## What works
+
+- Bold, *italic*, ~strikethrough~, \`inline code\` and ==highlights==
+- [Links](https://lexical.dev) and checklists
+- Fenced code blocks with syntax highlighting
+
+\`\`\`ts
+export function greet(name: string): string {
+  return \`Hello, \${name}!\`;
+}
+\`\`\`
+
+> [!info]
+> Try the File menu: export this document as Markdown, HTML or an EPUB book.
+
+## Reading goals
+
+| Book | Pages | Done |
+| ---- | ----- | ---- |
+| The Midnight Library | 320 | Yes |
+| Persian Miniatures | 412 | No |
+
+- [x] Read chapter one
+- [ ] Write book summary
+- [ ] Export the EPUB`;
+
 
 const markdownSections: string[] = [
   `# 🚀 نمونه کامل Markdown
@@ -697,6 +729,13 @@ export function ShowcasePage() {
           {markdownSections.map((section, index) => (
             <Markdown key={index} content={section} />
           ))}
+        </div>
+      </Section>
+
+      {/* ---------- MarkdownEditor ---------- */}
+      <Section title="MarkdownEditor" description="WYSIWYG Lexical editor — edit rich content, then export Markdown, HTML or an EPUB 3 (XHTML + OPF) book from the File menu.">
+        <div className={`${styles.stack} ${styles.stackFull}`}>
+          <MarkdownEditor initialMarkdown={EDITOR_SAMPLE_MARKDOWN} />
         </div>
       </Section>
 
