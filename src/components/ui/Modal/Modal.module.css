@@ -11,6 +11,15 @@
   animation: fadeIn var(--transition-base) ease both;
 }
 
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
 .dialog {
   display: flex;
   flex-direction: column;
@@ -23,7 +32,25 @@
   border: 1px solid var(--color-border);
   border-radius: var(--radius-dialog);
   box-shadow: var(--shadow-lg);
-  animation: cardAppear var(--transition-base) ease both;
+  animation: popIn 420ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+@keyframes popIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.7) translateY(24px);
+  }
+  55% {
+    opacity: 1;
+    transform: scale(1.06) translateY(-4px);
+  }
+  75% {
+    transform: scale(0.97) translateY(2px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
 }
 
 .head {
