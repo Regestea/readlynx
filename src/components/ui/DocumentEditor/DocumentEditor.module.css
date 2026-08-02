@@ -332,6 +332,9 @@
 }
 
 .editorCode {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
   margin: 0.9em 0;
   padding: var(--space-4);
   border-radius: var(--radius-small);
@@ -345,6 +348,64 @@
 
 .codeHighlight {
   color: var(--color-text);
+}
+
+/* ---------- Syntax highlighting tokens ---------- */
+
+.tokenComment,
+.tokenProlog,
+.tokenCdata,
+.tokenDoctype {
+  color: var(--syntax-comment);
+  font-style: italic;
+}
+
+.tokenKeyword,
+.tokenAtRule,
+.tokenRule,
+.tokenImportant {
+  color: var(--syntax-keyword);
+}
+
+.tokenString,
+.tokenChar,
+.tokenUrl,
+.tokenRegex {
+  color: var(--syntax-string);
+}
+
+.tokenNumber,
+.tokenBoolean,
+.tokenConstant {
+  color: var(--syntax-number);
+}
+
+.tokenFunction,
+.tokenParameter {
+  color: var(--syntax-function);
+}
+
+.tokenProperty,
+.tokenTag,
+.tokenSelector,
+.tokenVariable,
+.tokenDeleted,
+.tokenEntity,
+.tokenNamedEntity {
+  color: var(--syntax-property);
+}
+
+.tokenOperator,
+.tokenPunctuation,
+.tokenNamespace {
+  color: var(--syntax-operator);
+}
+
+.tokenClass,
+.tokenMaybeClassName,
+.tokenSymbol,
+.tokenInserted {
+  color: var(--syntax-class);
 }
 
 .textBold {
@@ -364,8 +425,14 @@
 }
 
 .textHighlight {
+  background: transparent;
+  border-radius: 0.3rem;
+}
+
+.contentEditable :global(mark) {
   background: var(--color-selection);
-  border-radius: 2px;
+  border-radius: 0.3rem;
+  color: inherit;
 }
 
 .textSuperscript {
@@ -379,9 +446,10 @@
 }
 
 .textCode {
-  padding: 0.1em 0.35em;
-  border-radius: 4px;
-  background: var(--color-bg-secondary);
+  padding: 0.1em 0.4em;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-glass);
   font-family: "Cascadia Code", "Fira Code", Consolas, monospace;
   font-size: 0.85em;
 }
