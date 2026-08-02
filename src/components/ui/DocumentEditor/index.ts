@@ -3,6 +3,14 @@ export type { DocumentEditorProps } from "./DocumentEditor";
 export { EditorProvider } from "./EditorProvider";
 export { useEditorAPI, useToolbarState } from "./context";
 export {
+  PAGE_FORMATS,
+  PAGE_MARGIN_X,
+  PAGE_MARGIN_Y,
+  ZOOM_OPTIONS,
+  pageContentHeight,
+  type PageFormat,
+} from "./constants";
+export {
   EMPTY_TOOLBAR_STATE,
   type BlockType,
   type CalloutTone,

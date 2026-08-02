@@ -51,3 +51,22 @@ export const HEADING_OPTIONS = [
 ] as const;
 
 export const PLACEHOLDER_TEXT = "Start writing…";
+
+/* ---------- Paged document ---------- */
+
+export type PageFormat = "a4" | "letter";
+
+export const PAGE_FORMATS: Record<PageFormat, { width: number; height: number }> = {
+  a4: { width: 794, height: 1123 },
+  letter: { width: 816, height: 1056 },
+};
+
+export const PAGE_MARGIN_X = 80;
+export const PAGE_MARGIN_Y = 72;
+
+export const ZOOM_OPTIONS = [0.5, 0.75, 1, 1.25, 1.5] as const;
+
+export function pageContentHeight(format: PageFormat): number {
+  return PAGE_FORMATS[format].height - PAGE_MARGIN_Y * 2;
+}
+
