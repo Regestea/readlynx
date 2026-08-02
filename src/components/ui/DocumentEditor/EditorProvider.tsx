@@ -32,11 +32,13 @@ import { $getSelectionStyleValueForProperty } from "@lexical/selection";
 import { $convertFromMarkdownString, $convertToMarkdownString } from "@lexical/markdown";
 import { mdTransformers } from "./plugins/MarkdownPlugin";
 import { AutoFocusPlugin } from "./plugins/AutoFocusPlugin";
+import { AutoDirectionPlugin } from "./plugins/AutoDirectionPlugin";
 import { MarkdownPlugin } from "./plugins/MarkdownPlugin";
 import { ShortcutsPlugin } from "./plugins/ShortcutsPlugin";
 import { exportEpub } from "./exporters/epubExporter";
 import { exportHtml } from "./exporters/htmlExporter";
 import { createEditorTheme } from "./theme";
+import { isRtlDominant } from "./utils/direction";
 import { CalloutNode } from "./nodes/CalloutNode";
 import { CustomBlockNode } from "./nodes/CustomBlockNode";
 import { ImageNode } from "./nodes/ImageNode";
@@ -93,6 +95,22 @@ function computeToolbarState(canUndo: boolean, canRedo: boolean): ToolbarState {
     } else {
       const type = element.getType();
       state.blockType = mapTypeToBlockType(type, element);
+    }
+    const format = element.getFormat();
+    if (format === 2) {
+      state.alignment = "center";
+    } else if (format === 3) {
+      state.alignment = "right";
+    } else if (format === 4) {
+      state.alignment = "justify";
+    } else if (format === 1) {
+      state.alignment = "left";
+    } else if (element.getDirection() === "rtl") {
+      state.alignment = "right";
+    } else if (element.getDirection() === null && isRtlDominant(element.getTextContent())) {
+      state.alignment = "right";
+    } else {
+      state.alignment = "left";
     }
   }
 
@@ -297,6 +315,7 @@ function EditorCore({
       <TablePlugin />
       <MarkdownPlugin shortcuts />
       <ShortcutsPlugin onSave={onSave} />
+      <AutoDirectionPlugin />
       <AutoFocusPlugin />
       <EditorApiBridge apiRef={apiRef} historyState={historyState}>
         {children}

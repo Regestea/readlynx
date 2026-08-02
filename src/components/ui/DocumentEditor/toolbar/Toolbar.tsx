@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import {
+  AlignCenter,
+  AlignLeft,
+  AlignRight,
   Check,
   ChevronDown,
   Code,
@@ -23,6 +26,7 @@ import {
   $getSelection,
   $isRangeSelection,
   $setTextFormat,
+  FORMAT_ELEMENT_COMMAND,
 } from "lexical";
 import { $patchStyleText, $setBlocksType } from "@lexical/selection";
 import { $createHeadingNode, $createQuoteNode } from "@lexical/rich-text";
@@ -166,6 +170,12 @@ const LINE_TYPE_OPTIONS: { value: BlockType; label: string; icon: ReactNode }[] 
   { value: "ul", label: "Bullet list", icon: <List size={15} strokeWidth={2} aria-hidden="true" /> },
   { value: "ol", label: "Numbered list", icon: <ListOrdered size={15} strokeWidth={2} aria-hidden="true" /> },
   { value: "check", label: "Checklist", icon: <ListChecks size={15} strokeWidth={2} aria-hidden="true" /> },
+];
+
+const ALIGN_OPTIONS: { value: "left" | "center" | "right"; label: string; icon: ReactNode }[] = [
+  { value: "left", label: "Align left", icon: <AlignLeft size={15} strokeWidth={2} aria-hidden="true" /> },
+  { value: "center", label: "Align center", icon: <AlignCenter size={15} strokeWidth={2} aria-hidden="true" /> },
+  { value: "right", label: "Align right", icon: <AlignRight size={15} strokeWidth={2} aria-hidden="true" /> },
 ];
 
 export function Toolbar({ fullscreen, onToggleFullscreen }: ToolbarProps) {
@@ -329,6 +339,10 @@ export function Toolbar({ fullscreen, onToggleFullscreen }: ToolbarProps) {
     });
   };
 
+  const applyAlignment = (alignment: "left" | "center" | "right") => {
+    editor.dispatchCommand(FORMAT_ELEMENT_COMMAND, alignment);
+  };
+
   return (
     <div className={styles.toolbar} role="toolbar" aria-label="Formatting tools">
       <div className={styles.toolbarGroup}>
@@ -487,6 +501,27 @@ export function Toolbar({ fullscreen, onToggleFullscreen }: ToolbarProps) {
 
       <div className={styles.toolbarGroup}>
         <TextFormatButtons state={state} onToggleLink={onToggleLink} />
+      </div>
+
+      <div className={styles.toolbarGroup}>
+        {ALIGN_OPTIONS.map(({ value, label, icon }) => (
+          <button
+            key={value}
+            type="button"
+            className={[
+              styles.toolButton,
+              state.alignment === value ? styles.toolButtonActive : "",
+            ]
+              .filter(Boolean)
+              .join(" ")}
+            title={label}
+            aria-label={label}
+            aria-pressed={state.alignment === value}
+            onClick={() => applyAlignment(value)}
+          >
+            {icon}
+          </button>
+        ))}
       </div>
 
       <div className={styles.toolbarGroup}>
