@@ -18,25 +18,21 @@
   box-shadow: var(--shadow-md);
 }
 
-.root.darkMode {
-  background: #162033;
-  color: #eef2f7;
-}
-
 .root.fullscreen {
   position: fixed;
-  inset: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
   z-index: var(--z-dialog);
   border-radius: 0;
   border: none;
+  background: var(--color-bg);
 }
 
-.root.focusMode .toolbar {
-  opacity: 0;
+.fullscreenSpacer {
+  width: 100%;
   pointer-events: none;
-  height: 0;
-  padding: 0;
-  border-bottom: none;
 }
 
 /* ---------- Toolbar ---------- */
@@ -268,10 +264,6 @@
   caret-color: var(--color-primary);
 }
 
-.darkMode .contentEditable {
-  color: #eef2f7;
-}
-
 .placeholder {
   position: absolute;
   top: var(--space-6);
@@ -452,6 +444,7 @@
   background: var(--color-glass);
   font-family: "Cascadia Code", "Fira Code", Consolas, monospace;
   font-size: 0.85em;
+  color: var(--syntax-keyword);
 }
 
 .listUl {

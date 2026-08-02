@@ -51,6 +51,7 @@ import {
 interface EditorProviderProps {
   children: ReactNode;
   initialMarkdown?: string;
+  initialState?: string | null;
   editable?: boolean;
   onSave?: () => void;
   apiRef?: RefObject<EditorAPI | null>;
@@ -223,6 +224,7 @@ function EditorApiBridge({
 export function EditorProvider({
   children,
   initialMarkdown,
+  initialState,
   editable = true,
   onSave,
   apiRef,
@@ -257,7 +259,7 @@ export function EditorProvider({
 
   return (
     <LexicalComposer initialConfig={config}>
-      <EditorCore initialMarkdown={initialMarkdown} onSave={onSave} apiRef={apiRef}>
+      <EditorCore initialMarkdown={initialMarkdown} initialState={initialState} onSave={onSave} apiRef={apiRef}>
         {children}
       </EditorCore>
     </LexicalComposer>
@@ -267,11 +269,13 @@ export function EditorProvider({
 function EditorCore({
   children,
   initialMarkdown,
+  initialState,
   apiRef,
   onSave,
 }: {
   children: ReactNode;
   initialMarkdown?: string;
+  initialState?: string | null;
   apiRef?: RefObject<EditorAPI | null>;
   onSave?: () => void;
 }) {
@@ -279,13 +283,15 @@ function EditorCore({
   const [historyState] = useState(() => createEmptyHistoryState());
 
   useEffect(() => {
-    if (initialMarkdown) {
+    if (initialState) {
+      editor.setEditorState(editor.parseEditorState(initialState));
+    } else if (initialMarkdown) {
       editor.update(() => {
         $getRoot().clear();
         $convertFromMarkdownString(initialMarkdown, mdTransformers);
       });
     }
-  }, [editor, initialMarkdown]);
+  }, [editor, initialMarkdown, initialState]);
 
   return (
     <>

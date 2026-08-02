@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import {
   Check,
@@ -10,8 +10,6 @@ import {
   FolderOpen,
   Maximize,
   Minimize,
-  Moon,
-  Sun,
   FilePlus,
 } from "lucide-react";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
@@ -40,12 +38,8 @@ import { Button } from "../../Button/Button";
 import styles from "../DocumentEditor.module.css";
 
 interface ToolbarProps {
-  focus: boolean;
   fullscreen: boolean;
-  dark: boolean;
-  onToggleFocus: () => void;
-  onToggleFullscreen: () => void;
-  onToggleDark: () => void;
+  onToggleFullscreen: (editorState: string) => void;
 }
 
 function downloadFile(name: string, content: string, mime: string) {
@@ -136,19 +130,25 @@ const BLOCK_OPTIONS: { value: BlockType; label: string }[] = [
   { value: "check", label: "Checklist" },
 ];
 
-export function Toolbar({
-  focus,
-  fullscreen,
-  dark,
-  onToggleFocus,
-  onToggleFullscreen,
-  onToggleDark,
-}: ToolbarProps) {
+export function Toolbar({ fullscreen, onToggleFullscreen }: ToolbarProps) {
   const [editor] = useLexicalComposerContext();
   const api = useEditorAPI();
   const state = useToolbarState();
   const importInputRef = useRef<HTMLInputElement>(null);
   const [epubFiles, setEpubFiles] = useState<EpubFile[] | null>(null);
+
+  const handleToggleFullscreen = useCallback(() => {
+    onToggleFullscreen(api.saveState());
+  }, [api, onToggleFullscreen]);
+
+  useEffect(() => {
+    if (!fullscreen) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") handleToggleFullscreen();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [fullscreen, handleToggleFullscreen]);
 
   const onImport = (file: File) => {
     const reader = new FileReader();
@@ -395,30 +395,20 @@ export function Toolbar({
       </div>
 
       <div className={styles.toolbarGroup}>
-        <Menu label="View" icon={<Moon size={14} strokeWidth={1.8} aria-hidden="true" />}>
-          {(close) => (
-            <>
-              <MenuItem
-                label={dark ? "Light mode" : "Dark mode"}
-                icon={dark ? <Sun size={14} strokeWidth={1.8} aria-hidden="true" /> : <Moon size={14} strokeWidth={1.8} aria-hidden="true" />}
-                onSelect={onToggleDark}
-                close={close}
-              />
-              <MenuItem
-                label={focus ? "Exit focus mode" : "Focus mode"}
-                icon={<Maximize size={14} strokeWidth={1.8} aria-hidden="true" />}
-                onSelect={onToggleFocus}
-                close={close}
-              />
-              <MenuItem
-                label={fullscreen ? "Exit fullscreen" : "Fullscreen"}
-                icon={fullscreen ? <Minimize size={14} strokeWidth={1.8} aria-hidden="true" /> : <Maximize size={14} strokeWidth={1.8} aria-hidden="true" />}
-                onSelect={onToggleFullscreen}
-                close={close}
-              />
-            </>
+        <button
+          type="button"
+          className={styles.toolButton}
+          title={fullscreen ? "Exit fullscreen" : "Fullscreen"}
+          aria-label={fullscreen ? "Exit fullscreen" : "Fullscreen"}
+          aria-pressed={fullscreen}
+          onClick={handleToggleFullscreen}
+        >
+          {fullscreen ? (
+            <Minimize size={15} strokeWidth={2} aria-hidden="true" />
+          ) : (
+            <Maximize size={15} strokeWidth={2} aria-hidden="true" />
           )}
-        </Menu>
+        </button>
       </div>
 
       <input
