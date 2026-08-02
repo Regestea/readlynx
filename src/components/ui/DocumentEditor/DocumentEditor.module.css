@@ -596,6 +596,13 @@
   position: relative;
   display: inline-block;
   max-width: 100%;
+  cursor: grab;
+}
+
+.contentEditable :global(.__readlynx-drop-target) {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+  border-radius: 4px;
 }
 
 .image {

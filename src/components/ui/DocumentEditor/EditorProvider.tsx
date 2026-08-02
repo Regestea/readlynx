@@ -32,6 +32,7 @@ import { $getSelectionStyleValueForProperty } from "@lexical/selection";
 import { $convertFromMarkdownString, $convertToMarkdownString } from "@lexical/markdown";
 import { mdTransformers } from "./plugins/MarkdownPlugin";
 import { AutoFocusPlugin } from "./plugins/AutoFocusPlugin";
+import { DraggableImagePlugin } from "./plugins/DraggableImagePlugin";
 import { MarkdownPlugin } from "./plugins/MarkdownPlugin";
 import { ShortcutsPlugin } from "./plugins/ShortcutsPlugin";
 import { exportEpub } from "./exporters/epubExporter";
@@ -297,6 +298,7 @@ function EditorCore({
       <TablePlugin />
       <MarkdownPlugin shortcuts />
       <ShortcutsPlugin onSave={onSave} />
+      <DraggableImagePlugin />
       <AutoFocusPlugin />
       <EditorApiBridge apiRef={apiRef} historyState={historyState}>
         {children}

@@ -204,7 +204,8 @@ function ImageComponent({ nodeKey, src, altText, caption, width, maxWidth }: Ima
         event.preventDefault();
         setSelected(!isSelected);
       }}
-      draggable={false}
+      draggable={editor.isEditable()}
+      data-lexical-image
     >
       <img
         src={src}
