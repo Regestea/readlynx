@@ -11,7 +11,7 @@ import styles from "./App.module.css";
 
 export default function App() {
   const [activeId, setActiveId] = useState("home");
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
   const isHome = activeId === "home";
 
   return (
