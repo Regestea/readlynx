@@ -14,22 +14,12 @@
     border-color var(--transition-base) ease;
 }
 
-.greeting {
+.search {
   flex: 1;
   min-width: 0;
-}
-
-.title {
-  font-size: var(--font-size-2xl);
-  font-weight: var(--font-weight-semibold);
-  letter-spacing: -0.02em;
-  line-height: var(--line-height-tight);
-}
-
-.subtitle {
-  margin-top: var(--space-1);
-  font-size: var(--font-size-sm);
-  color: var(--color-text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .actions {
@@ -54,26 +44,4 @@
   border-radius: 50%;
   background: var(--color-terracotta);
   box-shadow: 0 0 0 2px var(--color-glass);
-}
-
-/* ---------- Theme toggle ---------- */
-
-.iconStack {
-  position: relative;
-  display: block;
-  width: 20px;
-  height: 20px;
-}
-
-.themeIcon {
-  position: absolute;
-  inset: 0;
-  transition:
-    opacity var(--transition-base) ease,
-    transform var(--transition-slow) ease;
-}
-
-.themeIconHidden {
-  opacity: 0;
-  transform: rotate(90deg) scale(0.5);
 }
