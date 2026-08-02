@@ -5,11 +5,13 @@ import {
   PASTE_COMMAND,
   PASTE_TAG,
   $getSelection,
+  $isElementNode,
   $isRangeSelection,
 } from "lexical";
 import type { PasteCommandType } from "lexical";
 import { $generateNodesFromMarkdownString } from "@lexical/markdown";
 import { mdTransformers } from "./MarkdownPlugin";
+import { isRtlDominant } from "../utils/direction";
 
 /**
  * Signals that clearly mark text as Markdown, checked at the start of lines.
@@ -87,6 +89,15 @@ export function MarkdownPastePlugin() {
               if (!$isRangeSelection(selection)) return;
               const nodes = $generateNodesFromMarkdownString(text, mdTransformers);
               if (nodes.length === 0) return;
+              // Set explicit direction on each pasted block so Persian/Arabic
+              // blocks render RTL immediately. AutoDirectionPlugin only follows
+              // the caret, so the blocks pasted *before* it would otherwise stay
+              // `dir=null` (LTR base direction) until clicked.
+              for (const node of nodes) {
+                if ($isElementNode(node)) {
+                  node.setDirection(isRtlDominant(node.getTextContent()) ? "rtl" : "ltr");
+                }
+              }
               selection.insertNodes(nodes);
             },
             { tag: PASTE_TAG },
