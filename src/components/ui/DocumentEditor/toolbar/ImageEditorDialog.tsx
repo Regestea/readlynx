@@ -10,6 +10,8 @@ import {
   RotateCw,
   Unlock,
   Upload,
+  ZoomIn,
+  ZoomOut,
 } from "lucide-react";
 import { Button } from "../../Button/Button";
 import { Modal } from "../../Modal/Modal";
@@ -28,9 +30,11 @@ interface CropRect {
   h: number;
 }
 
-type DragMode = "move" | "nw" | "ne" | "sw" | "se";
+type DragMode = "move" | "n" | "s" | "e" | "w" | "nw" | "ne" | "sw" | "se";
 
 const MIN_CROP = 16;
+const MIN_ZOOM = 0.25;
+const MAX_ZOOM = 8;
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
@@ -49,9 +53,12 @@ export function ImageEditorDialog({ open, onClose, onInsert }: ImageEditorDialog
   const [brightness, setBrightness] = useState(100);
   const [contrast, setContrast] = useState(100);
   const [grayscale, setGrayscale] = useState(false);
+  const [zoom, setZoom] = useState(1);
 
   const fileRef = useRef<HTMLInputElement>(null);
   const previewRef = useRef<HTMLCanvasElement>(null);
+  const previewRowRef = useRef<HTMLDivElement>(null);
+  const [panning, setPanning] = useState(false);
 
   const oriented = useMemo(() => {
     if (!img) return null;
@@ -64,6 +71,8 @@ export function ImageEditorDialog({ open, onClose, onInsert }: ImageEditorDialog
     if (!oriented) return 1;
     return Math.min(1, 520 / oriented.w, 360 / oriented.h);
   }, [oriented]);
+
+  const viewScale = displayScale * zoom;
 
   const onFile = (file: File | null | undefined) => {
     if (!file) return;
@@ -83,6 +92,7 @@ export function ImageEditorDialog({ open, onClose, onInsert }: ImageEditorDialog
         setBrightness(100);
         setContrast(100);
         setGrayscale(false);
+        setZoom(1);
       };
       image.src = data;
     };
@@ -126,8 +136,8 @@ export function ImageEditorDialog({ open, onClose, onInsert }: ImageEditorDialog
     const start = crop ?? { x: 0, y: 0, w: oriented.w, h: oriented.h };
 
     const onMove = (moveEvent: MouseEvent) => {
-      const dx = (moveEvent.clientX - startX) / displayScale;
-      const dy = (moveEvent.clientY - startY) / displayScale;
+      const dx = (moveEvent.clientX - startX) / viewScale;
+      const dy = (moveEvent.clientY - startY) / viewScale;
       if (mode === "move") {
         syncSizeToCrop({
           x: clamp(Math.round(start.x + dx), 0, Math.max(0, oriented.w - start.w)),
@@ -153,8 +163,15 @@ export function ImageEditorDialog({ open, onClose, onInsert }: ImageEditorDialog
       if (mode.includes("s")) {
         y2 = clamp(Math.round(Math.max(start.y + dy, start.y)), 0, oriented.h);
       }
-      if (x2 - x1 >= MIN_CROP) syncSizeToCrop({ x: x1, y: start.y, w: x2 - x1, h: start.h });
-      if (y2 - y1 >= MIN_CROP) syncSizeToCrop({ x: start.x, y: y1, w: start.w, h: y2 - y1 });
+      const nextW = x2 - x1;
+      const nextH = y2 - y1;
+      if (nextW >= MIN_CROP && nextH >= MIN_CROP) {
+        syncSizeToCrop({ x: x1, y: y1, w: nextW, h: nextH });
+      } else if (nextW >= MIN_CROP) {
+        syncSizeToCrop({ x: x1, y: start.y, w: nextW, h: start.h });
+      } else if (nextH >= MIN_CROP) {
+        syncSizeToCrop({ x: start.x, y: y1, w: start.w, h: nextH });
+      }
     };
 
     const onUp = () => {
@@ -163,6 +180,29 @@ export function ImageEditorDialog({ open, onClose, onInsert }: ImageEditorDialog
     };
     document.addEventListener("mousemove", onMove);
     document.addEventListener("mouseup", onUp);
+  };
+
+  const startPan = (event: React.PointerEvent) => {
+    const container = previewRowRef.current;
+    if (!container) return;
+    event.preventDefault();
+    const startClientX = event.clientX;
+    const startClientY = event.clientY;
+    const startScrollLeft = container.scrollLeft;
+    const startScrollTop = container.scrollTop;
+    setPanning(true);
+
+    const onMove = (moveEvent: PointerEvent) => {
+      container.scrollLeft = startScrollLeft - (moveEvent.clientX - startClientX);
+      container.scrollTop = startScrollTop - (moveEvent.clientY - startClientY);
+    };
+    const onUp = () => {
+      setPanning(false);
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
   };
 
   const rotate = (dir: 1 | -1) => {
@@ -194,7 +234,12 @@ export function ImageEditorDialog({ open, onClose, onInsert }: ImageEditorDialog
     setBrightness(100);
     setContrast(100);
     setGrayscale(false);
+    setZoom(1);
   };
+
+  const zoomIn = () => setZoom((value) => Math.min(MAX_ZOOM, value * 1.25));
+
+  const zoomOut = () => setZoom((value) => Math.max(MIN_ZOOM, value / 1.25));
 
   const onWidthChange = (value: string) => {
     const w = Number(value);
@@ -263,33 +308,43 @@ export function ImageEditorDialog({ open, onClose, onInsert }: ImageEditorDialog
         </div>
       ) : (
         <div className={styles.editor}>
-          <div className={styles.previewRow}>
+          <div ref={previewRowRef} className={styles.previewRow}>
             <div
-              className={styles.previewWrap}
-              style={{ width: oriented!.w * displayScale, height: oriented!.h * displayScale }}
+              className={`${styles.previewWrap}${panning ? ` ${styles.previewPanning}` : ""}`}
+              onPointerDown={startPan}
             >
-              <canvas
-                ref={previewRef}
-                className={styles.previewCanvas}
-                style={{ width: oriented!.w * displayScale, height: oriented!.h * displayScale }}
-              />
-              {crop && (
-                <div
-                  className={styles.cropBox}
-                  style={{
-                    left: crop.x * displayScale,
-                    top: crop.y * displayScale,
-                    width: crop.w * displayScale,
-                    height: crop.h * displayScale,
-                  }}
-                  onMouseDown={(event) => startCropDrag("move", event)}
-                >
-                  <span className={`${styles.cropHandle} ${styles.cropNw}`} onMouseDown={(event) => startCropDrag("nw", event)} />
-                  <span className={`${styles.cropHandle} ${styles.cropNe}`} onMouseDown={(event) => startCropDrag("ne", event)} />
-                  <span className={`${styles.cropHandle} ${styles.cropSw}`} onMouseDown={(event) => startCropDrag("sw", event)} />
-                  <span className={`${styles.cropHandle} ${styles.cropSe}`} onMouseDown={(event) => startCropDrag("se", event)} />
-                </div>
-              )}
+              <div
+                className={styles.previewInner}
+                style={{ width: oriented!.w * viewScale, height: oriented!.h * viewScale }}
+              >
+                <canvas
+                  ref={previewRef}
+                  className={styles.previewCanvas}
+                  style={{ width: oriented!.w * viewScale, height: oriented!.h * viewScale }}
+                />
+                {crop && (
+                  <div
+                    className={styles.cropBox}
+                    style={{
+                      left: crop.x * viewScale,
+                      top: crop.y * viewScale,
+                      width: crop.w * viewScale,
+                      height: crop.h * viewScale,
+                    }}
+                    onPointerDown={(event) => event.stopPropagation()}
+                    onMouseDown={(event) => startCropDrag("move", event)}
+                  >
+                    <span className={`${styles.cropHandle} ${styles.cropNw}`} onMouseDown={(event) => startCropDrag("nw", event)} />
+                    <span className={`${styles.cropHandle} ${styles.cropNe}`} onMouseDown={(event) => startCropDrag("ne", event)} />
+                    <span className={`${styles.cropHandle} ${styles.cropSw}`} onMouseDown={(event) => startCropDrag("sw", event)} />
+                    <span className={`${styles.cropHandle} ${styles.cropSe}`} onMouseDown={(event) => startCropDrag("se", event)} />
+                    <span className={`${styles.cropHandle} ${styles.cropN}`} onMouseDown={(event) => startCropDrag("n", event)} />
+                    <span className={`${styles.cropHandle} ${styles.cropS}`} onMouseDown={(event) => startCropDrag("s", event)} />
+                    <span className={`${styles.cropHandle} ${styles.cropE}`} onMouseDown={(event) => startCropDrag("e", event)} />
+                    <span className={`${styles.cropHandle} ${styles.cropW}`} onMouseDown={(event) => startCropDrag("w", event)} />
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
@@ -305,6 +360,14 @@ export function ImageEditorDialog({ open, onClose, onInsert }: ImageEditorDialog
             </button>
             <button type="button" className={styles.iconButton} title="Flip vertically" onClick={() => flip("v")}>
               <FlipVertical size={15} strokeWidth={2} aria-hidden="true" />
+            </button>
+            <span className={styles.toolSeparator} />
+            <button type="button" className={styles.iconButton} title="Zoom out" onClick={zoomOut}>
+              <ZoomOut size={15} strokeWidth={2} aria-hidden="true" />
+            </button>
+            <span className={styles.zoomLevel}>{Math.round(zoom * 100)}%</span>
+            <button type="button" className={styles.iconButton} title="Zoom in" onClick={zoomIn}>
+              <ZoomIn size={15} strokeWidth={2} aria-hidden="true" />
             </button>
             <span className={styles.toolSeparator} />
             <button type="button" className={styles.iconButton} title="Reset edits" onClick={resetEdits}>

@@ -36,17 +36,31 @@
 
 .previewRow {
   display: flex;
-  justify-content: center;
-  min-height: 120px;
+  max-height: min(56vh, 460px);
+  overflow: auto;
 }
 
 .previewWrap {
   position: relative;
+  margin: auto;
+  flex-shrink: 0;
+  padding: var(--space-3);
   background: var(--color-checker, #eee);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-small);
   overflow: hidden;
   user-select: none;
+  touch-action: none;
+  cursor: grab;
+}
+
+.previewPanning {
+  cursor: grabbing;
+}
+
+.previewInner {
+  position: relative;
+  line-height: 0;
 }
 
 .previewCanvas {
@@ -70,8 +84,8 @@
 
 .cropHandle {
   position: absolute;
-  width: 12px;
-  height: 12px;
+  width: 14px;
+  height: 14px;
   border: 2px solid #fff;
   border-radius: 3px;
   background: var(--color-primary);
@@ -79,27 +93,55 @@
 }
 
 .cropNw {
-  top: -6px;
-  left: -6px;
+  top: -7px;
+  left: -7px;
   cursor: nwse-resize;
 }
 
 .cropNe {
-  top: -6px;
-  right: -6px;
+  top: -7px;
+  right: -7px;
   cursor: nesw-resize;
 }
 
 .cropSw {
-  bottom: -6px;
-  left: -6px;
+  bottom: -7px;
+  left: -7px;
   cursor: nesw-resize;
 }
 
 .cropSe {
-  bottom: -6px;
-  right: -6px;
+  bottom: -7px;
+  right: -7px;
   cursor: nwse-resize;
+}
+
+.cropN {
+  top: -7px;
+  left: 50%;
+  transform: translateX(-50%);
+  cursor: ns-resize;
+}
+
+.cropS {
+  bottom: -7px;
+  left: 50%;
+  transform: translateX(-50%);
+  cursor: ns-resize;
+}
+
+.cropE {
+  top: 50%;
+  right: -7px;
+  transform: translateY(-50%);
+  cursor: ew-resize;
+}
+
+.cropW {
+  top: 50%;
+  left: -7px;
+  transform: translateY(-50%);
+  cursor: ew-resize;
 }
 
 .toolRow {
@@ -134,6 +176,14 @@
 .iconButton:hover {
   background: var(--color-hover);
   color: var(--color-text);
+}
+
+.zoomLevel {
+  min-width: 44px;
+  text-align: center;
+  font-size: var(--font-size-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-secondary);
 }
 
 .controls {
