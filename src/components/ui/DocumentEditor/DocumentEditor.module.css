@@ -454,10 +454,22 @@
   font-size: 0.85em;
 }
 
-.listUl,
+.listUl {
+  margin: 0 0 0.9em;
+  padding-inline-start: 1.6em;
+  list-style-type: disc;
+}
+
 .listOl {
   margin: 0 0 0.9em;
   padding-inline-start: 1.6em;
+  list-style-type: decimal;
+}
+
+.listCheck {
+  margin: 0 0 0.9em;
+  padding-inline-start: 0;
+  list-style-type: none;
 }
 
 .listItem {

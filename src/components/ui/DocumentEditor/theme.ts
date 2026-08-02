@@ -62,7 +62,7 @@ export function createEditorTheme(): EditorThemeClasses {
     list: {
       ul: styles.listUl,
       ol: styles.listOl,
-      checklist: styles.listUl,
+      checklist: styles.listCheck,
       listitem: styles.listItem,
       listitemChecked: styles.listItemChecked,
       listitemUnchecked: styles.listItemUnchecked,

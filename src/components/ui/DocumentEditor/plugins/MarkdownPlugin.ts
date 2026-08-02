@@ -4,11 +4,16 @@ import { $createParagraphNode, $createTextNode } from "lexical";
 import {
   $convertFromMarkdownString,
   $convertToMarkdownString,
+  CHECK_LIST,
+  CODE,
+  HEADING,
   isTableRowDivider,
+  ORDERED_LIST,
+  QUOTE,
   registerMarkdownShortcuts,
   TEXT_FORMAT_TRANSFORMERS,
   TEXT_MATCH_TRANSFORMERS,
-  TRANSFORMERS,
+  UNORDERED_LIST,
   type ElementTransformer,
   type MultilineElementTransformer,
   type Transformer,
@@ -236,7 +241,20 @@ const CUSTOM_BLOCK: MultilineElementTransformer = {
 
 /* ---------- Public helpers ---------- */
 
-export const mdTransformers: Transformer[] = [TABLE, IMAGE, CALLOUT, CUSTOM_BLOCK, ...TRANSFORMERS];
+export const mdTransformers: Transformer[] = [
+  TABLE,
+  IMAGE,
+  CALLOUT,
+  CUSTOM_BLOCK,
+  HEADING,
+  QUOTE,
+  CHECK_LIST,
+  UNORDERED_LIST,
+  ORDERED_LIST,
+  CODE,
+  ...TEXT_FORMAT_TRANSFORMERS,
+  ...TEXT_MATCH_TRANSFORMERS,
+];
 
 export function importMarkdownString(target: ElementNode, markdown: string): void {
   $convertFromMarkdownString(markdown, mdTransformers, target);

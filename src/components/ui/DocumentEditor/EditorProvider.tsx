@@ -5,6 +5,7 @@ import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext
 import { HistoryPlugin } from "@lexical/react/LexicalHistoryPlugin";
 import { LinkPlugin } from "@lexical/react/LexicalLinkPlugin";
 import { ListPlugin } from "@lexical/react/LexicalListPlugin";
+import { CheckListPlugin } from "@lexical/react/LexicalCheckListPlugin";
 import { HorizontalRuleNode } from "@lexical/react/LexicalHorizontalRuleNode";
 import { CodeHighlightNode, CodeNode, registerCodeHighlighting } from "@lexical/code";
 import { LinkNode } from "@lexical/link";
@@ -290,6 +291,7 @@ function EditorCore({
       <HistoryPlugin externalHistoryState={historyState} />
       <LinkPlugin />
       <ListPlugin />
+      <CheckListPlugin />
       <MarkdownPlugin shortcuts />
       <ShortcutsPlugin onSave={onSave} />
       <AutoFocusPlugin />
