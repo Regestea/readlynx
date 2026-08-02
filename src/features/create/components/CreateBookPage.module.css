@@ -1,0 +1,218 @@
+.page {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  overflow: hidden;
+}
+
+.topBar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-medium);
+  background: var(--color-glass);
+  box-shadow: var(--shadow-sm);
+}
+
+.backButton {
+  flex-shrink: 0;
+}
+
+.titleInput {
+  flex: 1;
+  min-width: 0;
+  font-weight: var(--font-weight-semibold);
+}
+
+.searchBox {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  width: 260px;
+  max-width: 100%;
+  flex-shrink: 0;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-input);
+  background: var(--color-glass);
+  transition:
+    border-color var(--transition-base) ease,
+    box-shadow var(--transition-base) ease,
+    background-color var(--transition-base) ease;
+}
+
+.searchBox:focus-within {
+  border-color: var(--color-primary);
+  background: var(--color-card);
+  box-shadow:
+    var(--shadow-sm),
+    0 0 0 4px var(--color-glow);
+}
+
+.searchIcon {
+  flex-shrink: 0;
+  color: var(--color-text-muted);
+}
+
+.searchInput {
+  flex: 1;
+  min-width: 0;
+  height: 38px;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-md);
+}
+
+.searchInput::placeholder {
+  color: var(--color-text-muted);
+  opacity: 1;
+}
+
+.searchCount {
+  flex-shrink: 0;
+  min-width: 28px;
+  text-align: center;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.searchNav {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-small);
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition:
+    background var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.searchNav:hover:not(:disabled) {
+  background: var(--color-hover);
+  color: var(--color-text);
+}
+
+.searchNav:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.stats {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: 0 var(--space-2);
+  white-space: nowrap;
+}
+
+.stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.layout {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-small);
+  background: var(--color-card);
+  flex-shrink: 0;
+}
+
+.layoutButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 26px;
+  padding: 0 var(--space-2);
+  border: none;
+  border-radius: calc(var(--radius-small) - 2px);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-sm);
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.layoutButton:hover {
+  background: var(--color-hover);
+  color: var(--color-text);
+}
+
+.layoutButtonActive {
+  background: var(--color-active);
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+.pageSizeSelect {
+  flex-shrink: 0;
+  min-width: 120px;
+  height: 38px;
+  padding: 0 44px 0 18px;
+  font-size: var(--font-size-md);
+}
+
+.zoom {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex-shrink: 0;
+}
+
+.zoomButton {
+  width: 30px;
+  height: 30px;
+}
+
+.zoomLabel {
+  min-width: 40px;
+  text-align: center;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.editorArea {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.editorRoot {
+  flex: 1;
+  min-height: 0;
+}
+
+@media (max-width: 720px) {
+  .stats,
+  .layout,
+  .pageSizeSelect {
+    display: none;
+  }
+}

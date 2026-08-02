@@ -6,11 +6,17 @@ interface AddModeCardProps {
   icon: ReactNode;
   title: string;
   description: string;
+  onClick?: () => void;
 }
 
-export function AddModeCard({ icon, title, description }: AddModeCardProps) {
+export function AddModeCard({ icon, title, description, onClick }: AddModeCardProps) {
   return (
-    <button type="button" className={`animate-card-appear ${styles.card}`} aria-label={`Add — ${title}`}>
+    <button
+      type="button"
+      className={`animate-card-appear ${styles.card}`}
+      aria-label={`Add — ${title}`}
+      onClick={onClick}
+    >
       <span className={styles.icon} aria-hidden="true">
         {icon}
       </span>

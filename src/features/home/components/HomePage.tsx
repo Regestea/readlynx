@@ -8,7 +8,11 @@ import {
 } from "../data/mockData";
 import styles from "./HomePage.module.css";
 
-export function HomePage() {
+interface HomePageProps {
+  onCreateBook?: () => void;
+}
+
+export function HomePage({ onCreateBook }: HomePageProps) {
   return (
     <main className={styles.page} aria-label="Home">
       <div className={`${styles.intro} animate-fade-up`}>
@@ -23,6 +27,7 @@ export function HomePage() {
             icon={<NotebookPen size={22} strokeWidth={1.8} />}
             title="Create Book"
             description="Start writing a new book"
+            onClick={onCreateBook}
           />
           <AddModeCard
             icon={<Languages size={22} strokeWidth={1.8} />}
