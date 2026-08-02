@@ -1,7 +1,7 @@
 import { Redo2, Undo2 } from "lucide-react";
 import { useEditorAPI } from "../context";
 import type { ToolbarState } from "../types";
-import styles from "../MarkdownEditor.module.css";
+import styles from "../DocumentEditor.module.css";
 
 interface HistoryButtonsProps {
   state: ToolbarState;

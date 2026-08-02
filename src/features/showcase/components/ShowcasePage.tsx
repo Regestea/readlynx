@@ -26,7 +26,7 @@ import { Input } from "../../../components/ui/Input/Input";
 import { List } from "../../../components/ui/List/List";
 import type { ListItemData } from "../../../components/ui/List/List";
 import { Markdown } from "../../../components/ui/Markdown/Markdown";
-import { MarkdownEditor } from "../../../components/ui/MarkdownEditor";
+import { DocumentEditor } from "../../../components/ui/DocumentEditor";
 import { Modal } from "../../../components/ui/Modal/Modal";
 import { Mermaid } from "../../../components/ui/Mermaid/Mermaid";
 import { NumberInput } from "../../../components/ui/NumberInput/NumberInput";
@@ -732,10 +732,10 @@ export function ShowcasePage() {
         </div>
       </Section>
 
-      {/* ---------- MarkdownEditor ---------- */}
-      <Section title="MarkdownEditor" description="WYSIWYG Lexical editor — edit rich content, then export Markdown, HTML or an EPUB 3 (XHTML + OPF) book from the File menu.">
+      {/* ---------- DocumentEditor ---------- */}
+      <Section title="DocumentEditor" description="WYSIWYG Lexical editor — edit rich content, then export Markdown, HTML or an EPUB 3 (XHTML + OPF) book from the File menu.">
         <div className={`${styles.stack} ${styles.stackFull}`}>
-          <MarkdownEditor initialMarkdown={EDITOR_SAMPLE_MARKDOWN} />
+          <DocumentEditor initialMarkdown={EDITOR_SAMPLE_MARKDOWN} />
         </div>
       </Section>
 

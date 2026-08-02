@@ -7,9 +7,9 @@ import { EditorProvider } from "./EditorProvider";
 import { Toolbar } from "./toolbar/Toolbar";
 import { PLACEHOLDER_TEXT } from "./constants";
 import type { EditorAPI } from "./types";
-import styles from "./MarkdownEditor.module.css";
+import styles from "./DocumentEditor.module.css";
 
-export interface MarkdownEditorProps {
+export interface DocumentEditorProps {
   initialMarkdown?: string;
   editable?: boolean;
   apiRef?: RefObject<EditorAPI | null>;
@@ -17,13 +17,13 @@ export interface MarkdownEditorProps {
   className?: string;
 }
 
-export function MarkdownEditor({
+export function DocumentEditor({
   initialMarkdown,
   editable = true,
   apiRef,
   onSave,
   className,
-}: MarkdownEditorProps) {
+}: DocumentEditorProps) {
   const [focus, setFocus] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const [dark, setDark] = useState(false);
@@ -53,7 +53,7 @@ export function MarkdownEditor({
           <RichTextPlugin
             contentEditable={
               <ContentEditable
-                aria-label="Markdown editor"
+                aria-label="Document editor"
                 aria-placeholder={PLACEHOLDER_TEXT}
                 placeholder={<div className={styles.placeholder}>{PLACEHOLDER_TEXT}</div>}
                 className={styles.contentEditable}

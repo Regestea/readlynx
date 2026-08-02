@@ -12,7 +12,7 @@ import { DecoratorNode } from "lexical";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { useLexicalNodeSelection } from "@lexical/react/useLexicalNodeSelection";
 import { $getNodeByKey } from "lexical";
-import styles from "../MarkdownEditor.module.css";
+import styles from "../DocumentEditor.module.css";
 
 export interface ImagePayload {
   src: string;

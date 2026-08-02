@@ -1,5 +1,5 @@
-export { MarkdownEditor } from "./MarkdownEditor";
-export type { MarkdownEditorProps } from "./MarkdownEditor";
+export { DocumentEditor } from "./DocumentEditor";
+export type { DocumentEditorProps } from "./DocumentEditor";
 export { EditorProvider } from "./EditorProvider";
 export { useEditorAPI, useToolbarState } from "./context";
 export {

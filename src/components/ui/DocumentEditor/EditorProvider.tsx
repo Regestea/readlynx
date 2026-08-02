@@ -227,7 +227,7 @@ export function EditorProvider({
 }: EditorProviderProps) {
   const config: InitialConfigType = useMemo(
     () => ({
-      namespace: "readlynx-markdown-editor",
+      namespace: "readlynx-document-editor",
       editable,
       theme: createEditorTheme(),
       nodes: [

@@ -1,5 +1,5 @@
 import type { EditorThemeClasses } from "lexical";
-import styles from "./MarkdownEditor.module.css";
+import styles from "./DocumentEditor.module.css";
 
 export function createEditorTheme(): EditorThemeClasses {
   return {

@@ -7,7 +7,7 @@ import { $createCustomBlockNode } from "../nodes/CustomBlockNode";
 import { insertImage } from "../plugins/ImagePlugin";
 import { insertTable } from "../plugins/TablePlugin";
 import type { CalloutTone, CustomBlockKind } from "../types";
-import styles from "../MarkdownEditor.module.css";
+import styles from "../DocumentEditor.module.css";
 
 interface InsertButtonsProps {
   disabled?: boolean;

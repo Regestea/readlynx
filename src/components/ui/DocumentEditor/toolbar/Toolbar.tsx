@@ -37,7 +37,7 @@ import { FONT_SIZE_OPTIONS, HEADING_OPTIONS, TEXT_COLORS, BACKGROUND_COLORS } fr
 import type { BlockType, EpubFile } from "../types";
 import { Modal } from "../../Modal/Modal";
 import { Button } from "../../Button/Button";
-import styles from "../MarkdownEditor.module.css";
+import styles from "../DocumentEditor.module.css";
 
 interface ToolbarProps {
   focus: boolean;

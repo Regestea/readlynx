@@ -12,7 +12,7 @@ import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext
 import { FORMAT_TEXT_COMMAND, type TextFormatType } from "lexical";
 import { TOGGLE_LINK_COMMAND } from "@lexical/link";
 import type { ToolbarState } from "../types";
-import styles from "../MarkdownEditor.module.css";
+import styles from "../DocumentEditor.module.css";
 
 interface TextFormatButtonsProps {
   state: ToolbarState;
