@@ -35,6 +35,10 @@ import { AutoFocusPlugin } from "./plugins/AutoFocusPlugin";
 import { AutoDirectionPlugin } from "./plugins/AutoDirectionPlugin";
 import { MarkdownPlugin } from "./plugins/MarkdownPlugin";
 import { ShortcutsPlugin } from "./plugins/ShortcutsPlugin";
+import { PaginationPlugin } from "./plugins/PaginationPlugin";
+import { SearchPlugin } from "./plugins/SearchPlugin";
+import { CaretScrollPlugin } from "./plugins/CaretScrollPlugin";
+import type { PageFormat } from "./constants";
 import { exportEpub } from "./exporters/epubExporter";
 import { exportHtml } from "./exporters/htmlExporter";
 import { createEditorTheme } from "./theme";
@@ -42,6 +46,8 @@ import { isRtlDominant } from "./utils/direction";
 import { CalloutNode } from "./nodes/CalloutNode";
 import { CustomBlockNode } from "./nodes/CustomBlockNode";
 import { ImageNode } from "./nodes/ImageNode";
+import { PageBreakNode } from "./nodes/PageBreakNode";
+import { SearchHighlightNode } from "./nodes/SearchHighlightNode";
 import { EditorApiContext, ToolbarStateContext } from "./context";
 import {
   EMPTY_TOOLBAR_STATE,
@@ -58,6 +64,14 @@ interface EditorProviderProps {
   editable?: boolean;
   onSave?: () => void;
   apiRef?: RefObject<EditorAPI | null>;
+  paged?: boolean;
+  pageFormat?: PageFormat;
+  zoom?: number;
+  onPageCountChange?: (count: number) => void;
+  onWordCountChange?: (count: number) => void;
+  searchQuery?: string;
+  searchActiveIndex?: number;
+  onSearchResultCount?: (count: number) => void;
 }
 
 /* ---------- Toolbar state sync ---------- */
@@ -241,6 +255,14 @@ export function EditorProvider({
   editable = true,
   onSave,
   apiRef,
+  paged = false,
+  pageFormat = "a4",
+  zoom = 1,
+  onPageCountChange,
+  onWordCountChange,
+  searchQuery,
+  searchActiveIndex,
+  onSearchResultCount,
 }: EditorProviderProps) {
   const config: InitialConfigType = useMemo(
     () => ({
@@ -262,6 +284,8 @@ export function EditorProvider({
         ImageNode,
         CalloutNode,
         CustomBlockNode,
+        PageBreakNode,
+        SearchHighlightNode,
       ],
       onError: (error) => {
         console.error(error);
@@ -272,7 +296,20 @@ export function EditorProvider({
 
   return (
     <LexicalComposer initialConfig={config}>
-      <EditorCore initialMarkdown={initialMarkdown} initialState={initialState} onSave={onSave} apiRef={apiRef}>
+      <EditorCore
+        initialMarkdown={initialMarkdown}
+        initialState={initialState}
+        onSave={onSave}
+        apiRef={apiRef}
+        paged={paged}
+        pageFormat={pageFormat}
+        zoom={zoom}
+        onPageCountChange={onPageCountChange}
+        onWordCountChange={onWordCountChange}
+        searchQuery={searchQuery}
+        searchActiveIndex={searchActiveIndex}
+        onSearchResultCount={onSearchResultCount}
+      >
         {children}
       </EditorCore>
     </LexicalComposer>
@@ -285,12 +322,28 @@ function EditorCore({
   initialState,
   apiRef,
   onSave,
+  paged,
+  pageFormat,
+  zoom,
+  onPageCountChange,
+  onWordCountChange,
+  searchQuery,
+  searchActiveIndex,
+  onSearchResultCount,
 }: {
   children: ReactNode;
   initialMarkdown?: string;
   initialState?: string | null;
   apiRef?: RefObject<EditorAPI | null>;
   onSave?: () => void;
+  paged: boolean;
+  pageFormat: PageFormat;
+  zoom: number;
+  onPageCountChange?: (count: number) => void;
+  onWordCountChange?: (count: number) => void;
+  searchQuery?: string;
+  searchActiveIndex?: number;
+  onSearchResultCount?: (count: number) => void;
 }) {
   const [editor] = useLexicalComposerContext();
   const [historyState] = useState(() => createEmptyHistoryState());
@@ -317,6 +370,20 @@ function EditorCore({
       <ShortcutsPlugin onSave={onSave} />
       <AutoDirectionPlugin />
       <AutoFocusPlugin />
+      <CaretScrollPlugin />
+      {paged && (
+        <PaginationPlugin
+          format={pageFormat}
+          zoom={zoom}
+          onPageCountChange={onPageCountChange}
+          onWordCountChange={onWordCountChange}
+        />
+      )}
+      <SearchPlugin
+        query={searchQuery}
+        activeIndex={searchActiveIndex}
+        onResultCount={onSearchResultCount}
+      />
       <EditorApiBridge apiRef={apiRef} historyState={historyState}>
         {children}
       </EditorApiBridge>

@@ -1,12 +1,13 @@
 import { useRef, useState } from "react";
-import type { RefObject } from "react";
+import type { CSSProperties, RefObject } from "react";
 import { createPortal } from "react-dom";
 import { ContentEditable } from "@lexical/react/LexicalContentEditable";
 import { LexicalErrorBoundary } from "@lexical/react/LexicalErrorBoundary";
 import { RichTextPlugin } from "@lexical/react/LexicalRichTextPlugin";
 import { EditorProvider } from "./EditorProvider";
 import { Toolbar } from "./toolbar/Toolbar";
-import { PLACEHOLDER_TEXT } from "./constants";
+import { PAGE_FORMATS, PAGE_MARGIN_X, PAGE_MARGIN_Y, PLACEHOLDER_TEXT } from "./constants";
+import type { PageFormat } from "./constants";
 import type { EditorAPI } from "./types";
 import styles from "./DocumentEditor.module.css";
 
@@ -16,7 +17,18 @@ export interface DocumentEditorProps {
   apiRef?: RefObject<EditorAPI | null>;
   onSave?: () => void;
   className?: string;
+  paged?: boolean;
+  pageFormat?: PageFormat;
+  zoom?: number;
+  onPageCountChange?: (count: number) => void;
+  onWordCountChange?: (count: number) => void;
+  searchQuery?: string;
+  searchActiveIndex?: number;
+  onSearchResultCount?: (count: number) => void;
 }
+
+const MIN_ZOOM = 0.5;
+const MAX_ZOOM = 2;
 
 export function DocumentEditor({
   initialMarkdown,
@@ -24,6 +36,14 @@ export function DocumentEditor({
   apiRef,
   onSave,
   className,
+  paged = false,
+  pageFormat = "a4",
+  zoom = 1,
+  onPageCountChange,
+  onWordCountChange,
+  searchQuery,
+  searchActiveIndex,
+  onSearchResultCount,
 }: DocumentEditorProps) {
   const [fullscreen, setFullscreen] = useState(false);
   const [snapshot, setSnapshot] = useState<string | null>(null);
@@ -42,9 +62,48 @@ export function DocumentEditor({
     styles.root,
     className,
     fullscreen ? styles.fullscreen : "",
+    paged ? styles.paged : "",
   ]
     .filter(Boolean)
     .join(" ");
+
+  const { width: pageWidth, height: pageHeight } = PAGE_FORMATS[pageFormat];
+  const clampedZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom));
+
+  const placeholderElement = (
+    <div className={`${styles.placeholder} ${paged ? styles.placeholderPaged : ""}`}>
+      {PLACEHOLDER_TEXT}
+    </div>
+  );
+
+  const surface = (
+    <RichTextPlugin
+      contentEditable={
+        <ContentEditable
+          aria-label="Document editor"
+          aria-placeholder={PLACEHOLDER_TEXT}
+          placeholder={placeholderElement}
+          className={paged ? styles.contentEditablePaged : styles.contentEditable}
+          style={
+            paged
+              ? ({
+                  minHeight: pageHeight,
+                  paddingTop: `${PAGE_MARGIN_Y}px`,
+                  paddingLeft: `${PAGE_MARGIN_X}px`,
+                  paddingRight: `${PAGE_MARGIN_X}px`,
+                  paddingBottom: `calc(${PAGE_MARGIN_Y}px + var(--page-last-fill, 0px))`,
+                  "--page-margin-x": `${PAGE_MARGIN_X}px`,
+                  "--page-margin-y": `${PAGE_MARGIN_Y}px`,
+                } as CSSProperties)
+              : undefined
+          }
+          spellCheck
+        />
+      }
+      placeholder={placeholderElement}
+      ErrorBoundary={LexicalErrorBoundary}
+    />
+  );
 
   const editor = (
     <EditorProvider
@@ -53,26 +112,37 @@ export function DocumentEditor({
       editable={editable}
       apiRef={apiRef}
       onSave={onSave}
+      paged={paged}
+      pageFormat={pageFormat}
+      zoom={clampedZoom}
+      onPageCountChange={onPageCountChange}
+      onWordCountChange={onWordCountChange}
+      searchQuery={searchQuery}
+      searchActiveIndex={searchActiveIndex}
+      onSearchResultCount={onSearchResultCount}
     >
       <Toolbar
         fullscreen={fullscreen}
         onToggleFullscreen={toggleFullscreen}
       />
-      <div className={styles.shell}>
-        <RichTextPlugin
-          contentEditable={
-            <ContentEditable
-              aria-label="Document editor"
-              aria-placeholder={PLACEHOLDER_TEXT}
-              placeholder={<div className={styles.placeholder}>{PLACEHOLDER_TEXT}</div>}
-              className={styles.contentEditable}
-              spellCheck
-            />
-          }
-          placeholder={<div className={styles.placeholder}>{PLACEHOLDER_TEXT}</div>}
-          ErrorBoundary={LexicalErrorBoundary}
-        />
-      </div>
+      {paged ? (
+        <div className={styles.shellPaged}>
+          <div className={styles.pagedStage}>
+            <div
+              className={styles.pagedPage}
+              style={{
+                width: pageWidth,
+                minHeight: pageHeight,
+                transform: `scale(${clampedZoom})`,
+              }}
+            >
+              {surface}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className={styles.shell}>{surface}</div>
+      )}
     </EditorProvider>
   );
 

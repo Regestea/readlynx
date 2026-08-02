@@ -121,11 +121,18 @@
   --color-on-cover: #fbf7f0;
   --color-selection: rgba(138, 140, 103, 0.3);
   --color-scroll-thumb: rgba(143, 139, 130, 0.45);
+  --color-search: rgba(185, 121, 76, 0.28);
+  --color-search-active: rgba(185, 121, 76, 0.5);
   --color-bg-overlay: linear-gradient(
     180deg,
     rgba(247, 242, 234, 0.28) 0%,
     rgba(247, 242, 234, 0.58) 100%
   );
+
+  /* Paged document (editor) */
+  --color-canvas: #e6ded0;
+  --color-page: #ffffff;
+  --color-page-edge: rgba(70, 60, 50, 0.18);
 
   /* Syntax highlighting (matches prism oneLight) */
   --syntax-comment: #a0a1a7;
@@ -206,11 +213,18 @@ html[data-theme="dark"] {
   --color-on-cover: #eef2f7;
   --color-selection: rgba(143, 168, 199, 0.3);
   --color-scroll-thumb: rgba(125, 135, 152, 0.45);
+  --color-search: rgba(185, 121, 76, 0.3);
+  --color-search-active: rgba(185, 121, 76, 0.55);
   --color-bg-overlay: linear-gradient(
     180deg,
     rgba(22, 32, 51, 0.32) 0%,
     rgba(22, 32, 51, 0.62) 100%
   );
+
+  /* Paged document (editor) */
+  --color-canvas: #0e1526;
+  --color-page: #1c2945;
+  --color-page-edge: rgba(238, 242, 247, 0.12);
 
   /* Syntax highlighting (matches prism oneDark) */
   --syntax-comment: #7f848e;
