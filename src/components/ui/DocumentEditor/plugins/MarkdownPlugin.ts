@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import type { ElementNode } from "lexical";
-import { $createParagraphNode, $createTextNode } from "lexical";
+import { $createParagraphNode, $createTextNode, $isParagraphNode } from "lexical";
 import {
   $convertFromMarkdownString,
   $convertToMarkdownString,
@@ -75,7 +75,7 @@ const TABLE: MultilineElementTransformer = {
     const colCount = header.length;
     if (colCount === 0) return null;
 
-    const table = $createTableNodeWithDimensions(body.length, colCount);
+    const table = $createTableNodeWithDimensions(body.length + 1, colCount);
     const tableRows = table.getChildren();
     tableRows.forEach((rowNode, ri) => {
       if (!$isTableRowNode(rowNode)) return;
@@ -86,9 +86,11 @@ const TABLE: MultilineElementTransformer = {
         if (ri === 0) cellNode.setHeaderStyles(TableCellHeaderStates.ROW);
         const value = values[ci];
         if (value === undefined) return;
-        const paragraph = $createParagraphNode();
+        const existing = cellNode.getFirstChild();
+        const paragraph = $isParagraphNode(existing) ? existing : $createParagraphNode();
+        paragraph.clear();
         paragraph.append($createTextNode(value));
-        cellNode.append(paragraph);
+        if (paragraph !== existing) cellNode.append(paragraph);
       });
     });
     rootNode.append(table);

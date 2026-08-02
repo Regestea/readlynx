@@ -522,44 +522,70 @@
 /* ---------- Tables ---------- */
 
 .table {
-  border-collapse: collapse;
-  margin: 0.9em 0;
   width: 100%;
+  min-width: 480px;
   max-width: 100%;
+  margin: 0.9em 0;
   font-size: var(--font-size-sm);
+  border-collapse: separate;
+  border-spacing: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-medium);
+  box-shadow: var(--shadow-sm);
+  background: var(--color-glass);
 }
 
 .tableRow {
-  border-top: 1px solid var(--color-border);
-}
-
-.tableRow:first-child {
-  border-top: none;
+  border: none;
 }
 
 .tableCell {
-  padding: 0.4em 0.7em;
+  padding: var(--space-2) var(--space-3);
   border-inline-end: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border);
   min-width: 60px;
-  vertical-align: top;
+  vertical-align: middle;
+  text-align: center;
+  color: var(--color-text-secondary);
+  background: transparent;
+}
+
+.tableCell :global(p),
+.tableCellHeader :global(p) {
+  margin: 0;
 }
 
 .tableCell:last-child {
   border-inline-end: none;
 }
 
+.tableRow:last-child .tableCell {
+  border-bottom: none;
+}
+
 .tableCellHeader {
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+  font-size: 11px;
   font-weight: var(--font-weight-semibold);
-  color: var(--color-dark);
-  background: var(--color-bg-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  white-space: nowrap;
+  text-align: center;
+  color: var(--color-text-muted);
+  background: transparent;
 }
 
 .tableCellPrimary {
-  background: var(--color-bg-secondary);
+  background: transparent;
 }
 
 .tableCellSecondary {
   background: transparent;
+}
+
+.tableRow:hover {
+  background: var(--color-hover);
 }
 
 /* ---------- Image decorator ---------- */
