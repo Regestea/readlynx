@@ -596,38 +596,182 @@
   position: relative;
   display: inline-block;
   max-width: 100%;
-  cursor: grab;
-}
-
-.contentEditable :global(.__readlynx-drop-target) {
-  outline: 2px solid var(--color-primary);
-  outline-offset: 2px;
-  border-radius: 4px;
+  cursor: pointer;
 }
 
 .image {
   display: block;
-  border-radius: var(--radius-small);
   cursor: pointer;
 }
 
-.imageSelected {
-  outline: 2px solid var(--color-primary);
-  outline-offset: 2px;
-  border-radius: var(--radius-small);
+.imageMenu {
+  position: fixed;
+  z-index: var(--z-dialog);
+  min-width: 240px;
+  padding: var(--space-2);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-medium);
+  box-shadow: var(--shadow-lg);
+  font-family: var(--font-sans);
+  animation: fadeIn var(--transition-base) ease both;
 }
 
-.imageResizeHandle {
-  position: absolute;
-  bottom: -6px;
-  right: -6px;
-  width: 14px;
-  height: 14px;
-  border: 2px solid var(--color-bg);
-  border-radius: 50%;
+.imageMenuSection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.imageMenuLabel {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-muted);
+}
+
+.imageMenuRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.imageMenuButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  flex: 1;
+  padding: 6px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-small);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition:
+    background var(--transition-fast),
+    color var(--transition-fast),
+    border-color var(--transition-fast);
+}
+
+.imageMenuButton:hover {
+  background: var(--color-hover);
+  color: var(--color-text);
+}
+
+.imageMenuButtonActive,
+.imageMenuButton[aria-pressed="true"] {
+  color: var(--color-primary);
+  border-color: var(--color-primary);
+  background: var(--color-hover);
+}
+
+.imageMenuSeparator {
+  height: 1px;
+  background: var(--color-border);
+  margin: var(--space-2) 0;
+}
+
+.imageMenuDims {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.imageMenuDim {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+.imageMenuDim input {
+  width: 100%;
+  padding: 5px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-small);
+  background: var(--color-bg-secondary);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-sm);
+}
+
+.imageMenuHint {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.imageMenuRoundRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.imageMenuRoundRow input {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-small);
+  background: var(--color-bg-secondary);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-sm);
+}
+
+.imageMenuRoundSuffix {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+.imageMenuFooter {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.imageMenuApply {
+  flex: 1;
+  padding: 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-small);
   background: var(--color-primary);
-  cursor: ew-resize;
-  padding: 0;
+  color: var(--color-on-primary);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  cursor: pointer;
+  transition: filter var(--transition-fast);
+}
+
+.imageMenuApply:hover {
+  filter: brightness(1.15);
+}
+
+.imageMenuDelete {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex: 1;
+  padding: 8px;
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius-small);
+  background: transparent;
+  color: var(--color-danger);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition:
+    background var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.imageMenuDelete:hover {
+  background: var(--color-danger);
+  color: var(--color-bg);
 }
 
 .imageCaption {

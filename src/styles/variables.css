@@ -111,6 +111,7 @@
   --color-success: #6e8965;
   --color-success-soft: rgba(110, 137, 101, 0.14);
   --color-warning: #c18b4d;
+  --color-danger: #c0563f;
 
   /* Effects */
   --color-track: rgba(50, 43, 38, 0.1);
@@ -195,6 +196,7 @@ html[data-theme="dark"] {
   --color-success: #8daf89;
   --color-success-soft: rgba(141, 175, 137, 0.16);
   --color-warning: #c18b4d;
+  --color-danger: #d96b52;
 
   /* Effects */
   --color-track: rgba(238, 242, 247, 0.12);
