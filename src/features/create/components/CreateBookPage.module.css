@@ -63,7 +63,7 @@
   min-width: 0;
   height: 38px;
   border: none;
-  outline: none;
+  outline: none !important;
   background: transparent;
   color: var(--color-text);
   font-family: var(--font-sans);

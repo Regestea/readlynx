@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
-import { $createTextNode, $getRoot } from "lexical";
+import { $addUpdateTag, $createTextNode, $getRoot, SKIP_DOM_SELECTION_TAG } from "lexical";
 import type { TextNode } from "lexical";
 import { $createSearchHighlightNode, $isSearchHighlightNode } from "../nodes/SearchHighlightNode";
 import styles from "../DocumentEditor.module.css";
@@ -28,6 +28,9 @@ export function SearchPlugin({ query = "", activeIndex = 0, onResultCount }: Sea
     const q = query.trim().toLowerCase();
 
     editor.update(() => {
+      /* Search is a background pass: don't let Lexical restore the DOM
+         selection or steal focus from the search input. */
+      $addUpdateTag(SKIP_DOM_SELECTION_TAG);
       const root = $getRoot();
       const nodes = root.getAllTextNodes();
       for (const node of nodes) {
