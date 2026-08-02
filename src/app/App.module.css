@@ -28,8 +28,16 @@
   padding-right: var(--space-1);
 }
 
+.shellFull {
+  grid-template-columns: auto minmax(0, 1fr);
+}
+
 @media (max-width: 1380px) {
   .shell {
     grid-template-columns: auto minmax(0, 1fr) 288px;
+  }
+
+  .shellFull {
+    grid-template-columns: auto minmax(0, 1fr);
   }
 }

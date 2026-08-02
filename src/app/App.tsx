@@ -11,7 +11,6 @@ import styles from "./App.module.css";
 
 export default function App() {
   const [activeId, setActiveId] = useState("home");
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
   const isHome = activeId === "home";
 
   return (
@@ -22,24 +21,21 @@ export default function App() {
         <div className="app-background-overlay" />
       </div>
 
-      <div className={styles.shell}>
-        <Sidebar
-          activeId={activeId}
-          onNavigate={setActiveId}
-          collapsed={sidebarCollapsed}
-          onToggle={() => setSidebarCollapsed((collapsed) => !collapsed)}
-        />
+      <div className={`${styles.shell} ${isHome ? "" : styles.shellFull}`}>
+        <Sidebar activeId={activeId} onNavigate={setActiveId} />
 
         <div className={styles.main}>
-          <Header />
+          {isHome && <Header />}
           {isHome ? <HomePage /> : <ShowcasePage />}
         </div>
 
-        <aside className={styles.panel} aria-label="Reading overview">
-          <ReadingProgress />
-          <Quote />
-          <WeeklyStats />
-        </aside>
+        {isHome && (
+          <aside className={styles.panel} aria-label="Reading overview">
+            <ReadingProgress />
+            <Quote />
+            <WeeklyStats />
+          </aside>
+        )}
       </div>
     </ThemeProvider>
   );
