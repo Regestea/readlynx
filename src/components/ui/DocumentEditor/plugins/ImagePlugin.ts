@@ -3,6 +3,7 @@ import { $createParagraphNode } from "lexical";
 import { $createImageNode } from "../nodes/ImageNode";
 
 export function insertImage(editor: LexicalEditor, src: string, altText = "", width: number | null = null): void {
+  editor.getRootElement()?.focus({ preventScroll: true });
   editor.update(() => {
     const image = $createImageNode({ src, altText, width });
     const selection = $getSelection();
