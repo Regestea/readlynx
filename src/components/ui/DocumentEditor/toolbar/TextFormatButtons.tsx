@@ -10,12 +10,12 @@ import {
 } from "lucide-react";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { FORMAT_TEXT_COMMAND, type TextFormatType } from "lexical";
-import { TOGGLE_LINK_COMMAND } from "@lexical/link";
 import type { ToolbarState } from "../types";
 import styles from "../DocumentEditor.module.css";
 
 interface TextFormatButtonsProps {
   state: ToolbarState;
+  onToggleLink: () => void;
 }
 
 interface FormatButton {
@@ -25,20 +25,11 @@ interface FormatButton {
   shortcut: string;
 }
 
-export function TextFormatButtons({ state }: TextFormatButtonsProps) {
+export function TextFormatButtons({ state, onToggleLink }: TextFormatButtonsProps) {
   const [editor] = useLexicalComposerContext();
 
   const toggleFormat = (format: TextFormatType) => {
     editor.dispatchCommand(FORMAT_TEXT_COMMAND, format);
-  };
-
-  const toggleLink = () => {
-    if (state.isLink) {
-      editor.dispatchCommand(TOGGLE_LINK_COMMAND, null);
-      return;
-    }
-    const url = window.prompt("Link URL", "https://");
-    if (url) editor.dispatchCommand(TOGGLE_LINK_COMMAND, url);
   };
 
   const buttons: FormatButton[] = [
@@ -81,7 +72,7 @@ export function TextFormatButtons({ state }: TextFormatButtonsProps) {
         title={state.isLink ? "Remove link" : "Add link (Ctrl/Cmd+L)"}
         aria-label={state.isLink ? "Remove link" : "Add link"}
         aria-pressed={state.isLink}
-        onClick={toggleLink}
+        onClick={onToggleLink}
       >
         {state.isLink ? (
           <Link2Off size={15} strokeWidth={2} aria-hidden="true" />

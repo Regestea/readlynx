@@ -1,0 +1,236 @@
+.hiddenInput {
+  display: none;
+}
+
+.uploadZone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-8) var(--space-4);
+  border: 1.5px dashed var(--color-border);
+  border-radius: var(--radius-medium);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  text-align: center;
+  transition:
+    border-color var(--transition-fast),
+    background var(--transition-fast);
+}
+
+.uploadZone:hover {
+  border-color: var(--color-primary);
+  background: var(--color-hover);
+}
+
+.uploadHint {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.previewRow {
+  display: flex;
+  justify-content: center;
+  min-height: 120px;
+}
+
+.previewWrap {
+  position: relative;
+  background: var(--color-checker, #eee);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-small);
+  overflow: hidden;
+  user-select: none;
+}
+
+.previewCanvas {
+  display: block;
+}
+
+.cropBox {
+  position: absolute;
+  border: 1.5px solid var(--color-primary);
+  background: transparent;
+  cursor: move;
+  touch-action: none;
+}
+
+.cropBox::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.45);
+}
+
+.cropHandle {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border: 2px solid #fff;
+  border-radius: 3px;
+  background: var(--color-primary);
+  z-index: 1;
+}
+
+.cropNw {
+  top: -6px;
+  left: -6px;
+  cursor: nwse-resize;
+}
+
+.cropNe {
+  top: -6px;
+  right: -6px;
+  cursor: nesw-resize;
+}
+
+.cropSw {
+  bottom: -6px;
+  left: -6px;
+  cursor: nesw-resize;
+}
+
+.cropSe {
+  bottom: -6px;
+  right: -6px;
+  cursor: nwse-resize;
+}
+
+.toolRow {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.toolSeparator {
+  width: 1px;
+  height: 20px;
+  background: var(--color-border);
+  margin: 0 var(--space-1);
+}
+
+.iconButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: var(--radius-small);
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition:
+    background var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.iconButton:hover {
+  background: var(--color-hover);
+  color: var(--color-text);
+}
+
+.controls {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-medium);
+  background: var(--color-card);
+}
+
+.controlGroup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.controlLabel {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-muted);
+}
+
+.controlHint {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.sizeRow {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-2);
+}
+
+.sizeField {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+.sizeField input {
+  width: 88px;
+  padding: 6px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-small);
+  background: var(--color-glass);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-sm);
+}
+
+.lockButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-small);
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.lockButton[aria-pressed="true"] {
+  color: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+.controlGroup input[type="range"] {
+  width: 100%;
+  accent-color: var(--color-primary);
+}
+
+.checkRow {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.checkRow input {
+  accent-color: var(--color-primary);
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}

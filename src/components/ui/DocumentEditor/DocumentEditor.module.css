@@ -126,6 +126,9 @@
   left: 0;
   z-index: var(--z-overlay);
   min-width: 200px;
+  max-width: min(85vw, 320px);
+  max-height: min(60vh, 380px);
+  overflow-y: auto;
   padding: var(--space-2);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-small);
@@ -134,6 +137,11 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+
+.menuPanelRight {
+  left: auto;
+  right: 0;
 }
 
 .menuItem {
@@ -648,4 +656,46 @@
   font-size: var(--font-size-xs);
   color: var(--color-text-secondary);
   overflow-wrap: anywhere;
+}
+
+/* ---------- Link / image dialog ---------- */
+
+.promptField {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-bottom: var(--space-3);
+}
+
+.promptField:last-child {
+  margin-bottom: 0;
+}
+
+.promptLabel {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.promptActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.tableSizeRow {
+  display: flex;
+  gap: var(--space-3);
+}
+
+.tableSizeRow .promptField {
+  flex: 1;
+}
+
+.imagePreview {
+  margin-top: var(--space-2);
+  max-width: 100%;
+  max-height: 180px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-small);
+  object-fit: contain;
 }

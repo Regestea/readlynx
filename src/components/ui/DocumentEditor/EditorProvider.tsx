@@ -28,6 +28,7 @@ import {
 } from "lexical";
 import { $isLinkNode } from "@lexical/link";
 import { $findMatchingParent } from "@lexical/utils";
+import { $getSelectionStyleValueForProperty } from "@lexical/selection";
 import { $convertFromMarkdownString, $convertToMarkdownString } from "@lexical/markdown";
 import { mdTransformers } from "./plugins/MarkdownPlugin";
 import { AutoFocusPlugin } from "./plugins/AutoFocusPlugin";
@@ -72,11 +73,6 @@ function getSelectedNode(selection: ReturnType<typeof $getSelection>): TextNode 
   return $isElementNode(focusNode) ? focusNode : (focusNode.getParentOrThrow() as ElementNode);
 }
 
-function readStyleProperty(style: string, property: string): string {
-  const match = new RegExp(`${property}\\s*:\\s*([^;]+)`).exec(style);
-  return match ? match[1].trim() : "";
-}
-
 function computeToolbarState(canUndo: boolean, canRedo: boolean): ToolbarState {
   const selection = $getSelection();
   const state: ToolbarState = { ...EMPTY_TOOLBAR_STATE, canUndo, canRedo };
@@ -109,11 +105,10 @@ function computeToolbarState(canUndo: boolean, canRedo: boolean): ToolbarState {
   state.subscript = selection.hasFormat("subscript");
   state.code = selection.hasFormat("code");
 
-  const style = $isElementNode(node) ? node.getStyle() : "";
-  state.fontFamily = readStyleProperty(style, "font-family");
-  state.fontSize = readStyleProperty(style, "font-size");
-  state.textColor = readStyleProperty(style, "color");
-  state.bgColor = readStyleProperty(style, "background-color");
+  state.fontFamily = $getSelectionStyleValueForProperty(selection, "font-family", "");
+  state.fontSize = $getSelectionStyleValueForProperty(selection, "font-size", "");
+  state.textColor = $getSelectionStyleValueForProperty(selection, "color", "");
+  state.bgColor = $getSelectionStyleValueForProperty(selection, "background-color", "");
 
   const linkParent = $findMatchingParent(node as ElementNode, $isLinkNode);
   state.isLink = linkParent !== null;

@@ -3,14 +3,19 @@ import type { ReactNode } from "react";
 import {
   Check,
   ChevronDown,
+  Code,
   Download,
   FileText,
   FileType,
   FileType2,
   FolderOpen,
+  List,
+  ListChecks,
+  ListOrdered,
   Maximize,
   Minimize,
   FilePlus,
+  Quote,
 } from "lucide-react";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import {
@@ -27,19 +32,32 @@ import {
   INSERT_ORDERED_LIST_COMMAND,
   INSERT_UNORDERED_LIST_COMMAND,
 } from "@lexical/list";
+import { TOGGLE_LINK_COMMAND } from "@lexical/link";
 import { useEditorAPI, useToolbarState } from "../context";
 import { HistoryButtons } from "./HistoryButtons";
 import { TextFormatButtons } from "./TextFormatButtons";
 import { InsertButtons } from "./InsertButtons";
+import { insertImage } from "../plugins/ImagePlugin";
+import { insertTable } from "../plugins/TablePlugin";
+import { ImageEditorDialog } from "./ImageEditorDialog";
 import { FONT_SIZE_OPTIONS, HEADING_OPTIONS, TEXT_COLORS, BACKGROUND_COLORS } from "../constants";
 import type { BlockType, EpubFile } from "../types";
 import { Modal } from "../../Modal/Modal";
 import { Button } from "../../Button/Button";
+import { Input } from "../../Input/Input";
 import styles from "../DocumentEditor.module.css";
 
 interface ToolbarProps {
   fullscreen: boolean;
   onToggleFullscreen: (editorState: string) => void;
+}
+
+interface PromptDialogState {
+  kind: "link" | "table";
+  url: string;
+  alt: string;
+  rows?: number;
+  columns?: number;
 }
 
 function downloadFile(name: string, content: string, mime: string) {
@@ -54,7 +72,17 @@ function downloadFile(name: string, content: string, mime: string) {
 
 /* ---------- Menu primitives ---------- */
 
-function Menu({ label, icon, children }: { label: string; icon?: ReactNode; children: (close: () => void) => ReactNode }) {
+function Menu({
+  label,
+  icon,
+  align = "left",
+  children,
+}: {
+  label: string;
+  icon?: ReactNode;
+  align?: "left" | "right";
+  children: (close: () => void) => ReactNode;
+}) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -82,7 +110,18 @@ function Menu({ label, icon, children }: { label: string; icon?: ReactNode; chil
         <span>{label}</span>
         <ChevronDown size={12} strokeWidth={2} aria-hidden="true" />
       </button>
-      {open && <div className={styles.menuPanel}>{children(close)}</div>}
+      {open && (
+        <div
+          className={[
+            styles.menuPanel,
+            align === "right" ? styles.menuPanelRight : "",
+          ]
+            .filter(Boolean)
+            .join(" ")}
+        >
+          {children(close)}
+        </div>
+      )}
     </div>
   );
 }
@@ -121,13 +160,12 @@ function MenuItem({
 
 /* ---------- Toolbar ---------- */
 
-const BLOCK_OPTIONS: { value: BlockType; label: string }[] = [
-  ...HEADING_OPTIONS.map(({ value, label }) => ({ value: value as BlockType, label })),
-  { value: "quote", label: "Quote" },
-  { value: "code", label: "Code block" },
-  { value: "ul", label: "Bullet list" },
-  { value: "ol", label: "Numbered list" },
-  { value: "check", label: "Checklist" },
+const LINE_TYPE_OPTIONS: { value: BlockType; label: string; icon: ReactNode }[] = [
+  { value: "quote", label: "Quote", icon: <Quote size={15} strokeWidth={2} aria-hidden="true" /> },
+  { value: "code", label: "Code block", icon: <Code size={15} strokeWidth={2} aria-hidden="true" /> },
+  { value: "ul", label: "Bullet list", icon: <List size={15} strokeWidth={2} aria-hidden="true" /> },
+  { value: "ol", label: "Numbered list", icon: <ListOrdered size={15} strokeWidth={2} aria-hidden="true" /> },
+  { value: "check", label: "Checklist", icon: <ListChecks size={15} strokeWidth={2} aria-hidden="true" /> },
 ];
 
 export function Toolbar({ fullscreen, onToggleFullscreen }: ToolbarProps) {
@@ -136,6 +174,9 @@ export function Toolbar({ fullscreen, onToggleFullscreen }: ToolbarProps) {
   const state = useToolbarState();
   const importInputRef = useRef<HTMLInputElement>(null);
   const [epubFiles, setEpubFiles] = useState<EpubFile[] | null>(null);
+  const [promptDialog, setPromptDialog] = useState<PromptDialogState | null>(null);
+  const [imageEditorOpen, setImageEditorOpen] = useState(false);
+  const [imageEditorKey, setImageEditorKey] = useState(0);
 
   const handleToggleFullscreen = useCallback(() => {
     onToggleFullscreen(api.saveState());
@@ -169,6 +210,45 @@ export function Toolbar({ fullscreen, onToggleFullscreen }: ToolbarProps) {
 
   const onExportEpub = () => {
     setEpubFiles(api.exportEpub({ title: "My Book", author: "ReadLynx" }));
+  };
+
+  const onToggleLink = () => {
+    if (state.isLink) {
+      editor.dispatchCommand(TOGGLE_LINK_COMMAND, null);
+      return;
+    }
+    setPromptDialog({ kind: "link", url: "https://", alt: "" });
+  };
+
+  const onInsertImage = () => {
+    setImageEditorKey((key) => key + 1);
+    setImageEditorOpen(true);
+  };
+
+  const onInsertTable = () => {
+    setPromptDialog({ kind: "table", url: "", alt: "", rows: 3, columns: 3 });
+  };
+
+  const confirmPrompt = () => {
+    if (!promptDialog) return;
+    const { kind, url, rows, columns } = promptDialog;
+    const cleanUrl = url.trim();
+    if (kind === "link") {
+      if (cleanUrl) editor.dispatchCommand(TOGGLE_LINK_COMMAND, cleanUrl);
+    } else if (kind === "table") {
+      insertTable(editor, {
+        rows: Math.max(1, Math.min(rows ?? 3, 20)),
+        columns: Math.max(1, Math.min(columns ?? 3, 10)),
+      });
+    }
+    setPromptDialog(null);
+  };
+
+  const canConfirmPrompt = (dialog: PromptDialogState): boolean => {
+    if (dialog.kind === "table") {
+      return (dialog.rows ?? 0) >= 1 && (dialog.columns ?? 0) >= 1;
+    }
+    return dialog.url.trim().length > 0;
   };
 
   const applyBlock = (type: BlockType) => {
@@ -302,27 +382,17 @@ export function Toolbar({ fullscreen, onToggleFullscreen }: ToolbarProps) {
         <select
           className={styles.blockSelect}
           value={state.blockType}
-          title="Block type"
-          aria-label="Block type"
+          title="Line Type"
+          aria-label="Line Type"
           onChange={(event) => applyBlock(event.target.value as BlockType)}
         >
-          {BLOCK_OPTIONS.map(({ value, label }) => (
+          {HEADING_OPTIONS.map(({ value, label }) => (
             <option key={value} value={value}>
               {label}
             </option>
           ))}
         </select>
       </div>
-
-      <div className={styles.toolbarGroup}>
-        <TextFormatButtons state={state} />
-      </div>
-
-      <div className={styles.toolbarGroup}>
-        <InsertButtons />
-      </div>
-
-      <div className={styles.toolbarSpacer} />
 
       <div className={styles.toolbarGroup}>
         <Menu label="Format" icon={<FileText size={14} strokeWidth={1.8} aria-hidden="true" />}>
@@ -395,6 +465,37 @@ export function Toolbar({ fullscreen, onToggleFullscreen }: ToolbarProps) {
       </div>
 
       <div className={styles.toolbarGroup}>
+        {LINE_TYPE_OPTIONS.map(({ value, label, icon }) => (
+          <button
+            key={value}
+            type="button"
+            className={[
+              styles.toolButton,
+              state.blockType === value ? styles.toolButtonActive : "",
+            ]
+              .filter(Boolean)
+              .join(" ")}
+            title={label}
+            aria-label={label}
+            aria-pressed={state.blockType === value}
+            onClick={() => applyBlock(value)}
+          >
+            {icon}
+          </button>
+        ))}
+      </div>
+
+      <div className={styles.toolbarGroup}>
+        <TextFormatButtons state={state} onToggleLink={onToggleLink} />
+      </div>
+
+      <div className={styles.toolbarGroup}>
+        <InsertButtons onInsertImage={onInsertImage} onInsertTable={onInsertTable} />
+      </div>
+
+      <div className={styles.toolbarSpacer} />
+
+      <div className={styles.toolbarGroup}>
         <button
           type="button"
           className={styles.toolButton}
@@ -438,6 +539,100 @@ export function Toolbar({ fullscreen, onToggleFullscreen }: ToolbarProps) {
           ))}
         </div>
       </Modal>
+
+      <Modal
+        open={promptDialog !== null}
+        onClose={() => setPromptDialog(null)}
+        title={
+          promptDialog?.kind === "table" ? "Insert table" : "Add link"
+        }
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setPromptDialog(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              disabled={!promptDialog || !canConfirmPrompt(promptDialog)}
+              onClick={confirmPrompt}
+            >
+              {promptDialog?.kind === "link" ? "Apply" : "Insert"}
+            </Button>
+          </>
+        }
+      >
+        {promptDialog?.kind === "table" ? (
+          <div className={styles.tableSizeRow}>
+            <div className={styles.promptField}>
+              <label className={styles.promptLabel} htmlFor="readlynx-table-rows">
+                Rows
+              </label>
+              <Input
+                id="readlynx-table-rows"
+                type="number"
+                min={1}
+                max={20}
+                value={promptDialog.rows ?? 3}
+                autoFocus
+                onChange={(event) =>
+                  setPromptDialog((prev) =>
+                    prev ? { ...prev, rows: Number(event.target.value) } : prev,
+                  )
+                }
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") confirmPrompt();
+                }}
+              />
+            </div>
+            <div className={styles.promptField}>
+              <label className={styles.promptLabel} htmlFor="readlynx-table-columns">
+                Columns
+              </label>
+              <Input
+                id="readlynx-table-columns"
+                type="number"
+                min={1}
+                max={10}
+                value={promptDialog.columns ?? 3}
+                onChange={(event) =>
+                  setPromptDialog((prev) =>
+                    prev ? { ...prev, columns: Number(event.target.value) } : prev,
+                  )
+                }
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") confirmPrompt();
+                }}
+              />
+            </div>
+          </div>
+        ) : (
+          <div className={styles.promptField}>
+            <label className={styles.promptLabel} htmlFor="readlynx-prompt-url">
+              Link URL
+            </label>
+            <Input
+              id="readlynx-prompt-url"
+              type="url"
+              value={promptDialog?.url ?? ""}
+              placeholder="https://"
+              autoFocus
+              onChange={(event) =>
+                setPromptDialog((prev) => (prev ? { ...prev, url: event.target.value } : prev))
+              }
+              onKeyDown={(event) => {
+                if (event.key === "Enter") confirmPrompt();
+              }}
+            />
+          </div>
+        )}
+      </Modal>
+
+      <ImageEditorDialog
+        key={imageEditorKey}
+        open={imageEditorOpen}
+        onClose={() => setImageEditorOpen(false)}
+        onInsert={(src, width) => insertImage(editor, src, "", width)}
+      />
     </div>
   );
 }
