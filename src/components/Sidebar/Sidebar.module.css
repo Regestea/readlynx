@@ -1,10 +1,11 @@
 .sidebar {
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: var(--space-6);
-  width: var(--sidebar-width);
+  width: var(--sidebar-width-collapsed);
   min-height: 0;
-  padding: var(--space-6);
+  padding: var(--space-6) var(--space-3);
   background: var(--color-card);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sidebar);
@@ -13,18 +14,6 @@
   -webkit-backdrop-filter: blur(var(--blur-glass));
   overflow-x: hidden;
   overflow-y: auto;
-  will-change: width;
-  transition:
-    width var(--transition-collapse),
-    padding var(--transition-collapse),
-    background-color var(--transition-base) ease,
-    border-color var(--transition-base) ease;
-}
-
-@media (max-width: 1380px) {
-  .sidebar {
-    width: 244px;
-  }
 }
 
 /* ---------- Brand ---------- */
@@ -32,8 +21,9 @@
 .brand {
   display: flex;
   align-items: center;
-  gap: var(--space-4);
-  padding: var(--space-2) var(--space-2) var(--space-4);
+  justify-content: center;
+  width: 100%;
+  padding-bottom: var(--space-4);
   border-bottom: 1px solid var(--color-border);
 }
 
@@ -51,76 +41,33 @@
     inset 0 1px 0 rgba(255, 255, 255, 0.2);
 }
 
-.brandText {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.name {
-  font-size: var(--font-size-xl);
-  font-weight: var(--font-weight-bold);
-  letter-spacing: -0.01em;
-  line-height: var(--line-height-tight);
-}
-
-.tagline {
-  font-size: var(--font-size-xs);
-  color: var(--color-text-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
 /* ---------- Navigation ---------- */
 
 .nav {
   display: flex;
   flex-direction: column;
-  gap: var(--space-6);
+  gap: var(--space-2);
   flex: 1;
-}
-
-.group {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
-
-.sectionLabel {
-  font-size: 11px;
-  font-weight: var(--font-weight-semibold);
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  color: var(--color-text-muted);
-  padding: var(--space-1) var(--space-4);
-  margin-bottom: var(--space-1);
+  width: 100%;
 }
 
 .navItem {
-  position: relative;
   display: flex;
   align-items: center;
-  gap: var(--space-4);
+  justify-content: center;
   width: 100%;
-  padding: 12px 16px;
+  padding: 12px 0;
   border-radius: var(--radius-medium);
-  text-align: left;
-  font-size: var(--font-size-md);
-  font-weight: var(--font-weight-medium);
   color: var(--color-text-secondary);
   transition:
     background-color var(--transition-base) ease,
     color var(--transition-base) ease,
-    transform var(--transition-base) ease,
-    gap var(--transition-collapse),
-    padding var(--transition-collapse);
+    transform var(--transition-base) ease;
 }
 
 .navItem:hover {
   background: var(--color-hover);
   color: var(--color-text);
-  transform: translateX(2px);
 }
 
 .navIcon {
@@ -135,216 +82,57 @@
 .active {
   background: var(--color-active);
   color: var(--color-text);
-  font-weight: var(--font-weight-semibold);
-}
-
-.active:hover {
-  transform: none;
 }
 
 .active .navIcon {
   color: var(--color-icon);
 }
 
-.activeDot {
-  position: absolute;
-  right: 14px;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--color-terracotta);
-}
-
 /* ---------- Footer ---------- */
 
 .footer {
   display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
+  justify-content: center;
+  width: 100%;
 }
 
-/* ---------- Profile ---------- */
+/* ---------- Theme toggle ---------- */
 
-.profile {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-4);
-  border-radius: var(--radius-medium);
-  background: var(--color-glass);
-  border: 1px solid var(--color-border);
-  box-shadow: var(--shadow-sm);
-}
-
-.profileText {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  flex: 1;
-}
-
-.profileName {
-  font-size: var(--font-size-md);
-  font-weight: var(--font-weight-semibold);
-  line-height: var(--line-height-tight);
-}
-
-.profileMeta {
-  font-size: var(--font-size-xs);
-  color: var(--color-text-muted);
-}
-
-.profileIcon {
-  color: var(--color-icon-inactive);
-  flex-shrink: 0;
-}
-
-/* ---------- Collapse toggle ---------- */
-
-.collapseToggle {
+.themeToggle {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: var(--space-3);
   width: 100%;
-  padding: 11px 16px;
+  padding: 12px 0;
   border-radius: var(--radius-medium);
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
-  color: var(--color-text-muted);
+  color: var(--color-text-secondary);
   transition:
     background-color var(--transition-base) ease,
     color var(--transition-base) ease;
 }
 
-.collapseToggle:hover {
+.themeToggle:hover {
   background: var(--color-hover);
   color: var(--color-text);
 }
 
-.toggleIcon {
-  transition: transform var(--transition-collapse);
+.iconStack {
+  position: relative;
+  display: block;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
 }
 
-/* ==========================================================
-   COLLAPSED — icon rail only (animated)
-   ========================================================== */
-
-/* Text that collapses to zero width while fading out */
-.brandText,
-.profileText,
-.navItemLabel,
-.collapseLabel {
-  min-width: 0;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
+.themeIcon {
+  position: absolute;
+  inset: 0;
   transition:
-    opacity 300ms ease,
-    max-width var(--transition-collapse);
+    opacity var(--transition-base) ease,
+    transform var(--transition-slow) ease;
 }
 
-.brandText {
-  max-width: 160px;
-}
-
-.profileText {
-  flex: 1 1 auto;
-  max-width: 130px;
-}
-
-.navItemLabel {
-  max-width: 130px;
-}
-
-.collapseLabel {
-  max-width: 80px;
-}
-
-.sectionLabel {
-  overflow: hidden;
-  transition:
-    max-height var(--transition-collapse),
-    opacity 300ms ease,
-    padding var(--transition-collapse),
-    margin var(--transition-collapse);
-}
-
-.profileIcon {
-  transition:
-    width var(--transition-collapse),
-    height var(--transition-collapse),
-    opacity 300ms ease;
-}
-
-.brand,
-.profile,
-.collapseToggle {
-  transition: gap var(--transition-collapse);
-}
-
-/* ---------- Collapsed state ---------- */
-
-.collapsed {
-  width: var(--sidebar-width-collapsed);
-  padding: var(--space-6) var(--space-3);
-}
-
-.collapsed .toggleIcon {
-  transform: rotate(180deg);
-}
-
-.collapsed .brandText,
-.collapsed .profileText,
-.collapsed .navItemLabel,
-.collapsed .collapseLabel {
-  max-width: 0;
+.themeIconHidden {
   opacity: 0;
-}
-
-.collapsed .brand,
-.collapsed .profile,
-.collapsed .collapseToggle {
-  gap: 0;
-}
-
-.collapsed .brand {
-  justify-content: center;
-  padding: var(--space-2) 0 var(--space-4);
-}
-
-.collapsed .sectionLabel {
-  max-height: 0;
-  opacity: 0;
-  padding: 0;
-  margin: 0;
-}
-
-.collapsed .navItem {
-  justify-content: center;
-  gap: 0;
-  padding: 12px 0;
-}
-
-.collapsed .navItem:hover {
-  transform: none;
-}
-
-.collapsed .activeDot {
-  display: none;
-}
-
-.collapsed .profile {
-  justify-content: center;
-  padding: var(--space-2);
-}
-
-.collapsed .profileIcon {
-  width: 0;
-  height: 0;
-  opacity: 0;
-}
-
-.collapsed .collapseToggle {
-  padding: 11px;
+  transform: rotate(90deg) scale(0.5);
 }

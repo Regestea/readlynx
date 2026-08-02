@@ -4,32 +4,24 @@ import {
   Heart,
   Home,
   Library,
+  Moon,
   NotebookPen,
-  PanelLeft,
   Settings,
+  Sun,
   Users,
 } from "lucide-react";
-import { Avatar } from "../ui/Avatar/Avatar";
+import { useTheme } from "../../app/providers/theme/ThemeContext";
 import styles from "./Sidebar.module.css";
 
-const NAV_GROUPS = [
-  {
-    label: "Menu",
-    items: [
-      { id: "home", label: "Home", Icon: Home },
-      { id: "library", label: "Library", Icon: Library },
-    ],
-  },
-  {
-    label: "Library",
-    items: [
-      { id: "currently-reading", label: "Currently Reading", Icon: BookOpen },
-      { id: "favorites", label: "Favorites", Icon: Heart },
-      { id: "collections", label: "Collections", Icon: FolderOpen },
-      { id: "notes", label: "Notes", Icon: NotebookPen },
-      { id: "authors", label: "Authors", Icon: Users },
-    ],
-  },
+const NAV_ITEMS = [
+  { id: "home", label: "Home", Icon: Home },
+  { id: "library", label: "Library", Icon: Library },
+  { id: "currently-reading", label: "Currently Reading", Icon: BookOpen },
+  { id: "favorites", label: "Favorites", Icon: Heart },
+  { id: "collections", label: "Collections", Icon: FolderOpen },
+  { id: "notes", label: "Notes", Icon: NotebookPen },
+  { id: "authors", label: "Authors", Icon: Users },
+  { id: "settings", label: "Settings", Icon: Settings },
 ] as const;
 
 interface NavItemProps {
@@ -45,12 +37,11 @@ function NavItem({ label, Icon, active, onClick }: NavItemProps) {
       type="button"
       className={`${styles.navItem} ${active ? styles.active : ""}`}
       aria-current={active ? "page" : undefined}
+      aria-label={label}
       title={label}
       onClick={onClick}
     >
       <Icon size={18} strokeWidth={1.8} className={styles.navIcon} aria-hidden="true" />
-      <span className={styles.navItemLabel}>{label}</span>
-      {active && <span className={styles.activeDot} aria-hidden="true" />}
     </button>
   );
 }
@@ -58,72 +49,52 @@ function NavItem({ label, Icon, active, onClick }: NavItemProps) {
 interface SidebarProps {
   activeId: string;
   onNavigate: (id: string) => void;
-  collapsed: boolean;
-  onToggle: () => void;
 }
 
-export function Sidebar({ activeId, onNavigate, collapsed, onToggle }: SidebarProps) {
+export function Sidebar({ activeId, onNavigate }: SidebarProps) {
+  const { theme, toggleTheme } = useTheme();
+  const isDark = theme === "dark";
+
   return (
-    <aside
-      className={`${styles.sidebar} ${collapsed ? styles.collapsed : ""}`}
-      aria-label="Primary"
-    >
+    <aside className={styles.sidebar} aria-label="Primary">
       <div className={styles.brand}>
         <span className={styles.logo} aria-hidden="true">
           <BookOpen size={22} strokeWidth={1.8} />
         </span>
-        <div className={styles.brandText}>
-          <span className={styles.name}>ReadLynx</span>
-          <span className={styles.tagline}>Quiet mornings, good books</span>
-        </div>
       </div>
 
       <nav className={styles.nav} aria-label="Main menu">
-        {NAV_GROUPS.map((group) => (
-          <div key={group.label} className={styles.group}>
-            <p className={styles.sectionLabel}>{group.label}</p>
-            {group.items.map((item) => (
-              <NavItem
-                key={item.id}
-                label={item.label}
-                Icon={item.Icon}
-                active={item.id === activeId}
-                onClick={() => onNavigate(item.id)}
-              />
-            ))}
-          </div>
-        ))}
-        <div className={styles.group}>
-          <p className={styles.sectionLabel}>General</p>
+        {NAV_ITEMS.map((item) => (
           <NavItem
-            label="Settings"
-            Icon={Settings}
-            active={activeId === "settings"}
-            onClick={() => onNavigate("settings")}
+            key={item.id}
+            label={item.label}
+            Icon={item.Icon}
+            active={item.id === activeId}
+            onClick={() => onNavigate(item.id)}
           />
-        </div>
+        ))}
       </nav>
 
       <div className={styles.footer}>
-        <div className={styles.profile}>
-          <Avatar name="Avery Lane" size={40} />
-          <div className={styles.profileText}>
-            <span className={styles.profileName}>Avery Lane</span>
-            <span className={styles.profileMeta}>Reader · 42 books</span>
-          </div>
-          <Settings size={16} strokeWidth={1.8} className={styles.profileIcon} aria-hidden="true" />
-        </div>
-
         <button
           type="button"
-          className={styles.collapseToggle}
-          onClick={onToggle}
-          aria-expanded={!collapsed}
-          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          className={styles.themeToggle}
+          onClick={toggleTheme}
+          aria-label={isDark ? "Switch to light theme" : "Switch to dark theme"}
+          title="Change theme"
         >
-          <PanelLeft size={18} strokeWidth={1.8} className={styles.toggleIcon} aria-hidden="true" />
-          <span className={styles.collapseLabel}>Collapse</span>
+          <span className={styles.iconStack} aria-hidden="true">
+            <Sun
+              size={18}
+              strokeWidth={1.8}
+              className={`${styles.themeIcon} ${isDark ? styles.themeIconHidden : ""}`}
+            />
+            <Moon
+              size={18}
+              strokeWidth={1.8}
+              className={`${styles.themeIcon} ${isDark ? "" : styles.themeIconHidden}`}
+            />
+          </span>
         </button>
       </div>
     </aside>
