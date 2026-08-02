@@ -3,6 +3,7 @@ import type { ReactNode, RefObject } from "react";
 import { LexicalComposer, type InitialConfigType } from "@lexical/react/LexicalComposer";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { HistoryPlugin } from "@lexical/react/LexicalHistoryPlugin";
+import { OnChangePlugin } from "@lexical/react/LexicalOnChangePlugin";
 import { LinkPlugin } from "@lexical/react/LexicalLinkPlugin";
 import { ListPlugin } from "@lexical/react/LexicalListPlugin";
 import { CheckListPlugin } from "@lexical/react/LexicalCheckListPlugin";
@@ -34,6 +35,7 @@ import { mdTransformers } from "./plugins/MarkdownPlugin";
 import { AutoFocusPlugin } from "./plugins/AutoFocusPlugin";
 import { AutoDirectionPlugin } from "./plugins/AutoDirectionPlugin";
 import { MarkdownPlugin } from "./plugins/MarkdownPlugin";
+import { MarkdownPastePlugin } from "./plugins/MarkdownPastePlugin";
 import { ShortcutsPlugin } from "./plugins/ShortcutsPlugin";
 import { PaginationPlugin } from "./plugins/PaginationPlugin";
 import { SearchPlugin } from "./plugins/SearchPlugin";
@@ -63,6 +65,7 @@ interface EditorProviderProps {
   initialState?: string | null;
   editable?: boolean;
   onSave?: () => void;
+  onChange?: (json: string) => void;
   apiRef?: RefObject<EditorAPI | null>;
   paged?: boolean;
   pageFormat?: PageFormat;
@@ -219,8 +222,7 @@ function EditorApiBridge({
       importMarkdown: (markdown: string) => {
         editor.update(() => $convertFromMarkdownString(markdown, mdTransformers));
       },
-      exportMarkdown: () =>
-        editor.getEditorState().read(() => $convertToMarkdownString(mdTransformers)),
+      exportMarkdown: () => editor.read(() => $convertToMarkdownString(mdTransformers)),
       exportHtml: () => exportHtml(editor),
       exportEpub: (metadata?: EpubMetadata) => exportEpub(editor, metadata),
       undo: () => editor.dispatchCommand(UNDO_COMMAND, undefined),
@@ -254,6 +256,7 @@ export function EditorProvider({
   initialState,
   editable = true,
   onSave,
+  onChange,
   apiRef,
   paged = false,
   pageFormat = "a4",
@@ -300,6 +303,7 @@ export function EditorProvider({
         initialMarkdown={initialMarkdown}
         initialState={initialState}
         onSave={onSave}
+        onChange={onChange}
         apiRef={apiRef}
         paged={paged}
         pageFormat={pageFormat}
@@ -322,6 +326,7 @@ function EditorCore({
   initialState,
   apiRef,
   onSave,
+  onChange,
   paged,
   pageFormat,
   zoom,
@@ -336,6 +341,7 @@ function EditorCore({
   initialState?: string | null;
   apiRef?: RefObject<EditorAPI | null>;
   onSave?: () => void;
+  onChange?: (json: string) => void;
   paged: boolean;
   pageFormat: PageFormat;
   zoom: number;
@@ -362,11 +368,17 @@ function EditorCore({
   return (
     <>
       <HistoryPlugin externalHistoryState={historyState} />
+      <OnChangePlugin
+        onChange={(editorState) => {
+          onChange?.(JSON.stringify(editorState.toJSON()));
+        }}
+      />
       <LinkPlugin />
       <ListPlugin />
       <CheckListPlugin />
       <TablePlugin />
       <MarkdownPlugin shortcuts />
+      <MarkdownPastePlugin />
       <ShortcutsPlugin onSave={onSave} />
       <AutoDirectionPlugin />
       <AutoFocusPlugin />

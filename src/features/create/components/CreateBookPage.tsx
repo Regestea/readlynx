@@ -242,6 +242,9 @@ export function CreateBookPage({ onBack }: CreateBookPageProps) {
           searchQuery={searchQuery}
           searchActiveIndex={searchIndex}
           onSearchResultCount={setSearchCount}
+          onChange={(json) => {
+            console.log("[editor change] json:", json);
+          }}
         />
       </div>
     </main>

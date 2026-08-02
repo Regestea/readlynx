@@ -16,6 +16,7 @@ export interface DocumentEditorProps {
   editable?: boolean;
   apiRef?: RefObject<EditorAPI | null>;
   onSave?: () => void;
+  onChange?: (json: string) => void;
   className?: string;
   paged?: boolean;
   pageFormat?: PageFormat;
@@ -35,6 +36,7 @@ export function DocumentEditor({
   editable = true,
   apiRef,
   onSave,
+  onChange,
   className,
   paged = false,
   pageFormat = "a4",
@@ -112,6 +114,7 @@ export function DocumentEditor({
       editable={editable}
       apiRef={apiRef}
       onSave={onSave}
+      onChange={onChange}
       paged={paged}
       pageFormat={pageFormat}
       zoom={clampedZoom}

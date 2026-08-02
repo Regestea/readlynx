@@ -35,6 +35,11 @@ import {
   CalloutNode,
 } from "../nodes/CalloutNode";
 import {
+  $createHorizontalRuleNode,
+  $isHorizontalRuleNode,
+  HorizontalRuleNode,
+} from "@lexical/react/LexicalHorizontalRuleNode";
+import {
   $createCustomBlockNode,
   $isCustomBlockNode,
   CustomBlockNode,
@@ -149,6 +154,22 @@ const IMAGE: ElementTransformer = {
   },
 };
 
+/* ---------- Thematic break ---------- */
+
+const HR_RE = /^\s{0,3}([-*_])(?:[ \t]*\1){2,}\s*$/;
+
+const HR: ElementTransformer = {
+  type: "element",
+  dependencies: [HorizontalRuleNode],
+  regExp: HR_RE,
+  replace(parentNode) {
+    parentNode.replace($createHorizontalRuleNode());
+  },
+  export(node) {
+    return $isHorizontalRuleNode(node) ? "---" : null;
+  },
+};
+
 /* ---------- Callout ---------- */
 
 const CALLOUT_RE = /^>\s*\[!([a-z]+)\]/i;
@@ -246,6 +267,7 @@ const CUSTOM_BLOCK: MultilineElementTransformer = {
 export const mdTransformers: Transformer[] = [
   TABLE,
   IMAGE,
+  HR,
   CALLOUT,
   CUSTOM_BLOCK,
   HEADING,
