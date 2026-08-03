@@ -37,6 +37,7 @@ import { AutoDirectionPlugin } from "./plugins/AutoDirectionPlugin";
 import { MarkdownPlugin } from "./plugins/MarkdownPlugin";
 import { MarkdownPastePlugin } from "./plugins/MarkdownPastePlugin";
 import { ShortcutsPlugin } from "./plugins/ShortcutsPlugin";
+import { ContextMenuPlugin } from "./plugins/ContextMenuPlugin";
 import { PaginationPlugin } from "./plugins/PaginationPlugin";
 import { PageBoundaryPlugin } from "./plugins/PageBoundaryPlugin";
 import { SearchPlugin } from "./plugins/SearchPlugin";
@@ -404,6 +405,7 @@ function EditorCore({
       <MarkdownPlugin shortcuts />
       <MarkdownPastePlugin />
       <ShortcutsPlugin onSave={onSave} />
+      <ContextMenuPlugin paged={paged} historyState={historyState} />
       <AutoDirectionPlugin />
       <AutoFocusPlugin />
       <CaretScrollPlugin />
