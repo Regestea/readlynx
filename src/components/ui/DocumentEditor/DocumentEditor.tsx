@@ -126,6 +126,7 @@ export function DocumentEditor({
         fullscreen={fullscreen}
         onToggleFullscreen={toggleFullscreen}
         paged={paged}
+        pageFormat={pageFormat}
       />
       {paged && (
         <style>{`@page { size: ${PAGE_FORMATS[pageFormat].cssSize}; margin: ${PAGE_MARGIN_MM}mm; }`}</style>

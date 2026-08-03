@@ -1,5 +1,6 @@
 import type { LexicalEditor } from "lexical";
 import { $generateHtmlFromNodes } from "@lexical/html";
+import { zipSync } from "fflate";
 import type { EpubFile, EpubMetadata } from "../types";
 
 const XML_DECL = '<?xml version="1.0" encoding="UTF-8"?>';
@@ -74,7 +75,7 @@ export function exportEpub(editor: LexicalEditor, metadata: EpubMetadata = {}): 
   const language = metadata.language?.trim() || "en";
   const uid = metadata.identifier?.trim() || `urn:uuid:${makeUuid()}`;
 
-  const bodyHtml = $generateHtmlFromNodes(editor);
+  const bodyHtml = editor.read(() => $generateHtmlFromNodes(editor));
   const chapters = splitChapters(bodyHtml);
   const chapterTitles = chapters.map(
     (chapter, i) => extractFirstHeading(chapter) || (chapters.length > 1 ? `Chapter ${i + 1}` : title),
@@ -213,4 +214,20 @@ ${chapter}
   });
 
   return files;
+}
+
+/**
+ * Packs the EPUB container files into a single `.epub` archive.
+ *
+ * Per the EPUB 3 spec, the `mimetype` file must be the first entry and stored
+ * uncompressed, which is what EPUB readers rely on for file sniffing.
+ */
+export function zipEpubFiles(files: EpubFile[]): Blob {
+  const entries: Record<string, Uint8Array | [Uint8Array, { level: 0 }]> = {};
+  for (const [index, file] of files.entries()) {
+    const bytes = new TextEncoder().encode(file.content);
+    entries[file.path] =
+      index === 0 && file.path === "mimetype" ? [bytes, { level: 0 }] : bytes;
+  }
+  return new Blob([zipSync(entries)], { type: "application/epub+zip" });
 }

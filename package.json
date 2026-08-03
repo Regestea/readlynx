@@ -26,6 +26,8 @@
     "@lexical/selection": "^0.49.0",
     "@lexical/table": "^0.49.0",
     "@lexical/utils": "^0.49.0",
+    "docx": "^9.7.1",
+    "fflate": "^0.8.3",
     "lexical": "^0.49.0",
     "lucide-react": "^1.28.0",
     "mermaid": "^11.16.0",

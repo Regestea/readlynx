@@ -42,6 +42,7 @@ import { PageBoundaryPlugin } from "./plugins/PageBoundaryPlugin";
 import { SearchPlugin } from "./plugins/SearchPlugin";
 import { CaretScrollPlugin } from "./plugins/CaretScrollPlugin";
 import type { PageFormat } from "./constants";
+import { exportDocx } from "./exporters/docxExporter";
 import { exportEpub } from "./exporters/epubExporter";
 import { exportHtml } from "./exporters/htmlExporter";
 import { createEditorTheme } from "./theme";
@@ -51,7 +52,7 @@ import { CustomBlockNode } from "./nodes/CustomBlockNode";
 import { ImageNode } from "./nodes/ImageNode";
 import { PageBreakNode } from "./nodes/PageBreakNode";
 import { SearchHighlightNode } from "./nodes/SearchHighlightNode";
-import { EditorApiContext, ToolbarStateContext } from "./context";
+import { EditorApiContext, ToolbarStateContext, DefaultFontContext } from "./context";
 import {
   EMPTY_TOOLBAR_STATE,
   type BlockType,
@@ -190,13 +191,24 @@ function EditorApiBridge({
   children,
   apiRef,
   historyState,
+  pageFormat,
 }: {
   children: ReactNode;
   apiRef?: RefObject<EditorAPI | null>;
   historyState: HistoryState;
+  pageFormat: PageFormat;
 }) {
   const [editor] = useLexicalComposerContext();
   const [toolbarState, setToolbarState] = useState<ToolbarState>(EMPTY_TOOLBAR_STATE);
+  const [defaultFontFamily, setDefaultFontFamily] = useState("");
+
+  useEffect(() => {
+    return editor.registerRootListener((rootElement) => {
+      if (rootElement) {
+        rootElement.style.fontFamily = defaultFontFamily || "";
+      }
+    });
+  }, [editor, defaultFontFamily]);
 
   useEffect(() => {
     return editor.registerUpdateListener(() => {
@@ -225,13 +237,14 @@ function EditorApiBridge({
       },
       exportMarkdown: () => editor.read(() => $convertToMarkdownString(mdTransformers)),
       exportHtml: () => exportHtml(editor),
+      exportDocx: () => exportDocx(editor, pageFormat),
       exportEpub: (metadata?: EpubMetadata) => exportEpub(editor, metadata),
       undo: () => editor.dispatchCommand(UNDO_COMMAND, undefined),
       redo: () => editor.dispatchCommand(REDO_COMMAND, undefined),
       focus: () => editor.focus(),
       getEditor: () => editor,
     }),
-    [editor],
+    [editor, pageFormat],
   );
 
   useEffect(() => {
@@ -244,7 +257,11 @@ function EditorApiBridge({
 
   return (
     <EditorApiContext.Provider value={api}>
-      <ToolbarStateContext.Provider value={toolbarState}>{children}</ToolbarStateContext.Provider>
+      <DefaultFontContext.Provider value={{ defaultFontFamily, setDefaultFontFamily }}>
+        <ToolbarStateContext.Provider value={toolbarState}>
+          {children}
+        </ToolbarStateContext.Provider>
+      </DefaultFontContext.Provider>
     </EditorApiContext.Provider>
   );
 }
@@ -403,7 +420,7 @@ function EditorCore({
         activeIndex={searchActiveIndex}
         onResultCount={onSearchResultCount}
       />
-      <EditorApiBridge apiRef={apiRef} historyState={historyState}>
+      <EditorApiBridge apiRef={apiRef} historyState={historyState} pageFormat={pageFormat}>
         {children}
       </EditorApiBridge>
     </>

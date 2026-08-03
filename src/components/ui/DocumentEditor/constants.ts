@@ -1,13 +1,3 @@
-export const FONT_FAMILY_OPTIONS = [
-  { value: "", label: "Default" },
-  { value: "Inter, sans-serif", label: "Inter" },
-  { value: "Georgia, serif", label: "Georgia" },
-  { value: "Times New Roman, serif", label: "Times New Roman" },
-  { value: "Courier New, monospace", label: "Courier New" },
-  { value: "Vazirmatn, Tahoma, sans-serif", label: "Vazirmatn (فارسی)" },
-  { value: "Noto Sans Arabic, Segoe UI, sans-serif", label: "Noto Arabic (العربية)" },
-] as const;
-
 export const FONT_SIZE_OPTIONS = [
   { value: "", label: "Default" },
   { value: "12px", label: "12px" },
@@ -83,8 +73,8 @@ export const PAGE_FORMATS: Record<PageFormat, PageFormatInfo> = {
   executive: { label: "Executive", width: 696, height: 1008, cssSize: "7.25in 10.5in" },
 };
 
-/** Standard page margin (1 inch = 25.4 mm) applied on all four sides. */
-export const PAGE_MARGIN_MM = 25.4;
+/** Standard page margin (0.5 inch = 12.7 mm) applied on all four sides. */
+export const PAGE_MARGIN_MM = 12.7;
 
 /* On-screen margins in px at 96 dpi (1 inch = 96 px), so they match the
    physical `@page` margins used when printing / exporting to PDF exactly. */
@@ -92,4 +82,13 @@ export const PAGE_MARGIN_X = Math.round((PAGE_MARGIN_MM / 25.4) * 96);
 export const PAGE_MARGIN_Y = Math.round((PAGE_MARGIN_MM / 25.4) * 96);
 
 export const ZOOM_OPTIONS = [0.5, 0.75, 1, 1.25, 1.5] as const;
+
+/** Physical page size in microns, for Electron's `printToPDF` pageSize option. */
+export function pageSizeMicrons(format: PageFormat): { width: number; height: number } {
+  const { width, height } = PAGE_FORMATS[format];
+  return {
+    width: Math.round((width / 96) * 25400),
+    height: Math.round((height / 96) * 25400),
+  };
+}
 

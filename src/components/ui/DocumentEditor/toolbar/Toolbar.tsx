@@ -7,7 +7,8 @@ import {
   Check,
   ChevronDown,
   Code,
-  Download,
+  FileDown,
+  FileOutput,
   FileText,
   FileType,
   FileType2,
@@ -18,6 +19,7 @@ import {
   Maximize,
   Minimize,
   FilePlus,
+  Palette,
   Quote,
 } from "lucide-react";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
@@ -45,8 +47,11 @@ import { insertImage } from "../plugins/ImagePlugin";
 import { insertTable } from "../plugins/TablePlugin";
 import { $createPageBreakNode } from "../nodes/PageBreakNode";
 import { ImageEditorDialog } from "./ImageEditorDialog";
-import { FONT_SIZE_OPTIONS, HEADING_OPTIONS, TEXT_COLORS, BACKGROUND_COLORS } from "../constants";
-import type { BlockType, EpubFile } from "../types";
+import { FontFamilySelect } from "./FontFamilySelect";
+import { FONT_SIZE_OPTIONS, HEADING_OPTIONS, TEXT_COLORS, BACKGROUND_COLORS, pageSizeMicrons } from "../constants";
+import type { PageFormat } from "../constants";
+import type { BlockType } from "../types";
+import { zipEpubFiles } from "../exporters/epubExporter";
 import { Modal } from "../../Modal/Modal";
 import { Button } from "../../Button/Button";
 import { Input } from "../../Input/Input";
@@ -56,6 +61,7 @@ interface ToolbarProps {
   fullscreen: boolean;
   onToggleFullscreen: (editorState: string) => void;
   paged?: boolean;
+  pageFormat?: PageFormat;
 }
 
 interface PromptDialogState {
@@ -74,6 +80,37 @@ function downloadFile(name: string, content: string, mime: string) {
   anchor.download = name;
   anchor.click();
   URL.revokeObjectURL(url);
+}
+
+function downloadBlob(name: string, blob: Blob) {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = name;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
+/** Temporarily hides everything outside `rootEl` so print/PDF only contains the editor. */
+function isolateForPrint(rootEl: HTMLElement | null): () => void {
+  if (!rootEl) return () => undefined;
+  const hidden: { el: HTMLElement; prev: string }[] = [];
+  let el: HTMLElement | null = rootEl;
+  while (el && el !== document.body) {
+    const parent: HTMLElement | null = el.parentElement;
+    if (parent) {
+      for (const sibling of Array.from(parent.children)) {
+        if (sibling !== el && sibling instanceof HTMLElement) {
+          hidden.push({ el: sibling, prev: sibling.style.display });
+          sibling.style.display = "none";
+        }
+      }
+    }
+    el = parent;
+  }
+  return () => {
+    for (const { el: element, prev } of hidden) element.style.display = prev;
+  };
 }
 
 /* ---------- Menu primitives ---------- */
@@ -180,12 +217,13 @@ const ALIGN_OPTIONS: { value: "left" | "center" | "right"; label: string; icon: 
   { value: "right", label: "Align right", icon: <AlignRight size={15} strokeWidth={2} aria-hidden="true" /> },
 ];
 
-export function Toolbar({ fullscreen, onToggleFullscreen, paged = false }: ToolbarProps) {
+export function Toolbar({ fullscreen, onToggleFullscreen, paged = false, pageFormat = "a4" }: ToolbarProps) {
   const [editor] = useLexicalComposerContext();
   const api = useEditorAPI();
   const state = useToolbarState();
   const importInputRef = useRef<HTMLInputElement>(null);
-  const [epubFiles, setEpubFiles] = useState<EpubFile[] | null>(null);
+  const textColorInputRef = useRef<HTMLInputElement>(null);
+  const bgColorInputRef = useRef<HTMLInputElement>(null);
   const [promptDialog, setPromptDialog] = useState<PromptDialogState | null>(null);
   const [imageEditorOpen, setImageEditorOpen] = useState(false);
   const [imageEditorKey, setImageEditorKey] = useState(0);
@@ -220,8 +258,32 @@ export function Toolbar({ fullscreen, onToggleFullscreen, paged = false }: Toolb
     downloadFile("document.html", api.exportHtml(), "text/html;charset=utf-8");
   };
 
+  const onExportPdf = async () => {
+    const rootEl = editor.getRootElement()?.closest<HTMLElement>(`.${styles.root}`) ?? null;
+    const restore = isolateForPrint(rootEl);
+    try {
+      const margins = { top: 0.5, bottom: 0.5, left: 0.5, right: 0.5 };
+      if (window.readlynx?.exportPdf) {
+        await window.readlynx.exportPdf({
+          defaultPath: "document.pdf",
+          pageSize: pageSizeMicrons(pageFormat),
+          margins,
+        });
+      } else {
+        window.print();
+      }
+    } finally {
+      restore();
+    }
+  };
+
+  const onExportDocx = async () => {
+    downloadBlob("document.docx", await api.exportDocx());
+  };
+
   const onExportEpub = () => {
-    setEpubFiles(api.exportEpub({ title: "My Book", author: "ReadLynx" }));
+    const files = api.exportEpub({ title: "My Book", author: "ReadLynx" });
+    downloadBlob("document.epub", zipEpubFiles(files));
   };
 
   const onToggleLink = () => {
@@ -349,6 +411,15 @@ export function Toolbar({ fullscreen, onToggleFullscreen, paged = false }: Toolb
     });
   };
 
+  const isCustomColor = (
+    value: string,
+    presets: readonly { value: string }[],
+  ): boolean =>
+    value !== "" && !presets.some((preset) => preset.value.toLowerCase() === value.toLowerCase());
+
+  const safeHex = (value: string): string =>
+    /^#[0-9a-f]{6}$/i.test(value) ? value : "#000000";
+
   const applyAlignment = (alignment: "left" | "center" | "right") => {
     editor.dispatchCommand(FORMAT_ELEMENT_COMMAND, alignment);
   };
@@ -388,6 +459,18 @@ export function Toolbar({ fullscreen, onToggleFullscreen, paged = false }: Toolb
                 close={close}
               />
               <MenuItem
+                label="Export PDF…"
+                icon={<FileDown size={14} strokeWidth={1.8} aria-hidden="true" />}
+                onSelect={() => void onExportPdf()}
+                close={close}
+              />
+              <MenuItem
+                label="Export DOCX"
+                icon={<FileOutput size={14} strokeWidth={1.8} aria-hidden="true" />}
+                onSelect={() => void onExportDocx()}
+                close={close}
+              />
+              <MenuItem
                 label="Export EPUB…"
                 icon={<FileType2 size={14} strokeWidth={1.8} aria-hidden="true" />}
                 onSelect={onExportEpub}
@@ -419,23 +502,29 @@ export function Toolbar({ fullscreen, onToggleFullscreen, paged = false }: Toolb
       </div>
 
       <div className={styles.toolbarGroup}>
-        <Menu label="Format" icon={<FileText size={14} strokeWidth={1.8} aria-hidden="true" />}>
+        <FontFamilySelect />
+      </div>
+
+      <div className={styles.toolbarGroup}>
+        <select
+          className={`${styles.blockSelect} ${styles.fontSizeSelect}`}
+          value={state.fontSize}
+          title="Font size"
+          aria-label="Font size"
+          onChange={(event) => applyFontSize(event.target.value)}
+        >
+          {FONT_SIZE_OPTIONS.map(({ value, label }) => (
+            <option key={value} value={value}>
+              {label}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className={styles.toolbarGroup}>
+        <Menu label="Colors" icon={<Palette size={14} strokeWidth={1.8} aria-hidden="true" />}>
           {(close) => (
             <>
-              <div className={styles.menuSection}>
-                <span className={styles.menuSectionLabel}>Font size</span>
-                <select
-                  className={styles.menuSelect}
-                  value={state.fontSize}
-                  onChange={(event) => applyFontSize(event.target.value)}
-                >
-                  {FONT_SIZE_OPTIONS.map(({ value, label }) => (
-                    <option key={value} value={value}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
-              </div>
               <div className={styles.menuSection}>
                 <span className={styles.menuSectionLabel}>Text color</span>
                 <div className={styles.swatchRow}>
@@ -455,6 +544,26 @@ export function Toolbar({ fullscreen, onToggleFullscreen, paged = false }: Toolb
                       onClick={() => applyColor("color", value)}
                     />
                   ))}
+                  <button
+                    type="button"
+                    className={[
+                      styles.swatch,
+                      styles.customSwatch,
+                      isCustomColor(state.textColor, TEXT_COLORS) ? styles.swatchActive : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" ")}
+                    title="Custom text color…"
+                    aria-label="Pick a custom text color"
+                    onClick={() => textColorInputRef.current?.click()}
+                  />
+                  <input
+                    ref={textColorInputRef}
+                    type="color"
+                    className={styles.hiddenColorInput}
+                    value={safeHex(state.textColor)}
+                    onChange={(event) => applyColor("color", event.target.value)}
+                  />
                 </div>
               </div>
               <div className={styles.menuSection}>
@@ -476,6 +585,26 @@ export function Toolbar({ fullscreen, onToggleFullscreen, paged = false }: Toolb
                       onClick={() => applyColor("background-color", value)}
                     />
                   ))}
+                  <button
+                    type="button"
+                    className={[
+                      styles.swatch,
+                      styles.customSwatch,
+                      isCustomColor(state.bgColor, BACKGROUND_COLORS) ? styles.swatchActive : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" ")}
+                    title="Custom highlight…"
+                    aria-label="Pick a custom highlight"
+                    onClick={() => bgColorInputRef.current?.click()}
+                  />
+                  <input
+                    ref={bgColorInputRef}
+                    type="color"
+                    className={styles.hiddenColorInput}
+                    value={safeHex(state.bgColor)}
+                    onChange={(event) => applyColor("background-color", event.target.value)}
+                  />
                 </div>
               </div>
               <MenuItem
@@ -572,22 +701,6 @@ export function Toolbar({ fullscreen, onToggleFullscreen, paged = false }: Toolb
           event.target.value = "";
         }}
       />
-
-      <Modal open={epubFiles !== null} onClose={() => setEpubFiles(null)} title="EPUB export (EPUB 3 files)">
-        <div className={styles.epubList}>
-          {epubFiles?.map((file) => (
-            <div key={file.path} className={styles.epubRow}>
-              <span className={styles.epubPath}>{file.path}</span>
-              <Button
-                variant="ghost"
-                onClick={() => downloadFile(file.path.replace(/\//g, "_"), file.content, file.mime)}
-              >
-                <Download size={14} strokeWidth={1.8} aria-hidden="true" /> Download
-              </Button>
-            </div>
-          ))}
-        </div>
-      </Modal>
 
       <Modal
         open={promptDialog !== null}

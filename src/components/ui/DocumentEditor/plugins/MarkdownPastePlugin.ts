@@ -10,6 +10,8 @@ import {
 } from "lexical";
 import type { PasteCommandType } from "lexical";
 import { $generateNodesFromMarkdownString } from "@lexical/markdown";
+import { $isCodeHighlightNode, $isCodeNode } from "@lexical/code";
+import { $findMatchingParent } from "@lexical/utils";
 import { mdTransformers } from "./MarkdownPlugin";
 import { isRtlDominant } from "../utils/direction";
 
@@ -51,10 +53,18 @@ function looksLikeMarkdown(text: string): boolean {
     }
   }
 
-  // A single block-level signal is a strong enough marker (heading, quote, list…).
+  // A single block-level signal (heading, quote, list…) is enough.
   if (blockHits >= 1) return true;
-  // Multi-line text with inline formatting (bold, links, code…) is markdown-ish.
-  return inlineHits >= 1 && lines.length >= 2;
+  // A single inline signal (bold, link, inline code…) is enough too — even on
+  // one line, so `**bold**` or `[link](url)` converts instead of pasting raw.
+  return inlineHits >= 1;
+}
+
+/** Fallback text source when the clipboard only carries HTML (e.g. Word). */
+function plainTextFromHtml(html: string): string {
+  const template = document.createElement("template");
+  template.innerHTML = html;
+  return template.content.textContent ?? "";
 }
 
 /**
@@ -73,20 +83,39 @@ export function MarkdownPastePlugin() {
         // once from `beforeinput` (insertFromPaste, an InputEvent with a
         // `dataTransfer`) and once from the DOM `paste` event (a ClipboardEvent
         // with `clipboardData`). Handle either source, but only insert once.
-        const text =
+        let text =
           "clipboardData" in event && event.clipboardData
             ? event.clipboardData.getData("text/plain")
             : "dataTransfer" in event && event.dataTransfer
               ? event.dataTransfer.getData("text/plain")
               : "";
+        if (!text.trim()) {
+          const html =
+            "clipboardData" in event && event.clipboardData
+              ? event.clipboardData.getData("text/html")
+              : "dataTransfer" in event && event.dataTransfer
+                ? event.dataTransfer.getData("text/html")
+                : "";
+          text = html ? plainTextFromHtml(html) : "";
+        }
         if (!text.trim() || !looksLikeMarkdown(text)) return false;
+
+        // Never rewrite the raw syntax inside code blocks.
+        const selection = $getSelection();
+        if (!$isRangeSelection(selection)) return false;
+        const anchorNode = selection.anchor.getNode();
+        const inCodeBlock =
+          $isCodeNode(anchorNode) ||
+          $isCodeHighlightNode(anchorNode) ||
+          ($findMatchingParent(anchorNode, (node) => $isCodeNode(node) || $isCodeHighlightNode(node)) !== null);
+        if (inCodeBlock) return false;
 
         if (!handledRef.current) {
           handledRef.current = true;
           editor.update(
             () => {
-              const selection = $getSelection();
-              if (!$isRangeSelection(selection)) return;
+              const currentSelection = $getSelection();
+              if (!$isRangeSelection(currentSelection)) return;
               const nodes = $generateNodesFromMarkdownString(text, mdTransformers);
               if (nodes.length === 0) return;
               // Set explicit direction on each pasted block so Persian/Arabic
@@ -98,7 +127,7 @@ export function MarkdownPastePlugin() {
                   node.setDirection(isRtlDominant(node.getTextContent()) ? "rtl" : "ltr");
                 }
               }
-              selection.insertNodes(nodes);
+              currentSelection.insertNodes(nodes);
             },
             { tag: PASTE_TAG },
           );

@@ -203,17 +203,6 @@
   letter-spacing: 0.06em;
 }
 
-.menuSelect {
-  width: 100%;
-  padding: var(--space-1) var(--space-2);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-small);
-  background: var(--color-card);
-  color: var(--color-text);
-  font-family: var(--font-sans);
-  font-size: var(--font-size-sm);
-}
-
 .swatchRow {
   display: flex;
   gap: var(--space-1);
@@ -238,6 +227,27 @@
   outline-offset: 1px;
 }
 
+.customSwatch {
+  background: conic-gradient(
+    from 180deg,
+    #ff6b6b,
+    #ffd93d,
+    #6bcb77,
+    #4d96ff,
+    #c86bff,
+    #ff6b6b
+  );
+}
+
+.hiddenColorInput {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  margin: 0;
+  pointer-events: none;
+}
+
 .blockSelect {
   height: 28px;
   max-width: 150px;
@@ -248,6 +258,11 @@
   color: var(--color-text);
   font-family: var(--font-sans);
   font-size: var(--font-size-sm);
+}
+
+.fontSizeSelect {
+  width: 86px;
+  max-width: 86px;
 }
 
 .hiddenInput {

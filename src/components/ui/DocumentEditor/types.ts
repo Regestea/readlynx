@@ -15,6 +15,7 @@ export interface EditorAPI {
   importMarkdown(markdown: string): void;
   exportMarkdown(): string;
   exportHtml(): string;
+  exportDocx(): Promise<Blob>;
   exportEpub(metadata?: EpubMetadata): EpubFile[];
   undo(): void;
   redo(): void;
