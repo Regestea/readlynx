@@ -76,10 +76,20 @@ export const PAGE_FORMATS: Record<PageFormat, PageFormatInfo> = {
 /** Standard page margin (0.5 inch = 12.7 mm) applied on all four sides. */
 export const PAGE_MARGIN_MM = 12.7;
 
-/* On-screen margins in px at 96 dpi (1 inch = 96 px), so they match the
-   physical `@page` margins used when printing / exporting to PDF exactly. */
-export const PAGE_MARGIN_X = Math.round((PAGE_MARGIN_MM / 25.4) * 96);
-export const PAGE_MARGIN_Y = Math.round((PAGE_MARGIN_MM / 25.4) * 96);
+export const PAGE_MARGIN_OPTIONS = [
+  { value: 8, label: "Narrow" },
+  { value: 12.7, label: "Normal" },
+  { value: 20, label: "Wide" },
+] as const;
+
+/** On-screen margin in px at 96 dpi (1 inch = 96 px), so the margins match
+ *  the physical `@page` margins used when printing / exporting to PDF exactly. */
+export function marginPx(marginMm: number): number {
+  return Math.round((marginMm / 25.4) * 96);
+}
+
+export const PAGE_MARGIN_X = marginPx(PAGE_MARGIN_MM);
+export const PAGE_MARGIN_Y = marginPx(PAGE_MARGIN_MM);
 
 export const ZOOM_OPTIONS = [0.5, 0.75, 1, 1.25, 1.5] as const;
 

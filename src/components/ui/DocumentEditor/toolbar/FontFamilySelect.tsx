@@ -4,7 +4,7 @@ import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext
 import { $getSelection, $isRangeSelection } from "lexical";
 import { $patchStyleText } from "@lexical/selection";
 import { useDefaultFont, useToolbarState } from "../context";
-import { getInstalledFonts } from "../utils/systemFonts";
+import { CURATED_FONT_OPTIONS, getInstalledFonts } from "../utils/systemFonts";
 import styles from "./FontFamilySelect.module.css";
 
 interface FontOption {
@@ -14,12 +14,7 @@ interface FontOption {
 
 const CURATED_OPTIONS: FontOption[] = [
   { value: "", label: "Default" },
-  { value: "Inter, sans-serif", label: "Inter" },
-  { value: "Georgia, serif", label: "Georgia" },
-  { value: "Times New Roman, serif", label: "Times New Roman" },
-  { value: "Courier New, monospace", label: "Courier New" },
-  { value: "Vazirmatn, Tahoma, sans-serif", label: "Vazirmatn (فارسی)" },
-  { value: "Noto Sans Arabic, Segoe UI, sans-serif", label: "Noto Arabic (العربية)" },
+  ...CURATED_FONT_OPTIONS,
 ];
 
 function labelForValue(value: string): string {

@@ -5,8 +5,7 @@ declare global {
     readlynx?: {
       exportPdf(options: {
         defaultPath: string;
-        pageSize: { width: number; height: number };
-        margins: { top: number; bottom: number; left: number; right: number };
+        html: string;
       }): Promise<string | null>;
     };
   }

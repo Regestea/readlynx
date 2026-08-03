@@ -24,8 +24,9 @@ import {
   TextRun,
   WidthType,
 } from "docx";
-import { PAGE_FORMATS, PAGE_MARGIN_MM } from "../constants";
+import { PAGE_FORMATS } from "../constants";
 import type { PageFormat } from "../constants";
+import type { ExportThemeOptions } from "../types";
 import { $isCalloutNode } from "../nodes/CalloutNode";
 import { $isCustomBlockNode } from "../nodes/CustomBlockNode";
 import { $isImageNode } from "../nodes/ImageNode";
@@ -46,6 +47,7 @@ const IS_HIGHLIGHT = 128;
 
 const MONO_FONT = "Consolas";
 const MAX_LIST_DEPTH = 4;
+const DEFAULT_MARGIN_MM = 12.7;
 
 const BLOCK_SHADING: Record<string, string> = {
   info: "EAF2FB",
@@ -369,17 +371,57 @@ const NUMBERING_CONFIG = [
   },
 ] as const;
 
-export async function exportDocx(editor: LexicalEditor, format: PageFormat): Promise<Blob> {
+const GENERIC_FAMILIES = new Set(["sans-serif", "serif", "monospace", "cursive", "fantasy"]);
+
+/** First family name from a CSS font-family list, or the fallback. */
+function concreteFont(value: string | undefined, fallback: string): string {
+  const first = value
+    ?.split(",")[0]
+    ?.trim()
+    .replace(/^["']|["']$/g, "");
+  return first && !GENERIC_FAMILIES.has(first.toLowerCase()) ? first : fallback;
+}
+
+export async function exportDocx(
+  editor: LexicalEditor,
+  format: PageFormat,
+  options: ExportThemeOptions = {},
+): Promise<Blob> {
   const children = editor.getEditorState().read(() => {
     const root = $getRoot();
     return root.getChildren().flatMap((node) => nodeToDocx(node));
   });
 
   const { width, height } = PAGE_FORMATS[format];
-  const margin = Math.round((PAGE_MARGIN_MM / 25.4) * 1440);
+  const marginMm = options.marginMm ?? DEFAULT_MARGIN_MM;
+  const margin = Math.round((marginMm / 25.4) * 1440);
+
+  const defaultRun: {
+    font: string;
+    size?: number;
+    color?: string;
+  } = { font: concreteFont(options.fontFamily, "Calibri") };
+  if (options.fontSize) {
+    const size = fontSizeHalfPoints(options.fontSize);
+    if (size !== undefined) defaultRun.size = size;
+  }
+  if (options.textColor) {
+    const color = parseColor(options.textColor);
+    if (color) defaultRun.color = color;
+  }
 
   const document = new Document({
     numbering: { config: NUMBERING_CONFIG },
+    ...(options.backgroundColor
+      ? { background: { color: parseColor(options.backgroundColor) ?? "FFFFFF" } }
+      : {}),
+    styles: {
+      default: {
+        document: {
+          run: defaultRun,
+        },
+      },
+    },
     sections: [
       {
         properties: {

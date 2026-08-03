@@ -6,7 +6,7 @@ import { LexicalErrorBoundary } from "@lexical/react/LexicalErrorBoundary";
 import { RichTextPlugin } from "@lexical/react/LexicalRichTextPlugin";
 import { EditorProvider } from "./EditorProvider";
 import { Toolbar } from "./toolbar/Toolbar";
-import { PAGE_FORMATS, PAGE_MARGIN_MM, PAGE_MARGIN_X, PAGE_MARGIN_Y, PLACEHOLDER_TEXT } from "./constants";
+import { PAGE_FORMATS, PAGE_MARGIN_MM, marginPx, PLACEHOLDER_TEXT } from "./constants";
 import type { PageFormat } from "./constants";
 import type { EditorAPI } from "./types";
 import styles from "./DocumentEditor.module.css";
@@ -20,6 +20,8 @@ export interface DocumentEditorProps {
   className?: string;
   paged?: boolean;
   pageFormat?: PageFormat;
+  marginMm?: number;
+  onMarginChange?: (margin: number) => void;
   zoom?: number;
   onPageCountChange?: (count: number) => void;
   onWordCountChange?: (count: number) => void;
@@ -40,6 +42,8 @@ export function DocumentEditor({
   className,
   paged = false,
   pageFormat = "a4",
+  marginMm,
+  onMarginChange,
   zoom = 1,
   onPageCountChange,
   onWordCountChange,
@@ -70,6 +74,8 @@ export function DocumentEditor({
     .join(" ");
 
   const { width: pageWidth, height: pageHeight } = PAGE_FORMATS[pageFormat];
+  const pageMarginMm = marginMm ?? PAGE_MARGIN_MM;
+  const pageMarginPx = marginPx(pageMarginMm);
   const clampedZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom));
 
   const placeholderElement = (
@@ -90,10 +96,10 @@ export function DocumentEditor({
             paged
               ? ({
                   minHeight: pageHeight,
-                  paddingTop: `${PAGE_MARGIN_Y}px`,
-                  paddingLeft: `${PAGE_MARGIN_X}px`,
-                  paddingRight: `${PAGE_MARGIN_X}px`,
-                  paddingBottom: `${PAGE_MARGIN_Y}px`,
+                  paddingTop: `${pageMarginPx}px`,
+                  paddingLeft: `${pageMarginPx}px`,
+                  paddingRight: `${pageMarginPx}px`,
+                  paddingBottom: `${pageMarginPx}px`,
                 } as CSSProperties)
               : undefined
           }
@@ -116,6 +122,7 @@ export function DocumentEditor({
       paged={paged}
       pageFormat={pageFormat}
       zoom={clampedZoom}
+      marginY={pageMarginPx}
       onPageCountChange={onPageCountChange}
       onWordCountChange={onWordCountChange}
       searchQuery={searchQuery}
@@ -127,9 +134,11 @@ export function DocumentEditor({
         onToggleFullscreen={toggleFullscreen}
         paged={paged}
         pageFormat={pageFormat}
+        marginMm={pageMarginMm}
+        onMarginChange={onMarginChange}
       />
       {paged && (
-        <style>{`@page { size: ${PAGE_FORMATS[pageFormat].cssSize}; margin: ${PAGE_MARGIN_MM}mm; }`}</style>
+        <style>{`@page { size: ${PAGE_FORMATS[pageFormat].cssSize}; margin: ${pageMarginMm}mm; }`}</style>
       )}
       {paged ? (
         <div className={styles.shellPaged}>
@@ -140,8 +149,8 @@ export function DocumentEditor({
                 {
                   width: pageWidth,
                   zoom: clampedZoom,
-                  "--page-margin-x": `${PAGE_MARGIN_X}px`,
-                  "--page-margin-y": `${PAGE_MARGIN_Y}px`,
+                  "--page-margin-x": `${pageMarginPx}px`,
+                  "--page-margin-y": `${pageMarginPx}px`,
                 } as CSSProperties
               }
             >

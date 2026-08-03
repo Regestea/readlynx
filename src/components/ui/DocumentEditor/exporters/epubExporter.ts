@@ -1,7 +1,7 @@
 import type { LexicalEditor } from "lexical";
 import { $generateHtmlFromNodes } from "@lexical/html";
 import { zipSync } from "fflate";
-import type { EpubFile, EpubMetadata } from "../types";
+import type { EpubFile, EpubMetadata, ExportThemeOptions } from "../types";
 
 const XML_DECL = '<?xml version="1.0" encoding="UTF-8"?>';
 const NS_XHTML = "http://www.w3.org/1999/xhtml";
@@ -51,9 +51,8 @@ function splitChapters(bodyHtml: string): string[] {
   return chapters;
 }
 
-const BOOK_CSS = `
-@page { margin: 1.25em; }
-body { font-family: serif; line-height: 1.6; margin: 0; }
+const BOOK_CSS_BASE = `
+body { line-height: 1.6; margin: 0; }
 h1, h2, h3, h4, h5, h6 { line-height: 1.3; }
 p { margin: 0 0 0.9em; }
 ul, ol { margin: 0 0 0.9em; }
@@ -69,7 +68,26 @@ aside[data-callout-tone] { margin: 0.9em 0; padding: 0.5em 1em; background: #f0e
 section[data-block-kind="insight"] { margin: 0.9em 0; padding: 0.5em 1em; background: #f7f3ea; }
 `;
 
-export function exportEpub(editor: LexicalEditor, metadata: EpubMetadata = {}): EpubFile[] {
+/** Body CSS built from the export theme options (serif/white by default). */
+function bookCss(options: ExportThemeOptions = {}): string {
+  const bodyProps = [
+    options.fontFamily ? `font-family: ${options.fontFamily}` : "font-family: serif",
+    ...(options.fontSize ? [`font-size: ${options.fontSize}`] : []),
+    ...(options.textColor ? [`color: ${options.textColor}`] : []),
+    ...(options.backgroundColor ? [`background-color: ${options.backgroundColor}`] : []),
+    "line-height: 1.6",
+    "margin: 0",
+  ].join("; ");
+  return `@page { margin: ${options.marginMm ?? 12.7}mm; }
+body { ${bodyProps}; }
+${BOOK_CSS_BASE}`;
+}
+
+export function exportEpub(
+  editor: LexicalEditor,
+  metadata: EpubMetadata = {},
+  options: ExportThemeOptions = {},
+): EpubFile[] {
   const title = metadata.title?.trim() || "Untitled Book";
   const author = metadata.author?.trim() || "Unknown Author";
   const language = metadata.language?.trim() || "en";
@@ -210,7 +228,7 @@ ${chapter}
   files.push({
     path: "OEBPS/style.css",
     mime: "text/css",
-    content: BOOK_CSS,
+    content: bookCss(options),
   });
 
   return files;

@@ -11,9 +11,10 @@ interface ModalProps {
   title: string;
   children: ReactNode;
   footer?: ReactNode;
+  wide?: boolean;
 }
 
-export function Modal({ open, onClose, title, children, footer }: ModalProps) {
+export function Modal({ open, onClose, title, children, footer, wide = false }: ModalProps) {
   useEffect(() => {
     if (!open) return;
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -31,7 +32,7 @@ export function Modal({ open, onClose, title, children, footer }: ModalProps) {
         role="dialog"
         aria-modal="true"
         aria-labelledby="readlynx-modal-title"
-        className={styles.dialog}
+        className={`${styles.dialog} ${wide ? styles.dialogWide : ""}`}
         onClick={(event) => event.stopPropagation()}
       >
         <div className={styles.head}>

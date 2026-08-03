@@ -49,6 +49,20 @@ export type BlockType =
   | "hr"
   | "image";
 
+/** Visual options applied when exporting the document (PDF/DOCX/HTML/EPUB). */
+export interface ExportThemeOptions {
+  /** CSS font-family list ("" = document default). */
+  fontFamily?: string;
+  /** CSS font-size ("" = document default). */
+  fontSize?: string;
+  /** Text color, hex. */
+  textColor?: string;
+  /** Page / background color, hex. */
+  backgroundColor?: string;
+  /** Page margin in millimeters. */
+  marginMm?: number;
+}
+
 export interface ToolbarState {
   blockType: BlockType;
   bold: boolean;

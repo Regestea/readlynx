@@ -14,6 +14,21 @@
 /** Curated entries (bundled via Fontsource or commonly expected). */
 const CURATED_FONTS = ["Inter", "Vazirmatn", "Noto Sans Arabic"];
 
+export interface FontOption {
+  value: string;
+  label: string;
+}
+
+/** Curated font picker options with their CSS font-family values. */
+export const CURATED_FONT_OPTIONS: FontOption[] = [
+  { value: "Inter, sans-serif", label: "Inter" },
+  { value: "Georgia, serif", label: "Georgia" },
+  { value: "Times New Roman, serif", label: "Times New Roman" },
+  { value: "Courier New, monospace", label: "Courier New" },
+  { value: "Vazirmatn, Tahoma, sans-serif", label: "Vazirmatn (فارسی)" },
+  { value: "Noto Sans Arabic, Segoe UI, sans-serif", label: "Noto Arabic (العربية)" },
+];
+
 /* Broad list of fonts shipped with Windows, macOS, and common Linux distros. */
 const CANDIDATE_FONTS: string[] = [
   // Windows UI + core

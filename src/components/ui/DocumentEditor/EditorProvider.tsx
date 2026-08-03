@@ -72,6 +72,7 @@ interface EditorProviderProps {
   paged?: boolean;
   pageFormat?: PageFormat;
   zoom?: number;
+  marginY?: number;
   onPageCountChange?: (count: number) => void;
   onWordCountChange?: (count: number) => void;
   searchQuery?: string;
@@ -236,15 +237,16 @@ function EditorApiBridge({
         editor.update(() => $convertFromMarkdownString(markdown, mdTransformers));
       },
       exportMarkdown: () => editor.read(() => $convertToMarkdownString(mdTransformers)),
-      exportHtml: () => exportHtml(editor),
-      exportDocx: () => exportDocx(editor, pageFormat),
-      exportEpub: (metadata?: EpubMetadata) => exportEpub(editor, metadata),
+      exportHtml: () => exportHtml(editor, { fontFamily: defaultFontFamily }),
+      exportDocx: () => exportDocx(editor, pageFormat, { fontFamily: defaultFontFamily }),
+      exportEpub: (metadata?: EpubMetadata) =>
+        exportEpub(editor, metadata, { fontFamily: defaultFontFamily }),
       undo: () => editor.dispatchCommand(UNDO_COMMAND, undefined),
       redo: () => editor.dispatchCommand(REDO_COMMAND, undefined),
       focus: () => editor.focus(),
       getEditor: () => editor,
     }),
-    [editor, pageFormat],
+    [editor, pageFormat, defaultFontFamily],
   );
 
   useEffect(() => {
@@ -279,6 +281,7 @@ export function EditorProvider({
   paged = false,
   pageFormat = "a4",
   zoom = 1,
+  marginY,
   onPageCountChange,
   onWordCountChange,
   searchQuery,
@@ -326,6 +329,7 @@ export function EditorProvider({
         paged={paged}
         pageFormat={pageFormat}
         zoom={zoom}
+        marginY={marginY}
         onPageCountChange={onPageCountChange}
         onWordCountChange={onWordCountChange}
         searchQuery={searchQuery}
@@ -348,6 +352,7 @@ function EditorCore({
   paged,
   pageFormat,
   zoom,
+  marginY,
   onPageCountChange,
   onWordCountChange,
   searchQuery,
@@ -363,6 +368,7 @@ function EditorCore({
   paged: boolean;
   pageFormat: PageFormat;
   zoom: number;
+  marginY?: number;
   onPageCountChange?: (count: number) => void;
   onWordCountChange?: (count: number) => void;
   searchQuery?: string;
@@ -412,6 +418,7 @@ function EditorCore({
         <PageBoundaryPlugin
           format={pageFormat}
           zoom={zoom}
+          marginY={marginY}
           onPageCountChange={onPageCountChange}
         />
       )}

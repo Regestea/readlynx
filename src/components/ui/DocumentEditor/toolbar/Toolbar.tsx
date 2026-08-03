@@ -8,10 +8,7 @@ import {
   ChevronDown,
   Code,
   FileDown,
-  FileOutput,
   FileText,
-  FileType,
-  FileType2,
   FolderOpen,
   List,
   ListChecks,
@@ -39,7 +36,7 @@ import {
   INSERT_UNORDERED_LIST_COMMAND,
 } from "@lexical/list";
 import { TOGGLE_LINK_COMMAND } from "@lexical/link";
-import { useEditorAPI, useToolbarState } from "../context";
+import { useDefaultFont, useEditorAPI, useToolbarState } from "../context";
 import { HistoryButtons } from "./HistoryButtons";
 import { TextFormatButtons } from "./TextFormatButtons";
 import { InsertButtons } from "./InsertButtons";
@@ -48,10 +45,14 @@ import { insertTable } from "../plugins/TablePlugin";
 import { $createPageBreakNode } from "../nodes/PageBreakNode";
 import { ImageEditorDialog } from "./ImageEditorDialog";
 import { FontFamilySelect } from "./FontFamilySelect";
-import { FONT_SIZE_OPTIONS, HEADING_OPTIONS, TEXT_COLORS, BACKGROUND_COLORS, pageSizeMicrons } from "../constants";
+import { ExportDialog, type ExportSettings } from "./ExportDialog";
+import { FONT_SIZE_OPTIONS, HEADING_OPTIONS, TEXT_COLORS, BACKGROUND_COLORS, PAGE_MARGIN_OPTIONS } from "../constants";
 import type { PageFormat } from "../constants";
 import type { BlockType } from "../types";
-import { zipEpubFiles } from "../exporters/epubExporter";
+import { exportDocx } from "../exporters/docxExporter";
+import { exportEpub, zipEpubFiles } from "../exporters/epubExporter";
+import { exportHtml } from "../exporters/htmlExporter";
+import { exportPdfHtml } from "../exporters/pdfExporter";
 import { Modal } from "../../Modal/Modal";
 import { Button } from "../../Button/Button";
 import { Input } from "../../Input/Input";
@@ -62,6 +63,8 @@ interface ToolbarProps {
   onToggleFullscreen: (editorState: string) => void;
   paged?: boolean;
   pageFormat?: PageFormat;
+  marginMm?: number;
+  onMarginChange?: (margin: number) => void;
 }
 
 interface PromptDialogState {
@@ -217,16 +220,26 @@ const ALIGN_OPTIONS: { value: "left" | "center" | "right"; label: string; icon: 
   { value: "right", label: "Align right", icon: <AlignRight size={15} strokeWidth={2} aria-hidden="true" /> },
 ];
 
-export function Toolbar({ fullscreen, onToggleFullscreen, paged = false, pageFormat = "a4" }: ToolbarProps) {
+export function Toolbar({
+  fullscreen,
+  onToggleFullscreen,
+  paged = false,
+  pageFormat = "a4",
+  marginMm,
+  onMarginChange,
+}: ToolbarProps) {
   const [editor] = useLexicalComposerContext();
   const api = useEditorAPI();
   const state = useToolbarState();
+  const { defaultFontFamily } = useDefaultFont();
   const importInputRef = useRef<HTMLInputElement>(null);
   const textColorInputRef = useRef<HTMLInputElement>(null);
   const bgColorInputRef = useRef<HTMLInputElement>(null);
   const [promptDialog, setPromptDialog] = useState<PromptDialogState | null>(null);
   const [imageEditorOpen, setImageEditorOpen] = useState(false);
   const [imageEditorKey, setImageEditorKey] = useState(0);
+  const [exportOpen, setExportOpen] = useState(false);
+  const [exportSession, setExportSession] = useState(0);
 
   const handleToggleFullscreen = useCallback(() => {
     onToggleFullscreen(api.saveState());
@@ -254,36 +267,56 @@ export function Toolbar({ fullscreen, onToggleFullscreen, paged = false, pageFor
     downloadFile("document.md", api.exportMarkdown(), "text/markdown;charset=utf-8");
   };
 
-  const onExportHtml = () => {
-    downloadFile("document.html", api.exportHtml(), "text/html;charset=utf-8");
-  };
-
-  const onExportPdf = async () => {
+  const onExportPdf = async (settings: ExportSettings) => {
+    if (window.readlynx?.exportPdf) {
+      await window.readlynx.exportPdf({
+        defaultPath: "document.pdf",
+        html: exportPdfHtml(editor, settings, pageFormat),
+      });
+      return;
+    }
     const rootEl = editor.getRootElement()?.closest<HTMLElement>(`.${styles.root}`) ?? null;
     const restore = isolateForPrint(rootEl);
     try {
-      const margins = { top: 0.5, bottom: 0.5, left: 0.5, right: 0.5 };
-      if (window.readlynx?.exportPdf) {
-        await window.readlynx.exportPdf({
-          defaultPath: "document.pdf",
-          pageSize: pageSizeMicrons(pageFormat),
-          margins,
-        });
-      } else {
-        window.print();
-      }
+      window.print();
     } finally {
       restore();
     }
   };
 
-  const onExportDocx = async () => {
-    downloadBlob("document.docx", await api.exportDocx());
+  const onExportDocx = async (settings: ExportSettings) => {
+    downloadBlob("document.docx", await exportDocx(editor, pageFormat, settings));
   };
 
-  const onExportEpub = () => {
-    const files = api.exportEpub({ title: "My Book", author: "ReadLynx" });
+  const onExportHtml = (settings: ExportSettings) => {
+    downloadFile("document.html", exportHtml(editor, settings), "text/html;charset=utf-8");
+  };
+
+  const onExportEpub = (settings: ExportSettings) => {
+    const files = exportEpub(editor, { title: "My Book", author: "ReadLynx" }, settings);
     downloadBlob("document.epub", zipEpubFiles(files));
+  };
+
+  const runExport = (settings: ExportSettings) => {
+    const effective: ExportSettings = {
+      ...settings,
+      fontFamily: settings.fontFamily || defaultFontFamily,
+    };
+    switch (settings.format) {
+      case "pdf":
+        void onExportPdf(effective);
+        break;
+      case "docx":
+        void onExportDocx(effective);
+        break;
+      case "html":
+        onExportHtml(effective);
+        break;
+      case "epub":
+        onExportEpub(effective);
+        break;
+    }
+    setExportOpen(false);
   };
 
   const onToggleLink = () => {
@@ -453,27 +486,12 @@ export function Toolbar({ fullscreen, onToggleFullscreen, paged = false, pageFor
                 close={close}
               />
               <MenuItem
-                label="Export HTML"
-                icon={<FileType size={14} strokeWidth={1.8} aria-hidden="true" />}
-                onSelect={onExportHtml}
-                close={close}
-              />
-              <MenuItem
-                label="Export PDF…"
+                label="Export…"
                 icon={<FileDown size={14} strokeWidth={1.8} aria-hidden="true" />}
-                onSelect={() => void onExportPdf()}
-                close={close}
-              />
-              <MenuItem
-                label="Export DOCX"
-                icon={<FileOutput size={14} strokeWidth={1.8} aria-hidden="true" />}
-                onSelect={() => void onExportDocx()}
-                close={close}
-              />
-              <MenuItem
-                label="Export EPUB…"
-                icon={<FileType2 size={14} strokeWidth={1.8} aria-hidden="true" />}
-                onSelect={onExportEpub}
+                onSelect={() => {
+                  setExportSession((session) => session + 1);
+                  setExportOpen(true);
+                }}
                 close={close}
               />
             </>
@@ -520,6 +538,24 @@ export function Toolbar({ fullscreen, onToggleFullscreen, paged = false, pageFor
           ))}
         </select>
       </div>
+
+      {paged && (
+        <div className={styles.toolbarGroup}>
+          <select
+            className={styles.blockSelect}
+            value={marginMm}
+            title="Page margin"
+            aria-label="Page margin"
+            onChange={(event) => onMarginChange?.(Number(event.target.value))}
+          >
+            {PAGE_MARGIN_OPTIONS.map(({ value, label }) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       <div className={styles.toolbarGroup}>
         <Menu label="Colors" icon={<Palette size={14} strokeWidth={1.8} aria-hidden="true" />}>
@@ -790,10 +826,18 @@ export function Toolbar({ fullscreen, onToggleFullscreen, paged = false, pageFor
       </Modal>
 
       <ImageEditorDialog
-        key={imageEditorKey}
+        key={`image-editor-${imageEditorKey}`}
         open={imageEditorOpen}
         onClose={() => setImageEditorOpen(false)}
         onInsert={(src, width) => insertImage(editor, src, "", width)}
+      />
+
+      <ExportDialog
+        key={`export-${exportSession}`}
+        open={exportOpen}
+        onClose={() => setExportOpen(false)}
+        onExport={runExport}
+        defaultMarginMm={marginMm}
       />
     </div>
   );

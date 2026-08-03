@@ -1,19 +1,13 @@
 import { useEffect, useRef } from "react";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
-import { PAGE_FORMATS, PAGE_MARGIN_Y } from "../constants";
+import { PAGE_FORMATS } from "../constants";
 import type { PageFormat } from "../constants";
 import styles from "../DocumentEditor.module.css";
-
-/**
- * Whitespace opened between two PDF pages on screen. Matches the real stacked
- * pages: the bottom margin of page N plus the top margin of page N+1, so the
- * gap reads like two full page margins.
- */
-const PAGE_BREAK_GAP = PAGE_MARGIN_Y * 2;
 
 export interface PageBoundaryPluginProps {
   format: PageFormat;
   zoom: number;
+  marginY?: number;
   onPageCountChange?: (count: number) => void;
 }
 
@@ -41,6 +35,7 @@ export interface PageBoundaryPluginProps {
 export function PageBoundaryPlugin({
   format,
   zoom,
+  marginY = 48,
   onPageCountChange,
 }: PageBoundaryPluginProps) {
   const [editor] = useLexicalComposerContext();
@@ -48,6 +43,7 @@ export function PageBoundaryPlugin({
   const lastPageCountRef = useRef<number>(0);
 
   useEffect(() => {
+    const pageBreakGap = marginY * 2;
     let resizeObserver: ResizeObserver | null = null;
     const appliedMargins = new WeakMap<HTMLElement, number>();
     const touched = new Set<HTMLElement>();
@@ -61,7 +57,7 @@ export function PageBoundaryPlugin({
       const overlay = paper.querySelector<HTMLElement>("[data-page-boundaries]");
       if (!overlay) return;
 
-      const contentLimit = PAGE_FORMATS[format].height - PAGE_MARGIN_Y * 2;
+      const contentLimit = PAGE_FORMATS[format].height - marginY * 2;
       const visualScale = parseFloat(getComputedStyle(paper).zoom) || 1;
       const paperRect = paper.getBoundingClientRect();
 
@@ -93,7 +89,7 @@ export function PageBoundaryPlugin({
               center: pageLastBottom + gap / 2,
               height: gap > 0 ? Math.min(10, gap) : 10,
             });
-            if (!previousWasStrip) desiredMargin = PAGE_BREAK_GAP;
+            if (!previousWasStrip) desiredMargin = pageBreakGap;
           }
           pageFirstTop = top;
         }
@@ -148,7 +144,7 @@ export function PageBoundaryPlugin({
       unregisterRoot();
       for (const el of touched) el.style.marginTop = "";
     };
-  }, [editor, format, zoom, onPageCountChange]);
+  }, [editor, format, zoom, marginY, onPageCountChange]);
 
   return null;
 }
