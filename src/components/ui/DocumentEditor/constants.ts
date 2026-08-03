@@ -1,5 +1,6 @@
+export const DEFAULT_FONT_SIZE_VALUE = "14px";
+
 export const FONT_SIZE_OPTIONS = [
-  { value: "", label: "Default" },
   { value: "12px", label: "12px" },
   { value: "14px", label: "14px" },
   { value: "16px", label: "16px" },

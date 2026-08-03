@@ -3,7 +3,6 @@ import styles from "./DocumentEditor.module.css";
 
 export function createEditorTheme(): EditorThemeClasses {
   return {
-    paragraph: styles.editorParagraph,
     heading: {
       h1: styles.heading1,
       h2: styles.heading2,

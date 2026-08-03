@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import {
   AlignCenter,
+  AlignJustify,
   AlignLeft,
   AlignRight,
   Check,
@@ -46,7 +47,7 @@ import { $createPageBreakNode } from "../nodes/PageBreakNode";
 import { ImageEditorDialog } from "./ImageEditorDialog";
 import { FontFamilySelect } from "./FontFamilySelect";
 import { ExportDialog, type ExportSettings } from "./ExportDialog";
-import { FONT_SIZE_OPTIONS, HEADING_OPTIONS, TEXT_COLORS, BACKGROUND_COLORS, PAGE_MARGIN_OPTIONS } from "../constants";
+import { DEFAULT_FONT_SIZE_VALUE, FONT_SIZE_OPTIONS, HEADING_OPTIONS, TEXT_COLORS, BACKGROUND_COLORS, PAGE_MARGIN_OPTIONS } from "../constants";
 import type { PageFormat } from "../constants";
 import type { BlockType } from "../types";
 import { exportDocx } from "../exporters/docxExporter";
@@ -214,10 +215,11 @@ const LINE_TYPE_OPTIONS: { value: BlockType; label: string; icon: ReactNode }[] 
   { value: "check", label: "Checklist", icon: <ListChecks size={15} strokeWidth={2} aria-hidden="true" /> },
 ];
 
-const ALIGN_OPTIONS: { value: "left" | "center" | "right"; label: string; icon: ReactNode }[] = [
+const ALIGN_OPTIONS: { value: "left" | "center" | "right" | "justify"; label: string; icon: ReactNode }[] = [
   { value: "left", label: "Align left", icon: <AlignLeft size={15} strokeWidth={2} aria-hidden="true" /> },
   { value: "center", label: "Align center", icon: <AlignCenter size={15} strokeWidth={2} aria-hidden="true" /> },
   { value: "right", label: "Align right", icon: <AlignRight size={15} strokeWidth={2} aria-hidden="true" /> },
+  { value: "justify", label: "Align justify", icon: <AlignJustify size={15} strokeWidth={2} aria-hidden="true" /> },
 ];
 
 export function Toolbar({
@@ -453,7 +455,7 @@ export function Toolbar({
   const safeHex = (value: string): string =>
     /^#[0-9a-f]{6}$/i.test(value) ? value : "#000000";
 
-  const applyAlignment = (alignment: "left" | "center" | "right") => {
+  const applyAlignment = (alignment: "left" | "center" | "right" | "justify") => {
     editor.dispatchCommand(FORMAT_ELEMENT_COMMAND, alignment);
   };
 
@@ -526,7 +528,7 @@ export function Toolbar({
       <div className={styles.toolbarGroup}>
         <select
           className={`${styles.blockSelect} ${styles.fontSizeSelect}`}
-          value={state.fontSize}
+          value={state.fontSize || DEFAULT_FONT_SIZE_VALUE}
           title="Font size"
           aria-label="Font size"
           onChange={(event) => applyFontSize(event.target.value)}

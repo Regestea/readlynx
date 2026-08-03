@@ -24,6 +24,10 @@ function labelForValue(value: string): string {
   return value.split(",")[0].trim().replace(/^["']|["']$/g, "");
 }
 
+/** Font used when neither the selection nor a user default is set: the app's
+ *  CSS default (`--font-sans`). */
+const APP_DEFAULT_FONT_FAMILY = "Inter";
+
 export function FontFamilySelect() {
   const [editor] = useLexicalComposerContext();
   const state = useToolbarState();
@@ -90,7 +94,8 @@ export function FontFamilySelect() {
     applyFont(value);
   };
 
-  const label = labelForValue(state.fontFamily);
+  const effectiveFamily = state.fontFamily || defaultFontFamily || APP_DEFAULT_FONT_FAMILY;
+  const label = labelForValue(effectiveFamily);
 
   return (
     <div className={styles.wrapper} ref={wrapperRef}>
@@ -157,7 +162,7 @@ export function FontFamilySelect() {
                 .join(" ")}
               aria-pressed={defaultFontFamily === state.fontFamily}
               title="Use this font for newly typed text that has no explicit font"
-              onClick={() => setAsDefault(state.fontFamily || "sans-serif")}
+              onClick={() => setAsDefault(state.fontFamily || defaultFontFamily || APP_DEFAULT_FONT_FAMILY)}
             >
               Set as default
             </button>

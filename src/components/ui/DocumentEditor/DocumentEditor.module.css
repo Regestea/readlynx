@@ -365,7 +365,7 @@
   /* Word-like density: ~11.25pt font with 1.25 line spacing so one page holds
      about the same amount of text as a Microsoft Word page. */
   font-size: 15px;
-  line-height: 1.25;
+  line-height: 1.5;
   caret-color: var(--color-primary);
   box-sizing: border-box;
 }
@@ -486,10 +486,6 @@
 }
 
 /* ---------- Editor content (Lexical theme) ---------- */
-
-.editorParagraph {
-  margin: 0 0 0.75em;
-}
 
 .heading1 {
   font-size: 2em;
