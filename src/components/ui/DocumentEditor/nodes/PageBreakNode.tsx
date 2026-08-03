@@ -12,6 +12,7 @@ import type {
 import { $applyNodeReplacement, DecoratorNode } from "lexical";
 import styles from "../DocumentEditor.module.css";
 
+/** `fill` is accepted for backward compatibility with older saved states. */
 export type SerializedPageBreakNode = Spread<
   { type: "page-break"; page?: number; fill?: number; version: 1 },
   SerializedLexicalNode
@@ -21,21 +22,25 @@ function $convertPageBreakElement(): { node: PageBreakNode } {
   return { node: $createPageBreakNode() };
 }
 
+/**
+ * Manual page break.
+ *
+ * Pagination is pure CSS: the decorator root forces a hard page break via
+ * `page-break-after: always` (visible only when printing), while its rendered
+ * strip acts as a visual "page break" divider on screen. No measurement, no
+ * reflow, no document mutation while typing.
+ */
 export class PageBreakNode extends DecoratorNode<JSX.Element> {
   static getType(): string {
     return "page-break";
   }
 
   static clone(node: PageBreakNode): PageBreakNode {
-    return new PageBreakNode(node.__key, node.__page, node.__fill);
+    return new PageBreakNode(node.__key, node.__page);
   }
 
   static importJSON(serializedNode: SerializedPageBreakNode): PageBreakNode {
-    const node = new PageBreakNode(
-      undefined,
-      serializedNode.page ?? null,
-      serializedNode.fill ?? 0,
-    );
+    const node = new PageBreakNode(undefined, serializedNode.page ?? null);
     return node.updateFromJSON(serializedNode);
   }
 
@@ -51,20 +56,14 @@ export class PageBreakNode extends DecoratorNode<JSX.Element> {
   }
 
   __page: number | null;
-  __fill: number;
 
-  constructor(key?: NodeKey, page?: number | null, fill?: number) {
+  constructor(key?: NodeKey, page?: number | null) {
     super(key);
     this.__page = page ?? null;
-    this.__fill = fill ?? 0;
   }
 
   getPage(): number | null {
     return this.__page;
-  }
-
-  getFill(): number {
-    return this.__fill;
   }
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -73,6 +72,7 @@ export class PageBreakNode extends DecoratorNode<JSX.Element> {
     element.setAttribute("data-page-break", "");
     element.setAttribute("contenteditable", "false");
     element.setAttribute("aria-hidden", "true");
+    element.style.pageBreakAfter = "always";
     return element;
   }
 
@@ -92,7 +92,6 @@ export class PageBreakNode extends DecoratorNode<JSX.Element> {
       ...super.exportJSON(),
       type: "page-break",
       page: this.__page ?? undefined,
-      fill: this.__fill > 0 ? this.__fill : undefined,
       version: 1,
     };
   }
@@ -106,7 +105,7 @@ export class PageBreakNode extends DecoratorNode<JSX.Element> {
   }
 
   decorate(): JSX.Element {
-    return <PageBreakComponent page={this.__page} fill={this.__fill} />;
+    return <PageBreakComponent />;
   }
 }
 
@@ -114,20 +113,15 @@ export function $isPageBreakNode(node: LexicalNode | null | undefined): node is 
   return node instanceof PageBreakNode;
 }
 
-export function $createPageBreakNode(page?: number | null, fill?: number): PageBreakNode {
-  return $applyNodeReplacement(new PageBreakNode(undefined, page, fill));
+export function $createPageBreakNode(page?: number | null): PageBreakNode {
+  return $applyNodeReplacement(new PageBreakNode(undefined, page));
 }
 
-function PageBreakComponent({ page, fill }: { page: number | null; fill: number }) {
+function PageBreakComponent() {
   return (
     <div className={styles.pageBreak} contentEditable={false}>
-      {fill > 0 && (
-        <div className={styles.pageBreakFill} style={{ height: fill }} aria-hidden="true" />
-      )}
       <div className={styles.pageBreakGap} data-page-gap="true">
-        <span className={styles.pageBreakLabel}>
-          {page != null ? `Page ${page}` : "•"}
-        </span>
+        <span className={styles.pageBreakLabel}>Page break</span>
       </div>
     </div>
   );

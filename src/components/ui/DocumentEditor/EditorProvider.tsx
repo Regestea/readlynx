@@ -38,6 +38,7 @@ import { MarkdownPlugin } from "./plugins/MarkdownPlugin";
 import { MarkdownPastePlugin } from "./plugins/MarkdownPastePlugin";
 import { ShortcutsPlugin } from "./plugins/ShortcutsPlugin";
 import { PaginationPlugin } from "./plugins/PaginationPlugin";
+import { PageBoundaryPlugin } from "./plugins/PageBoundaryPlugin";
 import { SearchPlugin } from "./plugins/SearchPlugin";
 import { CaretScrollPlugin } from "./plugins/CaretScrollPlugin";
 import type { PageFormat } from "./constants";
@@ -387,8 +388,14 @@ function EditorCore({
         <PaginationPlugin
           format={pageFormat}
           zoom={zoom}
-          onPageCountChange={onPageCountChange}
           onWordCountChange={onWordCountChange}
+        />
+      )}
+      {paged && (
+        <PageBoundaryPlugin
+          format={pageFormat}
+          zoom={zoom}
+          onPageCountChange={onPageCountChange}
         />
       )}
       <SearchPlugin

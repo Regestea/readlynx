@@ -11,9 +11,10 @@ import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext
  * This plugin instead listens for real user `input` events and re-centers the
  * caret after the DOM settles.
  *
- * The measurement compensates for the page `zoom` transform: the scroll
- * container moves in unscaled layout pixels while the caret rect is reported
- * in scaled visual pixels, so the required scroll delta is `visualDelta / zoom`.
+ * The measurement compensates for the page visual scale (CSS `zoom` on the
+ * paper, or a `transform` on an ancestor): the scroll container moves in
+ * unscaled layout pixels while the caret rect is reported in scaled visual
+ * pixels, so the required scroll delta is `visualDelta / scale`.
  */
 export function CaretScrollPlugin() {
   const [editor] = useLexicalComposerContext();
@@ -39,16 +40,23 @@ export function CaretScrollPlugin() {
       }
       if (!scroller || scroller === document.body) return;
 
-      /* Detect the visual scale applied to the paged content (zoom transform). */
-      let zoom = 1;
+      /* Detect the visual scale applied to the paged content (CSS zoom on the
+         paper column, or a legacy transform on an ancestor). */
+      let scale = 1;
       let pageEl: HTMLElement | null = rootEl.parentElement;
       while (pageEl && pageEl !== document.body) {
-        const transform = getComputedStyle(pageEl).transform;
+        const style = getComputedStyle(pageEl);
+        const zoom = parseFloat(style.zoom);
+        if (Number.isFinite(zoom) && zoom > 0) {
+          scale = zoom;
+          break;
+        }
+        const transform = style.transform;
         if (transform && transform !== "none") {
           const visualHeight = pageEl.getBoundingClientRect().height;
           const layoutHeight = pageEl.offsetHeight;
           if (layoutHeight > 0 && visualHeight > 0) {
-            zoom = visualHeight / layoutHeight;
+            scale = visualHeight / layoutHeight;
           }
           break;
         }
@@ -59,7 +67,7 @@ export function CaretScrollPlugin() {
       const caretCenter = caretRect.top + caretRect.height / 2;
       const scrollerCenter = scrollerRect.top + scrollerRect.height / 2;
       const deltaVisual = caretCenter - scrollerCenter;
-      const target = scroller.scrollTop + deltaVisual / zoom;
+      const target = scroller.scrollTop + deltaVisual / scale;
       const max = scroller.scrollHeight - scroller.clientHeight;
       scroller.scrollTop = Math.max(0, Math.min(target, max));
     };

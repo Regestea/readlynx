@@ -43,6 +43,7 @@ import { TextFormatButtons } from "./TextFormatButtons";
 import { InsertButtons } from "./InsertButtons";
 import { insertImage } from "../plugins/ImagePlugin";
 import { insertTable } from "../plugins/TablePlugin";
+import { $createPageBreakNode } from "../nodes/PageBreakNode";
 import { ImageEditorDialog } from "./ImageEditorDialog";
 import { FONT_SIZE_OPTIONS, HEADING_OPTIONS, TEXT_COLORS, BACKGROUND_COLORS } from "../constants";
 import type { BlockType, EpubFile } from "../types";
@@ -54,6 +55,7 @@ import styles from "../DocumentEditor.module.css";
 interface ToolbarProps {
   fullscreen: boolean;
   onToggleFullscreen: (editorState: string) => void;
+  paged?: boolean;
 }
 
 interface PromptDialogState {
@@ -178,7 +180,7 @@ const ALIGN_OPTIONS: { value: "left" | "center" | "right"; label: string; icon: 
   { value: "right", label: "Align right", icon: <AlignRight size={15} strokeWidth={2} aria-hidden="true" /> },
 ];
 
-export function Toolbar({ fullscreen, onToggleFullscreen }: ToolbarProps) {
+export function Toolbar({ fullscreen, onToggleFullscreen, paged = false }: ToolbarProps) {
   const [editor] = useLexicalComposerContext();
   const api = useEditorAPI();
   const state = useToolbarState();
@@ -237,6 +239,14 @@ export function Toolbar({ fullscreen, onToggleFullscreen }: ToolbarProps) {
 
   const onInsertTable = () => {
     setPromptDialog({ kind: "table", url: "", alt: "", rows: 3, columns: 3 });
+  };
+
+  const onInsertPageBreak = () => {
+    editor.update(() => {
+      const selection = $getSelection();
+      if (!$isRangeSelection(selection)) return;
+      selection.insertNodes([$createPageBreakNode()]);
+    });
   };
 
   const confirmPrompt = () => {
@@ -525,7 +535,11 @@ export function Toolbar({ fullscreen, onToggleFullscreen }: ToolbarProps) {
       </div>
 
       <div className={styles.toolbarGroup}>
-        <InsertButtons onInsertImage={onInsertImage} onInsertTable={onInsertTable} />
+        <InsertButtons
+          onInsertImage={onInsertImage}
+          onInsertTable={onInsertTable}
+          onInsertPageBreak={paged ? onInsertPageBreak : undefined}
+        />
       </div>
 
       <div className={styles.toolbarSpacer} />

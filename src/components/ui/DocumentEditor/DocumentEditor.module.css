@@ -309,10 +309,37 @@
   min-height: 100%;
 }
 
-.pagedPage {
+.pagedPaper {
   position: relative;
-  background: transparent;
-  transform-origin: top center;
+  background: var(--color-page);
+  box-shadow: var(--shadow-md);
+}
+
+/* PDF page-break lines: drawn between blocks by PageBoundaryPlugin. */
+
+.pageBoundaries {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.pageBoundary {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 10px;
+}
+
+.pageBoundary::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  border-top: 10px solid var(--color-canvas);
 }
 
 .contentEditablePaged {
@@ -320,10 +347,11 @@
   outline: none;
   color: var(--color-text);
   font-family: var(--font-sans);
-  font-size: var(--font-size-lg);
-  line-height: var(--line-height-relaxed);
+  /* Word-like density: ~11.25pt font with 1.25 line spacing so one page holds
+     about the same amount of text as a Microsoft Word page. */
+  font-size: 15px;
+  line-height: 1.25;
   caret-color: var(--color-primary);
-  background: var(--color-page);
   box-sizing: border-box;
 }
 
@@ -333,8 +361,10 @@
 }
 
 .placeholderPaged {
-  top: var(--space-9);
-  left: 76px;
+  top: var(--page-margin-y, 96px);
+  left: var(--page-margin-x, 96px);
+  font-size: 15px;
+  line-height: 1.25;
 }
 
 .contentEditablePaged :global(p) {
@@ -355,58 +385,89 @@
   box-shadow: 0 0 0 2px var(--color-search-active);
 }
 
+/* Manual page break: a plain divider on screen, a hard break when printing. */
+
 .pageBreak {
-  position: relative;
   display: flex;
   flex-direction: column;
   width: calc(100% + 2 * var(--page-margin-x, 0px));
   margin-inline: calc(-1 * var(--page-margin-x, 0px));
-  padding-top: var(--page-margin-y, 0px);
-  padding-bottom: var(--page-margin-y, 0px);
-  background: var(--color-page);
   user-select: none;
   pointer-events: none;
 }
 
-.pageBreakFill {
-  background: var(--color-page);
-}
-
 .pageBreakGap {
   position: relative;
-  height: 84px;
+  height: 56px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--color-canvas);
 }
 
-.pageBreakGap::before,
-.pageBreakGap::after {
+.pageBreakGap::before {
   content: "";
   position: absolute;
   left: 0;
   right: 0;
-  height: 1px;
-  background: var(--color-page-edge);
-}
-
-.pageBreakGap::before {
-  top: 0;
-  box-shadow: 0 -16px 24px -14px rgba(0, 0, 0, 0.4);
-}
-
-.pageBreakGap::after {
-  bottom: 0;
-  box-shadow: 0 16px 24px -14px rgba(0, 0, 0, 0.32);
+  top: 50%;
+  border-top: 1px dashed var(--color-page-edge);
 }
 
 .pageBreakLabel {
+  position: relative;
+  padding: 3px 14px;
+  background: var(--color-page);
   color: var(--color-text-muted);
   font-family: var(--font-sans);
   font-size: var(--font-size-xs);
-  letter-spacing: 0.1em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
+}
+
+/* ---------- Print ---------- */
+
+@media print {
+  .root,
+  .root.fullscreen {
+    overflow: visible;
+    height: auto;
+    box-shadow: none;
+  }
+
+  .toolbar {
+    display: none;
+  }
+
+  .shell,
+  .shellPaged {
+    overflow: visible;
+    height: auto;
+    background: transparent;
+  }
+
+  .pagedStage {
+    display: block;
+    padding: 0;
+  }
+
+  .pagedPaper {
+    width: auto !important;
+    zoom: 1 !important;
+    box-shadow: none;
+  }
+
+  .contentEditablePaged {
+    min-height: 0 !important;
+    padding: 0 !important;
+  }
+
+  .pageBreak {
+    display: none;
+  }
+
+  .pageBoundaries {
+    display: none;
+  }
 }
 
 /* ---------- Editor content (Lexical theme) ---------- */

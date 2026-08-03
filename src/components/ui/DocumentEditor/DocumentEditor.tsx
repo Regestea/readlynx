@@ -6,7 +6,7 @@ import { LexicalErrorBoundary } from "@lexical/react/LexicalErrorBoundary";
 import { RichTextPlugin } from "@lexical/react/LexicalRichTextPlugin";
 import { EditorProvider } from "./EditorProvider";
 import { Toolbar } from "./toolbar/Toolbar";
-import { PAGE_FORMATS, PAGE_MARGIN_X, PAGE_MARGIN_Y, PLACEHOLDER_TEXT } from "./constants";
+import { PAGE_FORMATS, PAGE_MARGIN_MM, PAGE_MARGIN_X, PAGE_MARGIN_Y, PLACEHOLDER_TEXT } from "./constants";
 import type { PageFormat } from "./constants";
 import type { EditorAPI } from "./types";
 import styles from "./DocumentEditor.module.css";
@@ -93,9 +93,7 @@ export function DocumentEditor({
                   paddingTop: `${PAGE_MARGIN_Y}px`,
                   paddingLeft: `${PAGE_MARGIN_X}px`,
                   paddingRight: `${PAGE_MARGIN_X}px`,
-                  paddingBottom: `calc(${PAGE_MARGIN_Y}px + var(--page-last-fill, 0px))`,
-                  "--page-margin-x": `${PAGE_MARGIN_X}px`,
-                  "--page-margin-y": `${PAGE_MARGIN_Y}px`,
+                  paddingBottom: `${PAGE_MARGIN_Y}px`,
                 } as CSSProperties)
               : undefined
           }
@@ -127,19 +125,31 @@ export function DocumentEditor({
       <Toolbar
         fullscreen={fullscreen}
         onToggleFullscreen={toggleFullscreen}
+        paged={paged}
       />
+      {paged && (
+        <style>{`@page { size: ${PAGE_FORMATS[pageFormat].cssSize}; margin: ${PAGE_MARGIN_MM}mm; }`}</style>
+      )}
       {paged ? (
         <div className={styles.shellPaged}>
           <div className={styles.pagedStage}>
             <div
-              className={styles.pagedPage}
-              style={{
-                width: pageWidth,
-                minHeight: pageHeight,
-                transform: `scale(${clampedZoom})`,
-              }}
+              className={styles.pagedPaper}
+              style={
+                {
+                  width: pageWidth,
+                  zoom: clampedZoom,
+                  "--page-margin-x": `${PAGE_MARGIN_X}px`,
+                  "--page-margin-y": `${PAGE_MARGIN_Y}px`,
+                } as CSSProperties
+              }
             >
               {surface}
+              <div
+                className={styles.pageBoundaries}
+                data-page-boundaries="true"
+                aria-hidden="true"
+              />
             </div>
           </div>
         </div>

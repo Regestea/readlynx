@@ -3,7 +3,7 @@ import { AlignJustify, ArrowLeft, BookOpen, ChevronDown, ChevronUp, FileText, Se
 import { DocumentEditor } from "../../../components/ui/DocumentEditor";
 import { Button } from "../../../components/ui/Button/Button";
 import { Select } from "../../../components/ui/Select/Select";
-import { ZOOM_OPTIONS } from "../../../components/ui/DocumentEditor/constants";
+import { ZOOM_OPTIONS, PAGE_FORMATS } from "../../../components/ui/DocumentEditor/constants";
 import type { PageFormat } from "../../../components/ui/DocumentEditor/constants";
 import styles from "./CreateBookPage.module.css";
 
@@ -200,10 +200,10 @@ export function CreateBookPage({ onBack }: CreateBookPageProps) {
             aria-label="Page size"
             value={pageFormat}
             onChange={(event) => setPageFormat(event.target.value as PageFormat)}
-            options={[
-              { value: "a4", label: "A4" },
-              { value: "letter", label: "Letter" },
-            ]}
+            options={Object.entries(PAGE_FORMATS).map(([value, info]) => ({
+              value,
+              label: info.label,
+            }))}
           />
         )}
 

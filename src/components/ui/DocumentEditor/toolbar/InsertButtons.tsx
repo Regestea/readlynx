@@ -1,4 +1,4 @@
-import { FileImage, Minus, Table, Type } from "lucide-react";
+import { FileImage, FileStack, Minus, Table, Type } from "lucide-react";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { INSERT_HORIZONTAL_RULE_COMMAND } from "@lexical/react/LexicalHorizontalRuleNode";
 import { $getSelection, $isRangeSelection } from "lexical";
@@ -10,9 +10,14 @@ import styles from "../DocumentEditor.module.css";
 interface InsertButtonsProps {
   onInsertImage: () => void;
   onInsertTable: () => void;
+  onInsertPageBreak?: () => void;
 }
 
-export function InsertButtons({ onInsertImage, onInsertTable }: InsertButtonsProps) {
+export function InsertButtons({
+  onInsertImage,
+  onInsertTable,
+  onInsertPageBreak,
+}: InsertButtonsProps) {
   const [editor] = useLexicalComposerContext();
 
   const onDivider = () => {
@@ -84,6 +89,17 @@ export function InsertButtons({ onInsertImage, onInsertTable }: InsertButtonsPro
       >
         <Type size={15} strokeWidth={2} aria-hidden="true" />
       </button>
+      {onInsertPageBreak && (
+        <button
+          type="button"
+          className={styles.toolButton}
+          title="Insert page break"
+          aria-label="Insert page break"
+          onClick={onInsertPageBreak}
+        >
+          <FileStack size={15} strokeWidth={2} aria-hidden="true" />
+        </button>
+      )}
     </>
   );
 }

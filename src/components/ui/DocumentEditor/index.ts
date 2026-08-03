@@ -7,7 +7,6 @@ export {
   PAGE_MARGIN_X,
   PAGE_MARGIN_Y,
   ZOOM_OPTIONS,
-  pageContentHeight,
   type PageFormat,
 } from "./constants";
 export {

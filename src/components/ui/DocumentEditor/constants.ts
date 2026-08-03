@@ -54,19 +54,42 @@ export const PLACEHOLDER_TEXT = "Start writing…";
 
 /* ---------- Paged document ---------- */
 
-export type PageFormat = "a4" | "letter";
+export type PageFormat =
+  | "a4"
+  | "a5"
+  | "a3"
+  | "b5"
+  | "letter"
+  | "legal"
+  | "tabloid"
+  | "executive";
 
-export const PAGE_FORMATS: Record<PageFormat, { width: number; height: number }> = {
-  a4: { width: 794, height: 1123 },
-  letter: { width: 816, height: 1056 },
+export interface PageFormatInfo {
+  label: string;
+  width: number;
+  height: number;
+  /** CSS `@page { size: ... }` value (length pair) for exact print/PDF output. */
+  cssSize: string;
+}
+
+export const PAGE_FORMATS: Record<PageFormat, PageFormatInfo> = {
+  a4: { label: "A4", width: 794, height: 1123, cssSize: "210mm 297mm" },
+  a5: { label: "A5", width: 559, height: 794, cssSize: "148mm 210mm" },
+  a3: { label: "A3", width: 1123, height: 1587, cssSize: "297mm 420mm" },
+  b5: { label: "B5", width: 665, height: 945, cssSize: "176mm 250mm" },
+  letter: { label: "Letter", width: 816, height: 1056, cssSize: "8.5in 11in" },
+  legal: { label: "Legal", width: 816, height: 1344, cssSize: "8.5in 14in" },
+  tabloid: { label: "Tabloid", width: 1056, height: 1632, cssSize: "11in 17in" },
+  executive: { label: "Executive", width: 696, height: 1008, cssSize: "7.25in 10.5in" },
 };
 
-export const PAGE_MARGIN_X = 80;
-export const PAGE_MARGIN_Y = 72;
+/** Standard page margin (1 inch = 25.4 mm) applied on all four sides. */
+export const PAGE_MARGIN_MM = 25.4;
+
+/* On-screen margins in px at 96 dpi (1 inch = 96 px), so they match the
+   physical `@page` margins used when printing / exporting to PDF exactly. */
+export const PAGE_MARGIN_X = Math.round((PAGE_MARGIN_MM / 25.4) * 96);
+export const PAGE_MARGIN_Y = Math.round((PAGE_MARGIN_MM / 25.4) * 96);
 
 export const ZOOM_OPTIONS = [0.5, 0.75, 1, 1.25, 1.5] as const;
-
-export function pageContentHeight(format: PageFormat): number {
-  return PAGE_FORMATS[format].height - PAGE_MARGIN_Y * 2;
-}
 
