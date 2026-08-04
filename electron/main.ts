@@ -1,6 +1,8 @@
 import { app, BrowserWindow, dialog, ipcMain } from "electron";
 import fs from "node:fs";
 import path from "node:path";
+import { DbWorkerClient } from "./db/client.ts";
+import type { SaveDocumentPayload } from "../src/db/entities/types.ts";
 
 interface ExportPdfOptions {
   defaultPath: string;
@@ -37,7 +39,17 @@ const PDF_PAGINATOR_SRC = `(() => {
   if (last) last.style.breakAfter = "auto";
 })();`;
 
-function registerIpc() {
+function registerIpc(db: DbWorkerClient) {
+  ipcMain.handle("db:create-book", () => db.createBook());
+
+  ipcMain.handle("db:save-document", (_event, payload: SaveDocumentPayload) =>
+    db.saveDocument(payload),
+  );
+
+  ipcMain.handle("db:list-books", () => db.listBooks());
+
+  ipcMain.handle("db:get-book", (_event, bookId: string) => db.getBook(bookId));
+
   ipcMain.handle("export-pdf", async (event, options: ExportPdfOptions) => {
     const win = BrowserWindow.fromWebContents(event.sender);
     if (!win) return null;
@@ -110,9 +122,18 @@ function createWindow() {
   }
 }
 
+let dbClient: DbWorkerClient | null = null;
+
 app.whenReady().then(() => {
-  registerIpc();
+  const dbPath = path.join(app.getPath("userData"), "readlynx.db");
+  dbClient = new DbWorkerClient(dbPath);
+  registerIpc(dbClient);
   createWindow();
+});
+
+app.on("before-quit", () => {
+  dbClient?.close();
+  dbClient = null;
 });
 
 app.on("window-all-closed", () => {
