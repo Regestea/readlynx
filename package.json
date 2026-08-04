@@ -5,7 +5,7 @@
   "type": "module",
   "main": "electron/main.ts",
   "scripts": {
-    "dev": "concurrently \"vite --strictPort\" \"wait-on http://localhost:5173 && cross-env NODE_OPTIONS=--import=tsx/esm electron .\"",
+    "dev": "concurrently -k \"vite --strictPort\" \"wait-on http://localhost:5173 && electron .\"",
     "build": "vite build",
     "start": "electron .",
     "typecheck": "tsc -b",
