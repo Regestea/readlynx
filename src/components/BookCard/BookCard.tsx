@@ -1,5 +1,5 @@
 import type { CSSProperties } from "react";
-import type { Book } from "../../shared/types";
+import type { Book, BookKind } from "../../shared/types";
 import { Progress } from "../ui/Progress/Progress";
 import styles from "./BookCard.module.css";
 
@@ -17,6 +17,12 @@ const COVER_STYLES: Record<Book["cover"], string> = {
   navy: styles.coverNavy,
   sand: styles.coverSand,
   moon: styles.coverMoon,
+};
+
+const BADGE_LABELS: Record<BookKind, string> = {
+  created: "Created",
+  translated: "Translated",
+  reading: "Reading",
 };
 
 export function BookCard({ book, layout = "vertical", className = "", style }: BookCardProps) {
@@ -55,6 +61,7 @@ export function BookCard({ book, layout = "vertical", className = "", style }: B
       aria-label={`${book.title} by ${book.author}`}
     >
       <div className={`${styles.cover} ${COVER_STYLES[book.cover]}`} aria-hidden="true">
+        {book.kind && <span className={styles.badge}>{BADGE_LABELS[book.kind]}</span>}
         <span className={styles.coverTitle}>{book.title}</span>
         <span className={styles.coverAuthor}>{book.author}</span>
       </div>

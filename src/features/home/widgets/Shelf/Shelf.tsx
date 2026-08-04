@@ -1,8 +1,6 @@
 import type { ReactNode } from "react";
-import { ArrowRight } from "lucide-react";
 import type { Book } from "../../../../shared/types";
 import { BookCard } from "../../../../components/BookCard/BookCard";
-import { Button } from "../../../../components/ui/Button/Button";
 import { Card } from "../../../../components/ui/Card/Card";
 import styles from "./Shelf.module.css";
 
@@ -26,10 +24,6 @@ export function Shelf({ icon, title, subtitle, books }: ShelfProps) {
             <p className={styles.subtitle}>{subtitle}</p>
           </div>
         </div>
-        <Button variant="ghost">
-          View all
-          <ArrowRight size={16} strokeWidth={1.8} aria-hidden="true" />
-        </Button>
       </div>
       <div className={styles.grid}>
         {books.map((book) => (

@@ -1,11 +1,7 @@
 import { BookOpen, Languages, NotebookPen } from "lucide-react";
 import { AddModeCard } from "../widgets/AddModeCard/AddModeCard";
 import { Shelf } from "../widgets/Shelf/Shelf";
-import {
-  continueReadingBooks,
-  createdBooks,
-  translatedBooks,
-} from "../data/mockData";
+import { shelfBooks } from "../data/mockData";
 import styles from "./HomePage.module.css";
 
 interface HomePageProps {
@@ -43,24 +39,10 @@ export function HomePage({ onCreateBook }: HomePageProps) {
       </section>
 
       <Shelf
-        icon={<NotebookPen size={20} strokeWidth={1.8} />}
-        title="Create Book"
-        subtitle="Your works in progress"
-        books={createdBooks}
-      />
-
-      <Shelf
-        icon={<Languages size={20} strokeWidth={1.8} />}
-        title="Translate Book"
-        subtitle="Books you are translating"
-        books={translatedBooks}
-      />
-
-      <Shelf
         icon={<BookOpen size={20} strokeWidth={1.8} />}
-        title="Reading Book"
-        subtitle="Pick up where you left off"
-        books={continueReadingBooks}
+        title="Your Shelf"
+        subtitle="Everything you're writing, translating, and reading"
+        books={shelfBooks}
       />
     </main>
   );

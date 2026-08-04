@@ -6,6 +6,7 @@ export const continueReadingBooks: Book[] = [
     title: "The Hidden Life of Trees",
     author: "Peter Wohlleben",
     cover: "forest",
+    kind: "reading",
     progress: 0.68,
     totalPages: 288,
     pagesRead: 196,
@@ -16,6 +17,7 @@ export const continueReadingBooks: Book[] = [
     title: "Atomic Habits",
     author: "James Clear",
     cover: "terracotta",
+    kind: "reading",
     progress: 0.42,
     totalPages: 320,
     pagesRead: 134,
@@ -26,6 +28,7 @@ export const continueReadingBooks: Book[] = [
     title: "Braiding Sweetgrass",
     author: "Robin Wall Kimmerer",
     cover: "moon",
+    kind: "reading",
     progress: 0.53,
     totalPages: 391,
     pagesRead: 207,
@@ -36,6 +39,7 @@ export const continueReadingBooks: Book[] = [
     title: "The Overstory",
     author: "Richard Powers",
     cover: "navy",
+    kind: "reading",
     progress: 0.27,
     totalPages: 512,
     pagesRead: 138,
@@ -59,18 +63,20 @@ export const weeklyProgressBooks: Book[] = [
 ];
 
 export const createdBooks: Book[] = [
-  { id: "c1", title: "Mountain Winds", author: "Avery Lane", cover: "forest", progress: 0.35, category: "Draft" },
-  { id: "c2", title: "Seasons of Tea", author: "Avery Lane", cover: "terracotta", progress: 0.62, category: "Draft" },
-  { id: "c3", title: "Quiet Compass", author: "Avery Lane", cover: "moon", progress: 0.18, category: "Draft" },
-  { id: "c4", title: "Letters from Home", author: "Avery Lane", cover: "sand", progress: 0.84, category: "Draft" },
+  { id: "c1", title: "Mountain Winds", author: "Avery Lane", cover: "forest", kind: "created", progress: 0.35, category: "Draft" },
+  { id: "c2", title: "Seasons of Tea", author: "Avery Lane", cover: "terracotta", kind: "created", progress: 0.62, category: "Draft" },
+  { id: "c3", title: "Quiet Compass", author: "Avery Lane", cover: "moon", kind: "created", progress: 0.18, category: "Draft" },
+  { id: "c4", title: "Letters from Home", author: "Avery Lane", cover: "sand", kind: "created", progress: 0.84, category: "Draft" },
 ];
 
 export const translatedBooks: Book[] = [
-  { id: "t1", title: "The Little Prince", author: "Antoine de Saint-Exupéry", cover: "navy", progress: 0.7, category: "Translation" },
-  { id: "t2", title: "The Alchemist", author: "Paulo Coelho", cover: "moss", progress: 0.45, category: "Translation" },
-  { id: "t3", title: "Siddhartha", author: "Hermann Hesse", cover: "sand", progress: 0.9, category: "Translation" },
-  { id: "t4", title: "Persian Miniatures", author: "Anthony Welch", cover: "terracotta", progress: 0.28, category: "Translation" },
+  { id: "t1", title: "The Little Prince", author: "Antoine de Saint-Exupéry", cover: "navy", kind: "translated", progress: 0.7, category: "Translation" },
+  { id: "t2", title: "The Alchemist", author: "Paulo Coelho", cover: "moss", kind: "translated", progress: 0.45, category: "Translation" },
+  { id: "t3", title: "Siddhartha", author: "Hermann Hesse", cover: "sand", kind: "translated", progress: 0.9, category: "Translation" },
+  { id: "t4", title: "Persian Miniatures", author: "Anthony Welch", cover: "terracotta", kind: "translated", progress: 0.28, category: "Translation" },
 ];
+
+export const shelfBooks: Book[] = [...createdBooks, ...translatedBooks, ...continueReadingBooks];
 
 export const overallProgress = 0.64;
 export const overallPages = 320;
