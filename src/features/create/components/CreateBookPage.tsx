@@ -9,6 +9,9 @@ import styles from "./CreateBookPage.module.css";
 
 interface CreateBookPageProps {
   onBack?: () => void;
+  initialTitle?: string;
+  initialMarkdown?: string;
+  initialCover?: string | null;
 }
 
 const SAMPLE_BOOK = `# The Mountain Keep
@@ -75,7 +78,8 @@ And somewhere far below, in a village by a fountain, a grandmother looked up fro
 
 The End.`;
 
-export function CreateBookPage({ onBack }: CreateBookPageProps) {
+export function CreateBookPage({ onBack, initialTitle = "", initialMarkdown, initialCover = null }: CreateBookPageProps) {
+  const [title, setTitle] = useState(initialTitle);
   const [zoomIndex, setZoomIndex] = useState(2);
   const [layout, setLayout] = useState<"paged" | "continuous">("paged");
   const [pageFormat, setPageFormat] = useState<PageFormat>("a4");
@@ -109,6 +113,20 @@ export function CreateBookPage({ onBack }: CreateBookPageProps) {
         <Button variant="icon" className={styles.backButton} aria-label="Back to home" onClick={onBack}>
           <ArrowLeft size={18} strokeWidth={1.8} aria-hidden="true" />
         </Button>
+
+        <div className={styles.titleGroup}>
+          {initialCover && (
+            <img className={styles.coverThumb} src={initialCover} alt="Book cover" />
+          )}
+          <input
+            type="text"
+            className={styles.titleInput}
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
+            placeholder="Untitled book"
+            aria-label="Book title"
+          />
+        </div>
 
         <div className={styles.searchBox}>
           <Search size={15} strokeWidth={1.8} className={styles.searchIcon} aria-hidden="true" />
@@ -238,7 +256,7 @@ export function CreateBookPage({ onBack }: CreateBookPageProps) {
           pageFormat={pageFormat}
           margins={margins}
           onMarginsChange={setMargins}
-          initialMarkdown={SAMPLE_BOOK}
+          initialMarkdown={initialMarkdown ?? SAMPLE_BOOK}
           zoom={zoom}
           onPageCountChange={setPages}
           onWordCountChange={setWords}

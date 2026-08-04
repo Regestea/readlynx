@@ -1,14 +1,19 @@
+import { useState } from "react";
 import { BookOpen, Languages, NotebookPen } from "lucide-react";
 import { AddModeCard } from "../widgets/AddModeCard/AddModeCard";
 import { Shelf } from "../widgets/Shelf/Shelf";
+import { CreateBookDialog } from "../../create/components/CreateBookDialog";
 import { shelfBooks } from "../data/mockData";
+import type { CreateBookDetails } from "../../create/data/templates";
 import styles from "./HomePage.module.css";
 
 interface HomePageProps {
-  onCreateBook?: () => void;
+  onCreateBook?: (details: CreateBookDetails) => void;
 }
 
 export function HomePage({ onCreateBook }: HomePageProps) {
+  const [dialogOpen, setDialogOpen] = useState(false);
+
   return (
     <main className={styles.page} aria-label="Home">
       <div className={`${styles.intro} animate-fade-up`}>
@@ -23,7 +28,7 @@ export function HomePage({ onCreateBook }: HomePageProps) {
             icon={<NotebookPen size={22} strokeWidth={1.8} />}
             title="Create Book"
             description="Start writing a new book"
-            onClick={onCreateBook}
+            onClick={() => setDialogOpen(true)}
           />
           <AddModeCard
             icon={<Languages size={22} strokeWidth={1.8} />}
@@ -43,6 +48,15 @@ export function HomePage({ onCreateBook }: HomePageProps) {
         title="Your Shelf"
         subtitle="Everything you're writing, translating, and reading"
         books={shelfBooks}
+      />
+
+      <CreateBookDialog
+        open={dialogOpen}
+        onClose={() => setDialogOpen(false)}
+        onConfirm={(details) => {
+          setDialogOpen(false);
+          onCreateBook?.(details);
+        }}
       />
     </main>
   );

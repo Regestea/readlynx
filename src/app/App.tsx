@@ -5,6 +5,7 @@ import { Sidebar } from "../components/Sidebar/Sidebar";
 import { HomePage } from "../features/home/components/HomePage";
 import { ShowcasePage } from "../features/showcase/components/ShowcasePage";
 import { CreateBookPage } from "../features/create/components/CreateBookPage";
+import type { CreateBookDetails } from "../features/create/data/templates";
 import { Quote } from "../features/home/widgets/Quote/Quote";
 import { ReadingProgress } from "../features/home/widgets/ReadingProgress/ReadingProgress";
 import { WeeklyStats } from "../features/home/widgets/WeeklyStats/WeeklyStats";
@@ -12,6 +13,7 @@ import styles from "./App.module.css";
 
 export default function App() {
   const [activeId, setActiveId] = useState("home");
+  const [createDetails, setCreateDetails] = useState<CreateBookDetails | null>(null);
   const isHome = activeId === "home";
   const isFullWidth = !isHome;
 
@@ -28,9 +30,17 @@ export default function App() {
 
         <div className={styles.main}>
           {isHome && <Header />}
-          {isHome && <HomePage onCreateBook={() => setActiveId("create-book")} />}
+          {isHome && <HomePage onCreateBook={(details) => {
+            setCreateDetails(details);
+            setActiveId("create-book");
+          }} />}
           {activeId === "create-book" && (
-            <CreateBookPage onBack={() => setActiveId("home")} />
+            <CreateBookPage
+              onBack={() => setActiveId("home")}
+              initialTitle={createDetails?.title ?? ""}
+              initialMarkdown={createDetails?.template.initialMarkdown}
+              initialCover={createDetails?.coverSrc ?? null}
+            />
           )}
           {!isHome && activeId !== "create-book" && <ShowcasePage />}
         </div>

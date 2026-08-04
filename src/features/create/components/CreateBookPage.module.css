@@ -22,10 +22,40 @@
   flex-shrink: 0;
 }
 
+.titleGroup {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex: 1;
+  min-width: 0;
+}
+
+.coverThumb {
+  width: 30px;
+  aspect-ratio: 2 / 3;
+  object-fit: cover;
+  border-radius: 7px;
+  box-shadow: var(--shadow-sm);
+  flex-shrink: 0;
+}
+
 .titleInput {
   flex: 1;
   min-width: 0;
+  height: 38px;
+  padding: 0 var(--space-2);
+  border: none;
+  outline: none !important;
+  background: transparent;
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-lg);
   font-weight: var(--font-weight-semibold);
+}
+
+.titleInput::placeholder {
+  color: var(--color-text-muted);
+  opacity: 1;
 }
 
 .searchBox {
