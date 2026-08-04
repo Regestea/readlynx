@@ -47,3 +47,68 @@
   grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
   gap: var(--space-6);
 }
+
+/* ---------- Loading skeleton ---------- */
+
+.skeletonCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.skeletonCover {
+  aspect-ratio: 2 / 3;
+  border-radius: var(--radius-medium);
+  background: var(--color-hover);
+}
+
+.skeletonLine {
+  height: 12px;
+  width: 70%;
+  border-radius: var(--radius-small);
+  background: var(--color-hover);
+}
+
+.skeletonPulse {
+  animation: skeleton-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes skeleton-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* ---------- Empty state ---------- */
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  padding: var(--space-8) var(--space-4);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-medium);
+  text-align: center;
+}
+
+.emptyIcon {
+  color: var(--color-text-muted);
+  margin-bottom: var(--space-2);
+}
+
+.emptyText {
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+}
+
+.emptyHint {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}

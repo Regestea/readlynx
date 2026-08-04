@@ -9,10 +9,13 @@ interface ShelfProps {
   title: string;
   subtitle: string;
   books: Book[];
+  loading?: boolean;
   onBookClick?: (bookId: string) => void;
 }
 
-export function Shelf({ icon, title, subtitle, books, onBookClick }: ShelfProps) {
+const SKELETON_COUNT = 4;
+
+export function Shelf({ icon, title, subtitle, books, loading = false, onBookClick }: ShelfProps) {
   return (
     <Card className={`animate-fade-up ${styles.shelf}`}>
       <div className={styles.head}>
@@ -26,15 +29,34 @@ export function Shelf({ icon, title, subtitle, books, onBookClick }: ShelfProps)
           </div>
         </div>
       </div>
-      <div className={styles.grid}>
-        {books.map((book) => (
-          <BookCard
-            key={book.id}
-            book={book}
-            onClick={onBookClick ? () => onBookClick(book.id) : undefined}
-          />
-        ))}
-      </div>
+      {loading ? (
+        <div className={styles.grid} aria-hidden="true">
+          {Array.from({ length: SKELETON_COUNT }, (_, index) => (
+            <div key={index} className={`${styles.skeletonCard} ${styles.skeletonPulse}`}>
+              <div className={styles.skeletonCover} />
+              <div className={styles.skeletonLine} />
+            </div>
+          ))}
+        </div>
+      ) : books.length === 0 ? (
+        <div className={styles.empty}>
+          <span className={styles.emptyIcon} aria-hidden="true">
+            {icon}
+          </span>
+          <p className={styles.emptyText}>Your shelf is empty.</p>
+          <p className={styles.emptyHint}>Create your first book to get started.</p>
+        </div>
+      ) : (
+        <div className={styles.grid}>
+          {books.map((book) => (
+            <BookCard
+              key={book.id}
+              book={book}
+              onClick={onBookClick ? () => onBookClick(book.id) : undefined}
+            />
+          ))}
+        </div>
+      )}
     </Card>
   );
 }

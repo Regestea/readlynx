@@ -4,7 +4,6 @@ import { AddModeCard } from "../widgets/AddModeCard/AddModeCard";
 import { Shelf } from "../widgets/Shelf/Shelf";
 import { CreateBookDialog } from "../../create/components/CreateBookDialog";
 import type { CreateBookDetails } from "../../create/components/CreateBookDialog";
-import { shelfBooks as mockShelfBooks } from "../data/mockData";
 import type { Book, CoverStyle } from "../../../shared/types";
 import type { BookListItem } from "../../../db/entities/types";
 import styles from "./HomePage.module.css";
@@ -52,7 +51,8 @@ export function HomePage({ onCreateBook, onOpenBook }: HomePageProps) {
     };
   }, []);
 
-  const shelfBooks = books ?? mockShelfBooks;
+  const shelfBooks = books ?? [];
+  const shelfLoading = books === null;
 
   return (
     <main className={styles.page} aria-label="Home">
@@ -88,6 +88,7 @@ export function HomePage({ onCreateBook, onOpenBook }: HomePageProps) {
         title="Your Shelf"
         subtitle="Everything you're writing, translating, and reading"
         books={shelfBooks}
+        loading={shelfLoading}
         onBookClick={onOpenBook}
       />
 
