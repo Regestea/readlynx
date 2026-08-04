@@ -5,11 +5,12 @@ import { applySchema } from "../../src/db/schema.ts";
 import { seedDatabase } from "../../src/db/seed/seedDatabase.ts";
 import type { SaveDocumentPayload } from "../../src/db/entities/types.ts";
 import {
+  AppSettingsRepository,
   BookRepository,
   DocumentRepository,
   DocumentSettingsRepository,
 } from "../../src/db/repositories/index.ts";
-import { migrateLegacyCovers, persistCoverImage } from "./covers.ts";
+import { migrateLegacyCovers, persistCoverImage, removeCoverFile } from "./covers.ts";
 
 interface DbWorkerData {
   dbPath: string;
@@ -40,6 +41,7 @@ seedDatabase(db);
 const books = new BookRepository(db);
 const documents = new DocumentRepository(db);
 const documentSettings = new DocumentSettingsRepository(db);
+const appSettings = new AppSettingsRepository(db);
 
 function handleCreateBook(): { bookId: string; documentId: string } {
   const bookId = randomUUID();
@@ -74,11 +76,30 @@ function handleGetBook(bookId: string) {
   return { book, document, settings };
 }
 
+/** Deletes a book and everything that cascades from it. The cover file is
+ *  removed from disk too. Returns false when the book does not exist. */
+function handleDeleteBook(bookId: string): boolean {
+  const book = books.findById(bookId);
+  if (!book) return false;
+  db.transaction(() => {
+    books.remove(bookId);
+  })();
+  removeCoverFile(book.coverImage, dbPath);
+  return true;
+}
+
 const handlers: Record<string, (payload: unknown) => unknown> = {
   "create-book": handleCreateBook,
   "save-document": (payload) => handleSaveDocument(payload as SaveDocumentPayload),
   "list-books": () => books.list(),
   "get-book": (payload) => handleGetBook(payload as string),
+  "delete-book": (payload) => handleDeleteBook(payload as string),
+  "get-app-settings": () => appSettings.get() ?? null,
+  "update-app-settings": (payload) => {
+    const { theme } = payload as { theme: string };
+    appSettings.updateTheme(theme);
+    return { theme };
+  },
 };
 
 port.on("message", (request: DbRequest) => {

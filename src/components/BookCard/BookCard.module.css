@@ -75,6 +75,45 @@
   -webkit-backdrop-filter: blur(4px);
 }
 
+.deleteButton {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-pill);
+  color: #fff;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  opacity: 0;
+  cursor: pointer;
+  transition:
+    opacity var(--transition-base) ease,
+    background-color var(--transition-base) ease,
+    color var(--transition-base) ease;
+}
+
+.vertical:hover .deleteButton,
+.deleteButton:focus-visible {
+  opacity: 1;
+}
+
+.deleteButton:hover {
+  background: var(--color-danger);
+}
+
+.deleteButton:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
 /* ---------- Cover gradients (palette only) ---------- */
 
 .coverForest {
@@ -110,6 +149,7 @@
 /* ---------- Vertical (grid) ---------- */
 
 .vertical {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: var(--space-3);

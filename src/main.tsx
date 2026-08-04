@@ -1,7 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import App from "./app/App";
-import { getInitialTheme } from "./app/providers/theme/ThemeContext";
+import { getSystemTheme } from "./app/providers/theme/ThemeContext";
 
 import "@fontsource/inter/400.css";
 import "@fontsource/inter/500.css";
@@ -13,7 +13,7 @@ import "./styles/variables.css";
 import "./styles/animations.css";
 import "./styles/global.css";
 
-document.documentElement.dataset.theme = getInitialTheme();
+document.documentElement.dataset.theme = getSystemTheme();
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

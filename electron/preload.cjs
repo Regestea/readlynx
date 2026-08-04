@@ -7,5 +7,8 @@ contextBridge.exposeInMainWorld("readlynx", {
     saveDocument: (payload) => ipcRenderer.invoke("db:save-document", payload),
     listBooks: () => ipcRenderer.invoke("db:list-books"),
     getBook: (bookId) => ipcRenderer.invoke("db:get-book", bookId),
+    deleteBook: (bookId) => ipcRenderer.invoke("db:delete-book", bookId),
+    getAppSettings: () => ipcRenderer.invoke("db:get-app-settings"),
+    updateAppSettings: (theme) => ipcRenderer.invoke("db:update-app-settings", theme),
   },
 });

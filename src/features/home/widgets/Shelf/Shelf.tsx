@@ -11,11 +11,20 @@ interface ShelfProps {
   books: Book[];
   loading?: boolean;
   onBookClick?: (bookId: string) => void;
+  onDeleteBook?: (book: Book) => void;
 }
 
 const SKELETON_COUNT = 4;
 
-export function Shelf({ icon, title, subtitle, books, loading = false, onBookClick }: ShelfProps) {
+export function Shelf({
+  icon,
+  title,
+  subtitle,
+  books,
+  loading = false,
+  onBookClick,
+  onDeleteBook,
+}: ShelfProps) {
   return (
     <Card className={`animate-fade-up ${styles.shelf}`}>
       <div className={styles.head}>
@@ -53,6 +62,7 @@ export function Shelf({ icon, title, subtitle, books, loading = false, onBookCli
               key={book.id}
               book={book}
               onClick={onBookClick ? () => onBookClick(book.id) : undefined}
+              onDelete={onDeleteBook ? () => onDeleteBook(book) : undefined}
             />
           ))}
         </div>

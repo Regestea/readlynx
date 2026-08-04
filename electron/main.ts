@@ -87,6 +87,12 @@ function registerIpc(db: DbWorkerClient) {
 
   ipcMain.handle("db:get-book", (_event, bookId: string) => db.getBook(bookId));
 
+  ipcMain.handle("db:delete-book", (_event, bookId: string) => db.deleteBook(bookId));
+
+  ipcMain.handle("db:get-app-settings", () => db.getAppSettings());
+
+  ipcMain.handle("db:update-app-settings", (_event, theme: string) => db.updateAppSettings(theme));
+
   ipcMain.handle("export-pdf", async (event, options: ExportPdfOptions) => {
     const win = BrowserWindow.fromWebContents(event.sender);
     if (!win) return null;

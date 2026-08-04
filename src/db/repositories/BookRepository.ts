@@ -23,6 +23,12 @@ export class BookRepository {
       .run(fields.title, fields.coverImage, bookId);
   }
 
+  /** Deletes a book row. Related rows (document, settings, sources, reading
+   *  state) are removed by their `ON DELETE CASCADE` constraints. */
+  remove(bookId: string): void {
+    this.db.prepare("DELETE FROM Books WHERE id = ?").run(bookId);
+  }
+
   findById(bookId: string): BookEntity | undefined {
     return this.db.prepare("SELECT * FROM Books WHERE id = ?").get(bookId) as
       | BookEntity

@@ -4,6 +4,8 @@ import { AddModeCard } from "../widgets/AddModeCard/AddModeCard";
 import { Shelf } from "../widgets/Shelf/Shelf";
 import { CreateBookDialog } from "../../create/components/CreateBookDialog";
 import type { CreateBookDetails } from "../../create/components/CreateBookDialog";
+import { Modal } from "../../../components/ui/Modal/Modal";
+import { Button } from "../../../components/ui/Button/Button";
 import { coverUrl } from "../../../shared/coverUrl";
 import type { Book, CoverStyle } from "../../../shared/types";
 import type { BookListItem } from "../../../db/entities/types";
@@ -38,6 +40,8 @@ function toBook(row: BookListItem): Book {
 export function HomePage({ onCreateBook, onOpenBook }: HomePageProps) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [books, setBooks] = useState<Book[] | null>(null);
+  const [bookToDelete, setBookToDelete] = useState<Book | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     const db = window.readlynx?.db;
@@ -51,6 +55,20 @@ export function HomePage({ onCreateBook, onOpenBook }: HomePageProps) {
       cancelled = true;
     };
   }, []);
+
+  const handleConfirmDelete = async () => {
+    if (!bookToDelete || !window.readlynx) return;
+    setDeleting(true);
+    try {
+      const removed = await window.readlynx.db.deleteBook(bookToDelete.id);
+      if (removed) {
+        setBooks((prev) => (prev ? prev.filter((book) => book.id !== bookToDelete.id) : prev));
+      }
+    } finally {
+      setDeleting(false);
+      setBookToDelete(null);
+    }
+  };
 
   const shelfBooks = books ?? [];
   const shelfLoading = books === null;
@@ -91,6 +109,7 @@ export function HomePage({ onCreateBook, onOpenBook }: HomePageProps) {
         books={shelfBooks}
         loading={shelfLoading}
         onBookClick={onOpenBook}
+        onDeleteBook={setBookToDelete}
       />
 
       <CreateBookDialog
@@ -101,6 +120,27 @@ export function HomePage({ onCreateBook, onOpenBook }: HomePageProps) {
           onCreateBook?.(details);
         }}
       />
+
+      <Modal
+        open={bookToDelete !== null}
+        onClose={() => setBookToDelete(null)}
+        title="Delete book"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setBookToDelete(null)} disabled={deleting}>
+              Cancel
+            </Button>
+            <Button variant="danger" onClick={handleConfirmDelete} disabled={deleting}>
+              {deleting ? "Deleting…" : "Delete"}
+            </Button>
+          </>
+        }
+      >
+        <p className={styles.deleteText}>
+          Are you sure you want to delete “{bookToDelete?.title}”? Its document and settings will
+          be permanently removed. This cannot be undone.
+        </p>
+      </Modal>
     </main>
   );
 }

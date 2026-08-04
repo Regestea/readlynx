@@ -92,3 +92,14 @@
   background: var(--color-card);
   color: var(--color-primary);
 }
+
+.danger {
+  background: var(--color-danger);
+  color: #fff;
+  box-shadow: var(--shadow-md);
+}
+
+.danger:hover {
+  filter: brightness(1.06);
+  box-shadow: var(--shadow-lg);
+}

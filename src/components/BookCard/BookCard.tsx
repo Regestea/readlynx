@@ -1,4 +1,5 @@
-import type { CSSProperties } from "react";
+import type { CSSProperties, KeyboardEvent } from "react";
+import { Trash2 } from "lucide-react";
 import type { Book, BookKind } from "../../shared/types";
 import { Progress } from "../ui/Progress/Progress";
 import styles from "./BookCard.module.css";
@@ -9,6 +10,7 @@ interface BookCardProps {
   className?: string;
   style?: CSSProperties;
   onClick?: () => void;
+  onDelete?: () => void;
 }
 
 const COVER_STYLES: Record<Book["cover"], string> = {
@@ -26,11 +28,19 @@ const BADGE_LABELS: Record<BookKind, string> = {
   reading: "Reading",
 };
 
-function handleCardKeyDown(event: React.KeyboardEvent, onClick?: () => void) {
+function handleCardKeyDown(event: KeyboardEvent, onClick?: () => void) {
   if (!onClick) return;
   if (event.key === "Enter" || event.key === " ") {
     event.preventDefault();
     onClick();
+  }
+}
+
+function handleDeleteKeyDown(event: KeyboardEvent, onDelete: () => void) {
+  if (event.key === "Enter" || event.key === " ") {
+    event.preventDefault();
+    event.stopPropagation();
+    onDelete();
   }
 }
 
@@ -40,16 +50,33 @@ export function BookCard({
   className = "",
   style,
   onClick,
+  onDelete,
 }: BookCardProps) {
   const interactiveProps = onClick
     ? {
         role: "button",
         tabIndex: 0,
         onClick,
-        onKeyDown: (event: React.KeyboardEvent) => handleCardKeyDown(event, onClick),
+        onKeyDown: (event: KeyboardEvent) => handleCardKeyDown(event, onClick),
       }
     : {};
   const clickClass = onClick ? ` ${styles.clickable}` : "";
+
+  const deleteButton = onDelete ? (
+    <button
+      type="button"
+      className={styles.deleteButton}
+      onClick={(event) => {
+        event.stopPropagation();
+        onDelete();
+      }}
+      onKeyDown={(event) => handleDeleteKeyDown(event, onDelete)}
+      aria-label={`Delete ${book.title}`}
+      title="Delete book"
+    >
+      <Trash2 size={14} strokeWidth={1.8} aria-hidden="true" />
+    </button>
+  ) : null;
 
   if (layout === "horizontal") {
     return (
@@ -94,6 +121,7 @@ export function BookCard({
         <span className={styles.coverTitle}>{book.title}</span>
         <span className={styles.coverAuthor}>{book.author}</span>
       </div>
+      {deleteButton}
       <div className={styles.meta}>
         <h3 className={styles.metaTitle}>{book.title}</h3>
         <p className={styles.metaAuthor}>{book.author}</p>

@@ -19,6 +19,9 @@ declare global {
         saveDocument(payload: SaveDocumentPayload): Promise<{ documentId: string } | null>;
         listBooks(): Promise<BookListItem[]>;
         getBook(bookId: string): Promise<GetBookResult | null>;
+        deleteBook(bookId: string): Promise<boolean>;
+        getAppSettings(): Promise<{ theme: string } | null>;
+        updateAppSettings(theme: string): Promise<{ theme: string }>;
       };
     };
   }

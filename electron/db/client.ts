@@ -70,6 +70,18 @@ export class DbWorkerClient {
     return this.exec("get-book", bookId);
   }
 
+  deleteBook(bookId: string): Promise<boolean> {
+    return this.exec("delete-book", bookId);
+  }
+
+  getAppSettings(): Promise<{ theme: string } | null> {
+    return this.exec("get-app-settings");
+  }
+
+  updateAppSettings(theme: string): Promise<{ theme: string }> {
+    return this.exec("update-app-settings", { theme });
+  }
+
   close(): void {
     void this.worker.terminate();
   }
