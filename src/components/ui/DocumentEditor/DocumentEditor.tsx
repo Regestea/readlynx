@@ -6,8 +6,8 @@ import { LexicalErrorBoundary } from "@lexical/react/LexicalErrorBoundary";
 import { RichTextPlugin } from "@lexical/react/LexicalRichTextPlugin";
 import { EditorProvider } from "./EditorProvider";
 import { Toolbar } from "./toolbar/Toolbar";
-import { PAGE_FORMATS, PAGE_MARGIN_MM, marginPx, PLACEHOLDER_TEXT } from "./constants";
-import type { PageFormat } from "./constants";
+import { PAGE_FORMATS, PAGE_MARGIN_MM, uniformMargins, marginPx, PLACEHOLDER_TEXT } from "./constants";
+import type { PageFormat, PageMargins } from "./constants";
 import type { EditorAPI } from "./types";
 import styles from "./DocumentEditor.module.css";
 
@@ -20,8 +20,8 @@ export interface DocumentEditorProps {
   className?: string;
   paged?: boolean;
   pageFormat?: PageFormat;
-  marginMm?: number;
-  onMarginChange?: (margin: number) => void;
+  margins?: PageMargins;
+  onMarginsChange?: (margins: PageMargins) => void;
   zoom?: number;
   onPageCountChange?: (count: number) => void;
   onWordCountChange?: (count: number) => void;
@@ -42,8 +42,8 @@ export function DocumentEditor({
   className,
   paged = false,
   pageFormat = "a4",
-  marginMm,
-  onMarginChange,
+  margins,
+  onMarginsChange,
   zoom = 1,
   onPageCountChange,
   onWordCountChange,
@@ -74,8 +74,12 @@ export function DocumentEditor({
     .join(" ");
 
   const { width: pageWidth, height: pageHeight } = PAGE_FORMATS[pageFormat];
-  const pageMarginMm = marginMm ?? PAGE_MARGIN_MM;
-  const pageMarginPx = marginPx(pageMarginMm);
+  const pageMargins = margins ?? uniformMargins(PAGE_MARGIN_MM);
+  const marginTopPx = marginPx(pageMargins.top);
+  const marginRightPx = marginPx(pageMargins.right);
+  const marginBottomPx = marginPx(pageMargins.bottom);
+  const marginLeftPx = marginPx(pageMargins.left);
+  const marginYPx = Math.round((marginTopPx + marginBottomPx) / 2);
   const clampedZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom));
 
   const placeholderElement = (
@@ -96,10 +100,10 @@ export function DocumentEditor({
             paged
               ? ({
                   minHeight: pageHeight,
-                  paddingTop: `${pageMarginPx}px`,
-                  paddingLeft: `${pageMarginPx}px`,
-                  paddingRight: `${pageMarginPx}px`,
-                  paddingBottom: `${pageMarginPx}px`,
+                  paddingTop: `${marginTopPx}px`,
+                  paddingLeft: `${marginLeftPx}px`,
+                  paddingRight: `${marginRightPx}px`,
+                  paddingBottom: `${marginBottomPx}px`,
                 } as CSSProperties)
               : undefined
           }
@@ -122,7 +126,7 @@ export function DocumentEditor({
       paged={paged}
       pageFormat={pageFormat}
       zoom={clampedZoom}
-      marginY={pageMarginPx}
+      marginY={marginYPx}
       onPageCountChange={onPageCountChange}
       onWordCountChange={onWordCountChange}
       searchQuery={searchQuery}
@@ -134,11 +138,11 @@ export function DocumentEditor({
         onToggleFullscreen={toggleFullscreen}
         paged={paged}
         pageFormat={pageFormat}
-        marginMm={pageMarginMm}
-        onMarginChange={onMarginChange}
+        margins={pageMargins}
+        onMarginsChange={onMarginsChange}
       />
       {paged && (
-        <style>{`@page { size: ${PAGE_FORMATS[pageFormat].cssSize}; margin: ${pageMarginMm}mm; }`}</style>
+        <style>{`@page { size: ${PAGE_FORMATS[pageFormat].cssSize}; margin: ${pageMargins.top}mm ${pageMargins.right}mm ${pageMargins.bottom}mm ${pageMargins.left}mm; }`}</style>
       )}
       {paged ? (
         <div className={styles.shellPaged}>
@@ -149,8 +153,10 @@ export function DocumentEditor({
                 {
                   width: pageWidth,
                   zoom: clampedZoom,
-                  "--page-margin-x": `${pageMarginPx}px`,
-                  "--page-margin-y": `${pageMarginPx}px`,
+                  "--page-margin-top": `${marginTopPx}px`,
+                  "--page-margin-right": `${marginRightPx}px`,
+                  "--page-margin-bottom": `${marginBottomPx}px`,
+                  "--page-margin-left": `${marginLeftPx}px`,
                 } as CSSProperties
               }
             >

@@ -395,7 +395,9 @@ function EditorCore({
       <HistoryPlugin externalHistoryState={historyState} />
       <OnChangePlugin
         onChange={(editorState) => {
-          onChange?.(JSON.stringify(editorState.toJSON()));
+          const json = JSON.stringify(editorState.toJSON());
+          console.log(json);
+          onChange?.(json);
         }}
       />
       <LinkPlugin />

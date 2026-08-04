@@ -47,8 +47,9 @@ import { $createPageBreakNode } from "../nodes/PageBreakNode";
 import { ImageEditorDialog } from "./ImageEditorDialog";
 import { FontFamilySelect } from "./FontFamilySelect";
 import { ExportDialog, type ExportSettings } from "./ExportDialog";
-import { DEFAULT_FONT_SIZE_VALUE, FONT_SIZE_OPTIONS, HEADING_OPTIONS, TEXT_COLORS, BACKGROUND_COLORS, PAGE_MARGIN_OPTIONS } from "../constants";
-import type { PageFormat } from "../constants";
+import { MarginDialog } from "./MarginDialog";
+import { DEFAULT_FONT_SIZE_VALUE, FONT_SIZE_OPTIONS, HEADING_OPTIONS, TEXT_COLORS, BACKGROUND_COLORS, PAGE_MARGIN_OPTIONS, PAGE_MARGIN_CUSTOM, PAGE_MARGIN_MM, uniformMargins } from "../constants";
+import type { PageFormat, PageMargins } from "../constants";
 import type { BlockType } from "../types";
 import { exportDocx } from "../exporters/docxExporter";
 import { exportEpub, zipEpubFiles } from "../exporters/epubExporter";
@@ -64,8 +65,8 @@ interface ToolbarProps {
   onToggleFullscreen: (editorState: string) => void;
   paged?: boolean;
   pageFormat?: PageFormat;
-  marginMm?: number;
-  onMarginChange?: (margin: number) => void;
+  margins?: PageMargins;
+  onMarginsChange?: (margins: PageMargins) => void;
 }
 
 interface PromptDialogState {
@@ -227,8 +228,8 @@ export function Toolbar({
   onToggleFullscreen,
   paged = false,
   pageFormat = "a4",
-  marginMm,
-  onMarginChange,
+  margins,
+  onMarginsChange,
 }: ToolbarProps) {
   const [editor] = useLexicalComposerContext();
   const api = useEditorAPI();
@@ -242,6 +243,17 @@ export function Toolbar({
   const [imageEditorKey, setImageEditorKey] = useState(0);
   const [exportOpen, setExportOpen] = useState(false);
   const [exportSession, setExportSession] = useState(0);
+  const [marginDialogOpen, setMarginDialogOpen] = useState(false);
+  const [marginDialogSession, setMarginDialogSession] = useState(0);
+
+  const pageMargins = margins ?? uniformMargins(PAGE_MARGIN_MM);
+  const presetMargin = PAGE_MARGIN_OPTIONS.find(
+    (option) =>
+      pageMargins.top === option.value &&
+      pageMargins.right === option.value &&
+      pageMargins.bottom === option.value &&
+      pageMargins.left === option.value,
+  )?.value;
 
   const handleToggleFullscreen = useCallback(() => {
     onToggleFullscreen(api.saveState());
@@ -545,16 +557,24 @@ export function Toolbar({
         <div className={styles.toolbarGroup}>
           <select
             className={styles.blockSelect}
-            value={marginMm}
+            value={presetMargin !== undefined ? String(presetMargin) : PAGE_MARGIN_CUSTOM}
             title="Page margin"
             aria-label="Page margin"
-            onChange={(event) => onMarginChange?.(Number(event.target.value))}
+            onChange={(event) => {
+              if (event.target.value === PAGE_MARGIN_CUSTOM) {
+                setMarginDialogSession((session) => session + 1);
+                setMarginDialogOpen(true);
+                return;
+              }
+              onMarginsChange?.(uniformMargins(Number(event.target.value)));
+            }}
           >
             {PAGE_MARGIN_OPTIONS.map(({ value, label }) => (
-              <option key={value} value={value}>
+              <option key={value} value={String(value)}>
                 {label}
               </option>
             ))}
+            <option value={PAGE_MARGIN_CUSTOM}>Custom…</option>
           </select>
         </div>
       )}
@@ -839,7 +859,19 @@ export function Toolbar({
         open={exportOpen}
         onClose={() => setExportOpen(false)}
         onExport={runExport}
-        defaultMarginMm={marginMm}
+        defaultMarginMm={pageMargins.top}
+      />
+
+      <MarginDialog
+        key={`margin-${marginDialogSession}`}
+        open={marginDialogOpen}
+        onClose={() => setMarginDialogOpen(false)}
+        format={pageFormat}
+        margins={pageMargins}
+        onApply={(next) => {
+          onMarginsChange?.(next);
+          setMarginDialogOpen(false);
+        }}
       />
     </div>
   );

@@ -77,11 +77,30 @@ export const PAGE_FORMATS: Record<PageFormat, PageFormatInfo> = {
 /** Standard page margin (0.5 inch = 12.7 mm) applied on all four sides. */
 export const PAGE_MARGIN_MM = 12.7;
 
+/** Per-side page margins, in millimetres. */
+export interface PageMargins {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+}
+
+export function uniformMargins(mm: number): PageMargins {
+  return { top: mm, right: mm, bottom: mm, left: mm };
+}
+
+export function marginsEqual(a: PageMargins, b: PageMargins): boolean {
+  return a.top === b.top && a.right === b.right && a.bottom === b.bottom && a.left === b.left;
+}
+
 export const PAGE_MARGIN_OPTIONS = [
   { value: 8, label: "Narrow" },
   { value: 12.7, label: "Normal" },
   { value: 20, label: "Wide" },
 ] as const;
+
+/** Sentinel value for the toolbar's margin select: opens the custom-margin dialog. */
+export const PAGE_MARGIN_CUSTOM = "custom";
 
 /** On-screen margin in px at 96 dpi (1 inch = 96 px), so the margins match
  *  the physical `@page` margins used when printing / exporting to PDF exactly. */

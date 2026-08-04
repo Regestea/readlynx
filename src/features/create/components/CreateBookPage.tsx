@@ -3,8 +3,8 @@ import { AlignJustify, ArrowLeft, BookOpen, ChevronDown, ChevronUp, FileText, Se
 import { DocumentEditor } from "../../../components/ui/DocumentEditor";
 import { Button } from "../../../components/ui/Button/Button";
 import { Select } from "../../../components/ui/Select/Select";
-import { ZOOM_OPTIONS, PAGE_FORMATS, PAGE_MARGIN_MM } from "../../../components/ui/DocumentEditor/constants";
-import type { PageFormat } from "../../../components/ui/DocumentEditor/constants";
+import { ZOOM_OPTIONS, PAGE_FORMATS, PAGE_MARGIN_MM, uniformMargins } from "../../../components/ui/DocumentEditor/constants";
+import type { PageFormat, PageMargins } from "../../../components/ui/DocumentEditor/constants";
 import styles from "./CreateBookPage.module.css";
 
 interface CreateBookPageProps {
@@ -79,7 +79,7 @@ export function CreateBookPage({ onBack }: CreateBookPageProps) {
   const [zoomIndex, setZoomIndex] = useState(2);
   const [layout, setLayout] = useState<"paged" | "continuous">("paged");
   const [pageFormat, setPageFormat] = useState<PageFormat>("a4");
-  const [marginMm, setMarginMm] = useState<number>(PAGE_MARGIN_MM);
+  const [margins, setMargins] = useState<PageMargins>(() => uniformMargins(PAGE_MARGIN_MM));
   const [pages, setPages] = useState(1);
   const [words, setWords] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
@@ -236,8 +236,8 @@ export function CreateBookPage({ onBack }: CreateBookPageProps) {
           className={styles.editorRoot}
           paged={layout === "paged"}
           pageFormat={pageFormat}
-          marginMm={marginMm}
-          onMarginChange={setMarginMm}
+          margins={margins}
+          onMarginsChange={setMargins}
           initialMarkdown={SAMPLE_BOOK}
           zoom={zoom}
           onPageCountChange={setPages}

@@ -1,0 +1,120 @@
+.body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-5);
+}
+
+.preview {
+  display: flex;
+  justify-content: center;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-medium);
+  background: var(--color-bg-secondary);
+}
+
+.previewPage {
+  position: relative;
+  flex: none;
+  background: var(--color-page);
+  box-shadow: var(--shadow-sm);
+}
+
+.previewContent {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 10px;
+  border: 1px dashed var(--color-primary);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.previewLine {
+  display: block;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--color-text-muted);
+  opacity: 0.45;
+}
+
+.previewLine:first-child {
+  background: var(--color-primary);
+  opacity: 1;
+}
+
+.previewLabel {
+  position: absolute;
+  color: var(--color-primary);
+  font-family: var(--font-sans);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  pointer-events: none;
+}
+
+.previewLabelTop {
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.previewLabelBottom {
+  left: 50%;
+  transform: translate(-50%, 50%);
+}
+
+.previewLabelLeft {
+  top: 50%;
+  transform: translate(-50%, -50%);
+  writing-mode: vertical-rl;
+}
+
+.previewLabelRight {
+  top: 50%;
+  transform: translate(50%, -50%);
+  writing-mode: vertical-rl;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-rows: auto auto auto;
+  gap: var(--space-3);
+  align-items: center;
+  width: 100%;
+  max-width: 320px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.fieldTop {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.fieldLeft {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.fieldRight {
+  grid-column: 3;
+  grid-row: 2;
+}
+
+.fieldBottom {
+  grid-column: 2;
+  grid-row: 3;
+}
+
+.label {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+}

@@ -381,8 +381,8 @@
 }
 
 .placeholderPaged {
-  top: var(--page-margin-y, 96px);
-  left: var(--page-margin-x, 96px);
+  top: var(--page-margin-top, 96px);
+  left: var(--page-margin-left, 96px);
   font-size: 15px;
   line-height: 1.25;
 }
@@ -410,8 +410,9 @@
 .pageBreak {
   display: flex;
   flex-direction: column;
-  width: calc(100% + 2 * var(--page-margin-x, 0px));
-  margin-inline: calc(-1 * var(--page-margin-x, 0px));
+  width: calc(100% + var(--page-margin-left, 0px) + var(--page-margin-right, 0px));
+  margin-inline: calc(-1 * var(--page-margin-left, 0px))
+    calc(-1 * var(--page-margin-right, 0px));
   user-select: none;
   pointer-events: none;
 }
