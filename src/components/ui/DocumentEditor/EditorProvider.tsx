@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode, RefObject } from "react";
 import { LexicalComposer, type InitialConfigType } from "@lexical/react/LexicalComposer";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
@@ -67,9 +67,11 @@ interface EditorProviderProps {
   initialMarkdown?: string;
   initialState?: string | null;
   editable?: boolean;
-  onSave?: () => void;
+  onSave?: () => void | Promise<void>;
   onChange?: (json: string) => void;
   apiRef?: RefObject<EditorAPI | null>;
+  initialDefaultFontFamily?: string;
+  onDefaultFontFamilyChange?: (family: string) => void;
   paged?: boolean;
   pageFormat?: PageFormat;
   zoom?: number;
@@ -194,15 +196,28 @@ function EditorApiBridge({
   apiRef,
   historyState,
   pageFormat,
+  initialDefaultFontFamily,
+  onDefaultFontFamilyChange,
 }: {
   children: ReactNode;
   apiRef?: RefObject<EditorAPI | null>;
   historyState: HistoryState;
   pageFormat: PageFormat;
+  initialDefaultFontFamily?: string;
+  onDefaultFontFamilyChange?: (family: string) => void;
 }) {
   const [editor] = useLexicalComposerContext();
   const [toolbarState, setToolbarState] = useState<ToolbarState>(EMPTY_TOOLBAR_STATE);
-  const [defaultFontFamily, setDefaultFontFamily] = useState("");
+  const [defaultFontFamily, setDefaultFontFamily] = useState(initialDefaultFontFamily ?? "");
+
+  const fontChangeHandled = useRef(false);
+  useEffect(() => {
+    if (!fontChangeHandled.current) {
+      fontChangeHandled.current = true;
+      return;
+    }
+    onDefaultFontFamilyChange?.(defaultFontFamily);
+  }, [defaultFontFamily, onDefaultFontFamilyChange]);
 
   useEffect(() => {
     return editor.registerRootListener((rootElement) => {
@@ -279,6 +294,8 @@ export function EditorProvider({
   onSave,
   onChange,
   apiRef,
+  initialDefaultFontFamily,
+  onDefaultFontFamilyChange,
   paged = false,
   pageFormat = "a4",
   zoom = 1,
@@ -327,6 +344,8 @@ export function EditorProvider({
         onSave={onSave}
         onChange={onChange}
         apiRef={apiRef}
+        initialDefaultFontFamily={initialDefaultFontFamily}
+        onDefaultFontFamilyChange={onDefaultFontFamilyChange}
         paged={paged}
         pageFormat={pageFormat}
         zoom={zoom}
@@ -350,6 +369,8 @@ function EditorCore({
   apiRef,
   onSave,
   onChange,
+  initialDefaultFontFamily,
+  onDefaultFontFamilyChange,
   paged,
   pageFormat,
   zoom,
@@ -364,8 +385,10 @@ function EditorCore({
   initialMarkdown?: string;
   initialState?: string | null;
   apiRef?: RefObject<EditorAPI | null>;
-  onSave?: () => void;
+  onSave?: () => void | Promise<void>;
   onChange?: (json: string) => void;
+  initialDefaultFontFamily?: string;
+  onDefaultFontFamilyChange?: (family: string) => void;
   paged: boolean;
   pageFormat: PageFormat;
   zoom: number;
@@ -380,14 +403,25 @@ function EditorCore({
   const [historyState] = useState(() => createEmptyHistoryState());
 
   useEffect(() => {
-    if (initialState) {
-      editor.setEditorState(editor.parseEditorState(initialState));
-    } else if (initialMarkdown) {
-      editor.update(() => {
-        $getRoot().clear();
-        $convertFromMarkdownString(initialMarkdown, mdTransformers);
-      });
-    }
+    let cancelled = false;
+    // Defer past React's lifecycle so `setEditorState` doesn't run `flushSync`
+    // while React is still committing passive effects (avoids the "flushSync
+    // was called from inside a lifecycle method" warning and the resulting
+    // desync that crashes the table observer during teardown).
+    queueMicrotask(() => {
+      if (cancelled) return;
+      if (initialState) {
+        editor.setEditorState(editor.parseEditorState(initialState));
+      } else if (initialMarkdown) {
+        editor.update(() => {
+          $getRoot().clear();
+          $convertFromMarkdownString(initialMarkdown, mdTransformers);
+        });
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [editor, initialMarkdown, initialState]);
 
   return (
@@ -395,9 +429,7 @@ function EditorCore({
       <HistoryPlugin externalHistoryState={historyState} />
       <OnChangePlugin
         onChange={(editorState) => {
-          const json = JSON.stringify(editorState.toJSON());
-          console.log(json);
-          onChange?.(json);
+          onChange?.(JSON.stringify(editorState.toJSON()));
         }}
       />
       <LinkPlugin />
@@ -431,7 +463,13 @@ function EditorCore({
         activeIndex={searchActiveIndex}
         onResultCount={onSearchResultCount}
       />
-      <EditorApiBridge apiRef={apiRef} historyState={historyState} pageFormat={pageFormat}>
+      <EditorApiBridge
+        apiRef={apiRef}
+        historyState={historyState}
+        pageFormat={pageFormat}
+        initialDefaultFontFamily={initialDefaultFontFamily}
+        onDefaultFontFamilyChange={onDefaultFontFamilyChange}
+      >
         {children}
       </EditorApiBridge>
     </>

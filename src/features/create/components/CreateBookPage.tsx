@@ -1,94 +1,153 @@
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AlignJustify, ArrowLeft, BookOpen, ChevronDown, ChevronUp, FileText, Search, X, ZoomIn, ZoomOut } from "lucide-react";
 import { DocumentEditor } from "../../../components/ui/DocumentEditor";
 import { Button } from "../../../components/ui/Button/Button";
 import { Select } from "../../../components/ui/Select/Select";
-import { ZOOM_OPTIONS, PAGE_FORMATS, PAGE_MARGIN_MM, uniformMargins } from "../../../components/ui/DocumentEditor/constants";
+import type { EditorAPI } from "../../../components/ui/DocumentEditor/types";
+import { DEFAULT_FONT_SIZE_VALUE, PAGE_MARGIN_MM, PAGE_FORMATS, uniformMargins, ZOOM_OPTIONS } from "../../../components/ui/DocumentEditor/constants";
 import type { PageFormat, PageMargins } from "../../../components/ui/DocumentEditor/constants";
+import type { SaveDocumentPayload } from "../../../db/entities/types";
 import styles from "./CreateBookPage.module.css";
 
 interface CreateBookPageProps {
   onBack?: () => void;
-  initialTitle?: string;
-  initialMarkdown?: string;
-  initialCover?: string | null;
+  /** When set, the page opens this existing book instead of creating a new one. */
+  initialBookId?: string | null;
+  initialTitle: string;
+  initialMarkdown: string;
+  initialCover: string | null;
 }
 
-const SAMPLE_BOOK = `# The Mountain Keep
-
-A novel in progress — every chapter flows onto the next page as you write.
-
-## Chapter One — The Ascent
-
-The road to High Pass begins as a thread of grey beside the river, then climbs until the pines thin and the air turns sharp as flint.
-
-Mara pulled her hood tight and counted her steps the way her grandmother had taught her. One for the heart. Two for the hearth. Three for the road that never ends. By the time she reached the old watchtower, the valley below had folded itself into a blanket of cloud.
-
-She had never been this high before. The keep stood where the two ridgelines met, its stones older than the trees, older than the names carved into the gate.
-
-> A mountain is not climbed. It is kept, until it keeps you.
-
-The keeper's door was ajar. Inside, a fire burned low, and an old woman sat among maps that covered every wall like snowfall.
-
-"You have come," the woman said, without looking up. "Good. There is little time."
-
-## Chapter Two — The Cartographer's Room
-
-The maps were not maps of places. Mara realized this slowly, the way one realizes a dream is a memory turned inside out. Rivers flowed between years. A road labelled *Harvest* passed through a city that had not been built, and a port called *Goodbye* sat on a shore that had drowned a century ago.
-
-"Every line is a life," the keeper said. "Every fold in the parchment, a choice. When the ink dries, the choice is made."
-
-Mara touched the edge of a chart that showed her own village. There, a small circle of ink marked the square where her grandmother had told stories by the fountain. She felt the paper grow warm under her fingertips.
-
-## Chapter Three — The Fire
-
-That night the wind changed. It came down from the peaks in a single breath, and with it came the sound of bells — not from the valley, but from the sky.
-
-"The Keep has many names," the keeper whispered. "Tonight it is called the Alarm."
-
-Mara watched the fire-light dance across the maps. The ink was moving. Lines were redrawing themselves, rivers bending toward the mountain, roads turning to spiral.
-
-### What she found at the threshold
-
-Beyond the gate, the night was not dark. It was *bright*, brighter than noon, and in that brightness stood a figure woven from light and snow.
-
-"Do you know what a story is?" the figure asked. "It is a promise. And every promise is a door."
-
-Mara thought of her grandmother. Of the hearth. Of the road.
-
-"Then I will walk through it," she said.
-
-- The first promise was kept at dawn.
-- The second was kept at the river.
-- The third is kept still — by whoever reads this page.
-
-## Chapter Four — Unwritten
-
-The keeper gave her a single blank sheet. "This is the last map," she said. "Write your own place on it. Not the place you came from, but the place you will become."
-
-Mara took the sheet. Outside, the snow had stopped. The valley was green again.
-
-She wrote one word.
-
-*Home.*
-
-The ink glowed once, softly, like a fire remembering how to burn.
-
-And somewhere far below, in a village by a fountain, a grandmother looked up from her stories and smiled — as if she had always known her granddaughter would one day walk through a door of light.
-
-The End.`;
-
-export function CreateBookPage({ onBack, initialTitle = "", initialMarkdown, initialCover = null }: CreateBookPageProps) {
+export function CreateBookPage({
+  onBack,
+  initialBookId,
+  initialTitle,
+  initialMarkdown,
+  initialCover,
+}: CreateBookPageProps) {
+  const apiRef = useRef<EditorAPI | null>(null);
   const [title, setTitle] = useState(initialTitle);
+  const [coverImage, setCoverImage] = useState<string | null>(initialCover);
+  const [initialState, setInitialState] = useState<string | undefined>(undefined);
   const [zoomIndex, setZoomIndex] = useState(2);
   const [layout, setLayout] = useState<"paged" | "continuous">("paged");
   const [pageFormat, setPageFormat] = useState<PageFormat>("a4");
-  const [margins, setMargins] = useState<PageMargins>(() => uniformMargins(PAGE_MARGIN_MM));
+  const [margins, setMargins] = useState<PageMargins>(uniformMargins(PAGE_MARGIN_MM));
+  const [fontFamily, setFontFamily] = useState("");
   const [pages, setPages] = useState(1);
   const [words, setWords] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchIndex, setSearchIndex] = useState(0);
   const [searchCount, setSearchCount] = useState(0);
+
+  const idsRef = useRef<{ bookId: string; documentId: string } | null>(null);
+  const savedKeyRef = useRef("");
+  const savingRef = useRef(false);
+  const readyRef = useRef(initialBookId == null);
+  const firstRunRef = useRef(true);
+
+  useEffect(() => {
+    if (!initialBookId) return;
+    const db = window.readlynx?.db;
+    if (!db) return;
+    let cancelled = false;
+    void db.getBook(initialBookId).then((result) => {
+      if (cancelled) return;
+      if (!result || !result.document) {
+        readyRef.current = true;
+        return;
+      }
+      const { book, document, settings } = result;
+      idsRef.current = { bookId: book.id, documentId: document.id };
+      setTitle(book.title);
+      setCoverImage(book.coverImage);
+      setInitialState(document.contentJson);
+      if (settings) {
+        setLayout(settings.layout);
+        setPageFormat(settings.pageFormat);
+        setMargins({
+          top: settings.marginTop,
+          right: settings.marginRight,
+          bottom: settings.marginBottom,
+          left: settings.marginLeft,
+        });
+        setZoomIndex(settings.zoomIndex);
+        setFontFamily(settings.fontFamily);
+      }
+      savedKeyRef.current = JSON.stringify({
+        title: book.title,
+        coverImage: book.coverImage,
+        contentJson: document.contentJson,
+        settings: settings
+          ? {
+              layout: settings.layout,
+              pageFormat: settings.pageFormat,
+              marginTop: settings.marginTop,
+              marginRight: settings.marginRight,
+              marginBottom: settings.marginBottom,
+              marginLeft: settings.marginLeft,
+              zoomIndex: settings.zoomIndex,
+              fontFamily: settings.fontFamily,
+              fontSize: settings.fontSize,
+            }
+          : null,
+      });
+      readyRef.current = true;
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [initialBookId]);
+
+  /** Saves the current document + settings. Creates the book row only on the
+   *  first save; every later save updates the existing record. */
+  const saveNow = useCallback(async (): Promise<boolean> => {
+    const db = window.readlynx?.db;
+    if (!db || savingRef.current || !readyRef.current) return false;
+    const json = apiRef.current?.saveState() ?? "";
+    const payload: Omit<SaveDocumentPayload, "bookId"> = {
+      title,
+      coverImage,
+      contentJson: json,
+      settings: {
+        layout,
+        pageFormat,
+        marginTop: margins.top,
+        marginRight: margins.right,
+        marginBottom: margins.bottom,
+        marginLeft: margins.left,
+        zoomIndex,
+        fontFamily,
+        fontSize: parseFloat(DEFAULT_FONT_SIZE_VALUE),
+      },
+    };
+    const key = JSON.stringify(payload);
+    if (key === savedKeyRef.current) return false;
+    savingRef.current = true;
+    try {
+      const ids = idsRef.current ?? (await db.createBook());
+      idsRef.current = ids;
+      await db.saveDocument({ bookId: ids.bookId, ...payload });
+      savedKeyRef.current = key;
+      return true;
+    } finally {
+      savingRef.current = false;
+    }
+  }, [layout, pageFormat, margins, zoomIndex, fontFamily, title, coverImage]);
+
+  /** Document settings are persisted immediately when they change. The first
+   *  run is skipped (it would only echo the freshly loaded / default values). */
+  useEffect(() => {
+    if (firstRunRef.current) {
+      firstRunRef.current = false;
+      return;
+    }
+    void saveNow();
+  }, [layout, pageFormat, margins, zoomIndex, fontFamily, saveNow]);
+
+  const handleBack = () => {
+    onBack?.();
+  };
 
   const zoom = ZOOM_OPTIONS[Math.min(ZOOM_OPTIONS.length - 1, Math.max(0, zoomIndex))];
 
@@ -110,23 +169,9 @@ export function CreateBookPage({ onBack, initialTitle = "", initialMarkdown, ini
   return (
     <main className={styles.page} aria-label="Create book">
       <header className={`${styles.topBar} animate-fade-up`}>
-        <Button variant="icon" className={styles.backButton} aria-label="Back to home" onClick={onBack}>
+        <Button variant="icon" className={styles.backButton} aria-label="Back to home" onClick={handleBack}>
           <ArrowLeft size={18} strokeWidth={1.8} aria-hidden="true" />
         </Button>
-
-        <div className={styles.titleGroup}>
-          {initialCover && (
-            <img className={styles.coverThumb} src={initialCover} alt="Book cover" />
-          )}
-          <input
-            type="text"
-            className={styles.titleInput}
-            value={title}
-            onChange={(event) => setTitle(event.target.value)}
-            placeholder="Untitled book"
-            aria-label="Book title"
-          />
-        </div>
 
         <div className={styles.searchBox}>
           <Search size={15} strokeWidth={1.8} className={styles.searchIcon} aria-hidden="true" />
@@ -252,11 +297,18 @@ export function CreateBookPage({ onBack, initialTitle = "", initialMarkdown, ini
       <div className={styles.editorArea}>
         <DocumentEditor
           className={styles.editorRoot}
+          apiRef={apiRef}
           paged={layout === "paged"}
           pageFormat={pageFormat}
           margins={margins}
           onMarginsChange={setMargins}
-          initialMarkdown={initialMarkdown ?? SAMPLE_BOOK}
+          initialMarkdown={initialMarkdown}
+          initialState={initialState}
+          defaultFontFamily={fontFamily}
+          onDefaultFontFamilyChange={setFontFamily}
+          onSave={() => {
+            void saveNow();
+          }}
           zoom={zoom}
           onPageCountChange={setPages}
           onWordCountChange={setWords}

@@ -142,7 +142,14 @@ export function PageBoundaryPlugin({
       resizeObserver?.disconnect();
       unregisterUpdate();
       unregisterRoot();
-      for (const el of touched) el.style.marginTop = "";
+      // Only clean up inline margins while the editor root is still in the
+      // document. Resetting styles after React has begun tearing the editor
+      // down fires the table plugin's DOM MutationObserver against a stale
+      // editor state, which throws "Expected to find TableElement in DOM".
+      const rootEl = editor.getRootElement();
+      if (rootEl && rootEl.isConnected) {
+        for (const el of touched) el.style.marginTop = "";
+      }
     };
   }, [editor, format, zoom, marginY, onPageCountChange]);
 

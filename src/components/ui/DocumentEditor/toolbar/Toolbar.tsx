@@ -19,6 +19,7 @@ import {
   FilePlus,
   Palette,
   Quote,
+  Save,
 } from "lucide-react";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import {
@@ -67,6 +68,7 @@ interface ToolbarProps {
   pageFormat?: PageFormat;
   margins?: PageMargins;
   onMarginsChange?: (margins: PageMargins) => void;
+  onSave?: () => void | Promise<void>;
 }
 
 interface PromptDialogState {
@@ -230,6 +232,7 @@ export function Toolbar({
   pageFormat = "a4",
   margins,
   onMarginsChange,
+  onSave,
 }: ToolbarProps) {
   const [editor] = useLexicalComposerContext();
   const api = useEditorAPI();
@@ -245,6 +248,28 @@ export function Toolbar({
   const [exportSession, setExportSession] = useState(0);
   const [marginDialogOpen, setMarginDialogOpen] = useState(false);
   const [marginDialogSession, setMarginDialogSession] = useState(0);
+  const [saving, setSaving] = useState(false);
+  const [showSaved, setShowSaved] = useState(false);
+  const savedTimeoutRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (savedTimeoutRef.current) window.clearTimeout(savedTimeoutRef.current);
+    };
+  }, []);
+
+  const handleSave = async () => {
+    if (!onSave || saving) return;
+    setSaving(true);
+    try {
+      await onSave();
+      setShowSaved(true);
+      if (savedTimeoutRef.current) window.clearTimeout(savedTimeoutRef.current);
+      savedTimeoutRef.current = window.setTimeout(() => setShowSaved(false), 2000);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const pageMargins = margins ?? uniformMargins(PAGE_MARGIN_MM);
   const presetMargin = PAGE_MARGIN_OPTIONS.find(
@@ -511,6 +536,21 @@ export function Toolbar({
             </>
           )}
         </Menu>
+        <button
+          type="button"
+          className={styles.saveButton}
+          title="Save (Ctrl+S)"
+          onClick={() => void handleSave()}
+          disabled={saving}
+        >
+          <Save size={14} strokeWidth={1.8} aria-hidden="true" />
+          <span>{saving ? "Saving…" : "Save"}</span>
+        </button>
+        {showSaved && (
+          <span className={styles.savedLabel} aria-live="polite">
+            Saved
+          </span>
+        )}
       </div>
 
       <div className={styles.toolbarGroup}>

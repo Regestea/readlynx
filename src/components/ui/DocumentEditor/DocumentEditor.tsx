@@ -13,15 +13,20 @@ import styles from "./DocumentEditor.module.css";
 
 export interface DocumentEditorProps {
   initialMarkdown?: string;
+  /** Serialized editor state (JSON). Takes precedence over `initialMarkdown`. */
+  initialState?: string;
   editable?: boolean;
   apiRef?: RefObject<EditorAPI | null>;
-  onSave?: () => void;
+  onSave?: () => void | Promise<void>;
   onChange?: (json: string) => void;
   className?: string;
   paged?: boolean;
   pageFormat?: PageFormat;
   margins?: PageMargins;
   onMarginsChange?: (margins: PageMargins) => void;
+  /** Document-wide font used for text without an explicit font. */
+  defaultFontFamily?: string;
+  onDefaultFontFamilyChange?: (family: string) => void;
   zoom?: number;
   onPageCountChange?: (count: number) => void;
   onWordCountChange?: (count: number) => void;
@@ -35,6 +40,7 @@ const MAX_ZOOM = 2;
 
 export function DocumentEditor({
   initialMarkdown,
+  initialState,
   editable = true,
   apiRef,
   onSave,
@@ -44,6 +50,8 @@ export function DocumentEditor({
   pageFormat = "a4",
   margins,
   onMarginsChange,
+  defaultFontFamily,
+  onDefaultFontFamilyChange,
   zoom = 1,
   onPageCountChange,
   onWordCountChange,
@@ -118,11 +126,13 @@ export function DocumentEditor({
   const editor = (
     <EditorProvider
       initialMarkdown={initialMarkdown}
-      initialState={snapshot}
+      initialState={snapshot ?? initialState}
       editable={editable}
       apiRef={apiRef}
       onSave={onSave}
       onChange={onChange}
+      initialDefaultFontFamily={defaultFontFamily}
+      onDefaultFontFamilyChange={onDefaultFontFamilyChange}
       paged={paged}
       pageFormat={pageFormat}
       zoom={clampedZoom}
@@ -140,6 +150,7 @@ export function DocumentEditor({
         pageFormat={pageFormat}
         margins={pageMargins}
         onMarginsChange={onMarginsChange}
+        onSave={onSave}
       />
       {paged && (
         <style>{`@page { size: ${PAGE_FORMATS[pageFormat].cssSize}; margin: ${pageMargins.top}mm ${pageMargins.right}mm ${pageMargins.bottom}mm ${pageMargins.left}mm; }`}</style>

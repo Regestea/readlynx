@@ -9,7 +9,7 @@ import {
 } from "lexical";
 
 interface ShortcutsPluginProps {
-  onSave?: () => void;
+  onSave?: () => void | Promise<void>;
 }
 
 export function ShortcutsPlugin({ onSave }: ShortcutsPluginProps) {

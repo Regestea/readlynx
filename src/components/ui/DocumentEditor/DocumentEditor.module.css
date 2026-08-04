@@ -25,6 +25,10 @@
   background: var(--color-bg);
 }
 
+.root.fullscreen .toolbar {
+  background: var(--color-bg);
+}
+
 .root.paged {
   border: none;
   border-radius: 0;
@@ -120,6 +124,43 @@
 .menuButton[aria-expanded="true"] {
   background: var(--color-hover);
   color: var(--color-text);
+}
+
+.saveButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  margin-left: 2px;
+  padding: 0 var(--space-2);
+  border: none;
+  border-radius: var(--radius-small);
+  background: linear-gradient(135deg, var(--color-primary), var(--color-olive));
+  color: #fff;
+  font-family: var(--font-sans);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+  transition:
+    opacity var(--transition-fast),
+    filter var(--transition-fast);
+}
+
+.saveButton:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.saveButton:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.savedLabel {
+  margin-left: 4px;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-success);
+  white-space: nowrap;
 }
 
 .menuPanel {
