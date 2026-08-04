@@ -99,13 +99,8 @@ export function CreateBookPage({
     };
   }, [initialBookId]);
 
-  /** Saves the current document + settings. Creates the book row only on the
-   *  first save; every later save updates the existing record. */
-  const saveNow = useCallback(async (): Promise<boolean> => {
-    const db = window.readlynx?.db;
-    if (!db || savingRef.current || !readyRef.current) return false;
-    const json = apiRef.current?.saveState() ?? "";
-    const payload: Omit<SaveDocumentPayload, "bookId"> = {
+  const buildPayload = useCallback(
+    (json: string): Omit<SaveDocumentPayload, "bookId"> => ({
       title,
       coverImage,
       contentJson: json,
@@ -120,7 +115,17 @@ export function CreateBookPage({
         fontFamily,
         fontSize: parseFloat(DEFAULT_FONT_SIZE_VALUE),
       },
-    };
+    }),
+    [layout, pageFormat, margins, zoomIndex, fontFamily, title, coverImage],
+  );
+
+  /** Saves the current document + settings. Creates the book row only on the
+   *  first save; every later save updates the existing record. */
+  const saveNow = useCallback(async (): Promise<boolean> => {
+    const db = window.readlynx?.db;
+    if (!db || savingRef.current || !readyRef.current) return false;
+    const json = apiRef.current?.saveState() ?? "";
+    const payload = buildPayload(json);
     const key = JSON.stringify(payload);
     if (key === savedKeyRef.current) return false;
     savingRef.current = true;
@@ -133,17 +138,27 @@ export function CreateBookPage({
     } finally {
       savingRef.current = false;
     }
-  }, [layout, pageFormat, margins, zoomIndex, fontFamily, title, coverImage]);
+  }, [buildPayload]);
 
   /** Document settings are persisted immediately when they change. The first
-   *  run is skipped (it would only echo the freshly loaded / default values). */
+   *  run only records the baseline so StrictMode's phantom remount (and any
+   *  other render with no real change) can't create an empty book. Later runs
+   *  defer to a microtask so the editor content loaded via `initialState` is
+   *  applied first — otherwise the freshly opened document could be
+   *  overwritten with the still-empty editor state. */
   useEffect(() => {
     if (firstRunRef.current) {
       firstRunRef.current = false;
+      if (idsRef.current === null) {
+        const json = apiRef.current?.saveState() ?? "";
+        savedKeyRef.current = JSON.stringify(buildPayload(json));
+      }
       return;
     }
-    void saveNow();
-  }, [layout, pageFormat, margins, zoomIndex, fontFamily, saveNow]);
+    queueMicrotask(() => {
+      void saveNow();
+    });
+  }, [layout, pageFormat, margins, zoomIndex, fontFamily, saveNow, buildPayload]);
 
   const handleBack = () => {
     onBack?.();
