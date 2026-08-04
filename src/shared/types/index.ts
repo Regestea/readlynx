@@ -9,6 +9,8 @@ export interface Book {
   title: string;
   author: string;
   cover: CoverStyle;
+  /** Rendered instead of the palette gradient when present (data URL). */
+  coverImage?: string | null;
   kind?: BookKind;
   progress?: number;
   totalPages?: number;

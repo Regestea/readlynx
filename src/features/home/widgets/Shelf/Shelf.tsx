@@ -9,9 +9,10 @@ interface ShelfProps {
   title: string;
   subtitle: string;
   books: Book[];
+  onBookClick?: (bookId: string) => void;
 }
 
-export function Shelf({ icon, title, subtitle, books }: ShelfProps) {
+export function Shelf({ icon, title, subtitle, books, onBookClick }: ShelfProps) {
   return (
     <Card className={`animate-fade-up ${styles.shelf}`}>
       <div className={styles.head}>
@@ -27,7 +28,11 @@ export function Shelf({ icon, title, subtitle, books }: ShelfProps) {
       </div>
       <div className={styles.grid}>
         {books.map((book) => (
-          <BookCard key={book.id} book={book} />
+          <BookCard
+            key={book.id}
+            book={book}
+            onClick={onBookClick ? () => onBookClick(book.id) : undefined}
+          />
         ))}
       </div>
     </Card>

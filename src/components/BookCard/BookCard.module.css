@@ -31,6 +31,15 @@
   pointer-events: none;
 }
 
+.coverImage {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
+}
+
 .coverTitle {
   position: relative;
   z-index: 1;
@@ -206,4 +215,16 @@
   font-weight: var(--font-weight-semibold);
   color: var(--color-progress);
   flex-shrink: 0;
+}
+
+/* ---------- Clickable ---------- */
+
+.clickable {
+  cursor: pointer;
+}
+
+.clickable:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 4px;
+  border-radius: var(--radius-medium);
 }

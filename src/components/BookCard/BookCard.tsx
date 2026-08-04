@@ -8,6 +8,7 @@ interface BookCardProps {
   layout?: "vertical" | "horizontal";
   className?: string;
   style?: CSSProperties;
+  onClick?: () => void;
 }
 
 const COVER_STYLES: Record<Book["cover"], string> = {
@@ -25,18 +26,44 @@ const BADGE_LABELS: Record<BookKind, string> = {
   reading: "Reading",
 };
 
-export function BookCard({ book, layout = "vertical", className = "", style }: BookCardProps) {
+function handleCardKeyDown(event: React.KeyboardEvent, onClick?: () => void) {
+  if (!onClick) return;
+  if (event.key === "Enter" || event.key === " ") {
+    event.preventDefault();
+    onClick();
+  }
+}
+
+export function BookCard({
+  book,
+  layout = "vertical",
+  className = "",
+  style,
+  onClick,
+}: BookCardProps) {
+  const interactiveProps = onClick
+    ? {
+        role: "button",
+        tabIndex: 0,
+        onClick,
+        onKeyDown: (event: React.KeyboardEvent) => handleCardKeyDown(event, onClick),
+      }
+    : {};
+  const clickClass = onClick ? ` ${styles.clickable}` : "";
+
   if (layout === "horizontal") {
     return (
       <article
-        className={`${styles.horizontal} hover-lift ${className}`}
+        className={`${styles.horizontal} hover-lift ${className}${clickClass}`}
         style={style}
         aria-label={`${book.title} by ${book.author}`}
+        {...interactiveProps}
       >
         <div
           className={`${styles.cover} ${styles.coverSmall} ${COVER_STYLES[book.cover]}`}
           aria-hidden="true"
         >
+          {book.coverImage && <img className={styles.coverImage} src={book.coverImage} alt="" />}
           <span className={styles.coverTitle}>{book.title}</span>
           <span className={styles.coverAuthor}>{book.author}</span>
         </div>
@@ -56,11 +83,13 @@ export function BookCard({ book, layout = "vertical", className = "", style }: B
 
   return (
     <article
-      className={`${styles.vertical} ${className}`}
+      className={`${styles.vertical} ${className}${clickClass}`}
       style={style}
       aria-label={`${book.title} by ${book.author}`}
+      {...interactiveProps}
     >
       <div className={`${styles.cover} ${COVER_STYLES[book.cover]}`} aria-hidden="true">
+        {book.coverImage && <img className={styles.coverImage} src={book.coverImage} alt="" />}
         {book.kind && <span className={styles.badge}>{BADGE_LABELS[book.kind]}</span>}
         <span className={styles.coverTitle}>{book.title}</span>
         <span className={styles.coverAuthor}>{book.author}</span>
