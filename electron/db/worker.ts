@@ -9,6 +9,7 @@ import {
   DocumentRepository,
   DocumentSettingsRepository,
 } from "../../src/db/repositories/index.ts";
+import { migrateLegacyCovers, persistCoverImage } from "./covers.ts";
 
 interface DbWorkerData {
   dbPath: string;
@@ -33,6 +34,7 @@ const { dbPath } = workerData as DbWorkerData;
 
 const db = createConnection(dbPath);
 applySchema(db);
+migrateLegacyCovers(db, dbPath);
 seedDatabase(db);
 
 const books = new BookRepository(db);
@@ -52,18 +54,20 @@ function handleCreateBook(): { bookId: string; documentId: string } {
 
 function handleSaveDocument(payload: SaveDocumentPayload): { documentId: string } | null {
   const { bookId, title, coverImage, contentJson, settings } = payload;
+  const book = books.findById(bookId);
   const document = documents.findByBookId(bookId);
-  if (!document) return null;
+  if (!book || !document) return null;
+  const storedCover = persistCoverImage(coverImage, dbPath, book.coverImage);
   db.transaction(() => {
     documents.updateContent(document.id, contentJson);
     documentSettings.upsert(document.id, settings);
-    books.update(bookId, { title, coverImage });
+    books.update(bookId, { title, coverImage: storedCover });
   })();
   return { documentId: document.id };
 }
 
 function handleGetBook(bookId: string) {
-  const book = books.findByIdWithCover(bookId);
+  const book = books.findById(bookId);
   if (!book) return null;
   const document = documents.findByBookId(bookId) ?? null;
   const settings = document ? (documentSettings.findByDocumentId(document.id) ?? null) : null;

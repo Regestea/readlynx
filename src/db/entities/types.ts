@@ -8,7 +8,8 @@ export interface CreateBookResult {
   documentId: string;
 }
 
-/** Payload of `db:save-document`. */
+/** Payload of `db:save-document`. `coverImage` is a data URL, an existing
+ *  relative path, or null — the main process normalizes it to a stored file. */
 export interface SaveDocumentPayload {
   bookId: string;
   title: string;
@@ -17,19 +18,15 @@ export interface SaveDocumentPayload {
   settings: Omit<DocumentSettingsEntity, "documentId" | "updatedAt">;
 }
 
-/** Book with the cover BLOB decoded back to a data URL. */
-export type BookWithDecodedCover = Omit<BookEntity, "coverImage"> & {
-  coverImage: string | null;
-};
-
-/** Result of `db:get-book`. */
+/** Result of `db:get-book`. `book.coverImage` is a relative path. */
 export interface GetBookResult {
-  book: BookWithDecodedCover;
+  book: BookEntity;
   document: BookDocumentEntity | null;
   settings: DocumentSettingsEntity | null;
 }
 
-/** Row of `db:list-books` (cover BLOB decoded back to a data URL). */
+/** Row of `db:list-books`. `coverImage` is a relative path like
+ *  `covers/<file>`, resolved to a URL by the renderer. */
 export interface BookListItem {
   id: string;
   title: string;

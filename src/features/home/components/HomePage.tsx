@@ -4,6 +4,7 @@ import { AddModeCard } from "../widgets/AddModeCard/AddModeCard";
 import { Shelf } from "../widgets/Shelf/Shelf";
 import { CreateBookDialog } from "../../create/components/CreateBookDialog";
 import type { CreateBookDetails } from "../../create/components/CreateBookDialog";
+import { coverUrl } from "../../../shared/coverUrl";
 import type { Book, CoverStyle } from "../../../shared/types";
 import type { BookListItem } from "../../../db/entities/types";
 import styles from "./HomePage.module.css";
@@ -29,7 +30,7 @@ function toBook(row: BookListItem): Book {
     title: row.title,
     author: "",
     cover: coverForId(row.id),
-    coverImage: row.coverImage,
+    coverImage: coverUrl(row.coverImage),
     kind: "created",
   };
 }

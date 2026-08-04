@@ -1,8 +1,45 @@
-import { app, BrowserWindow, dialog, ipcMain } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, protocol } from "electron";
 import fs from "node:fs";
 import path from "node:path";
 import { DbWorkerClient } from "./db/client.ts";
+import { resolveCoverUrl } from "./db/covers.ts";
 import type { SaveDocumentPayload } from "../src/db/entities/types.ts";
+
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: "readlynx-cover",
+    privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true },
+  },
+]);
+
+const COVER_MIME_TYPES: Record<string, string> = {
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".webp": "image/webp",
+  ".gif": "image/gif",
+  ".svg": "image/svg+xml",
+  ".bmp": "image/bmp",
+  ".avif": "image/avif",
+};
+
+/** Serves cover image files referenced by relative paths in the database. */
+function registerCoverProtocol() {
+  protocol.handle("readlynx-cover", async (request) => {
+    try {
+      const dbPath = path.join(app.getPath("userData"), "readlynx.db");
+      const filePath = resolveCoverUrl(dbPath, request.url);
+      if (!filePath) {
+        return new Response("Forbidden", { status: 403 });
+      }
+      const data = await fs.promises.readFile(filePath);
+      const type = COVER_MIME_TYPES[path.extname(filePath).toLowerCase()] ?? "application/octet-stream";
+      return new Response(data, { headers: { "content-type": type } });
+    } catch {
+      return new Response("Not found", { status: 404 });
+    }
+  });
+}
 
 interface ExportPdfOptions {
   defaultPath: string;
@@ -125,6 +162,7 @@ function createWindow() {
 let dbClient: DbWorkerClient | null = null;
 
 app.whenReady().then(() => {
+  registerCoverProtocol();
   const dbPath = path.join(app.getPath("userData"), "readlynx.db");
   dbClient = new DbWorkerClient(dbPath);
   registerIpc(dbClient);
