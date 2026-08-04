@@ -48,7 +48,7 @@ import { ImageEditorDialog } from "./ImageEditorDialog";
 import { FontFamilySelect } from "./FontFamilySelect";
 import { ExportDialog, type ExportSettings } from "./ExportDialog";
 import { MarginDialog } from "./MarginDialog";
-import { DEFAULT_FONT_SIZE_VALUE, FONT_SIZE_OPTIONS, HEADING_OPTIONS, TEXT_COLORS, BACKGROUND_COLORS, PAGE_MARGIN_OPTIONS, PAGE_MARGIN_CUSTOM, PAGE_MARGIN_MM, uniformMargins } from "../constants";
+import { DEFAULT_FONT_SIZE_VALUE, FONT_SIZE_OPTIONS, HEADING_OPTIONS, TEXT_COLORS, BACKGROUND_COLORS, PAGE_MARGIN_OPTIONS, PAGE_MARGIN_MM, uniformMargins } from "../constants";
 import type { PageFormat, PageMargins } from "../constants";
 import type { BlockType } from "../types";
 import { exportDocx } from "../exporters/docxExporter";
@@ -555,27 +555,36 @@ export function Toolbar({
 
       {paged && (
         <div className={styles.toolbarGroup}>
-          <select
-            className={styles.blockSelect}
-            value={presetMargin !== undefined ? String(presetMargin) : PAGE_MARGIN_CUSTOM}
-            title="Page margin"
-            aria-label="Page margin"
-            onChange={(event) => {
-              if (event.target.value === PAGE_MARGIN_CUSTOM) {
-                setMarginDialogSession((session) => session + 1);
-                setMarginDialogOpen(true);
-                return;
-              }
-              onMarginsChange?.(uniformMargins(Number(event.target.value)));
-            }}
+          <Menu
+            label={
+              presetMargin !== undefined
+                ? (PAGE_MARGIN_OPTIONS.find((option) => option.value === presetMargin)?.label ?? "Margin")
+                : "Custom"
+            }
           >
-            {PAGE_MARGIN_OPTIONS.map(({ value, label }) => (
-              <option key={value} value={String(value)}>
-                {label}
-              </option>
-            ))}
-            <option value={PAGE_MARGIN_CUSTOM}>Custom…</option>
-          </select>
+            {(close) => (
+              <>
+                {PAGE_MARGIN_OPTIONS.map(({ value, label }) => (
+                  <MenuItem
+                    key={value}
+                    label={label}
+                    checked={presetMargin === value}
+                    onSelect={() => onMarginsChange?.(uniformMargins(value))}
+                    close={close}
+                  />
+                ))}
+                <MenuItem
+                  label="Custom…"
+                  checked={presetMargin === undefined}
+                  onSelect={() => {
+                    setMarginDialogSession((session) => session + 1);
+                    setMarginDialogOpen(true);
+                  }}
+                  close={close}
+                />
+              </>
+            )}
+          </Menu>
         </div>
       )}
 

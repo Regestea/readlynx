@@ -99,9 +99,6 @@ export const PAGE_MARGIN_OPTIONS = [
   { value: 20, label: "Wide" },
 ] as const;
 
-/** Sentinel value for the toolbar's margin select: opens the custom-margin dialog. */
-export const PAGE_MARGIN_CUSTOM = "custom";
-
 /** On-screen margin in px at 96 dpi (1 inch = 96 px), so the margins match
  *  the physical `@page` margins used when printing / exporting to PDF exactly. */
 export function marginPx(marginMm: number): number {
