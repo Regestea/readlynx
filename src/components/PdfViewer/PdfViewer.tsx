@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, FileWarning, Loader2, ZoomIn, ZoomOut } from "lucide-react";
+import { ChevronLeft, ChevronRight, FileWarning, Loader2, ScanText, ZoomIn, ZoomOut } from "lucide-react";
 import * as pdfjsLib from "pdfjs-dist";
 import type { PDFDocumentLoadingTask, PDFDocumentProxy, PDFPageProxy, RenderTask } from "pdfjs-dist";
+import { OcrPanel } from "./OcrPanel";
 import styles from "./PdfViewer.module.css";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
@@ -27,6 +28,10 @@ interface PdfViewerProps {
   fitWidth?: boolean;
   /** Called once the first page has been painted. */
   onReady?: () => void;
+  /** When true, show the OCR toolbar button even without an `onOcrText` handler. */
+  ocrEnabled?: boolean;
+  /** Called with the text recognized from the current page. */
+  onOcrText?: (text: string) => void;
 }
 
 export function PdfViewer({
@@ -38,6 +43,8 @@ export function PdfViewer({
   fit = false,
   fitWidth = false,
   onReady,
+  ocrEnabled = false,
+  onOcrText,
 }: PdfViewerProps) {
   const [doc, setDoc] = useState<PDFDocumentProxy | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -47,10 +54,130 @@ export function PdfViewer({
   const [rendering, setRendering] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const toolbarRef = useRef<HTMLDivElement>(null);
   const loadTaskRef = useRef<PDFDocumentLoadingTask | null>(null);
   const renderTaskRef = useRef<RenderTask | null>(null);
   const onReadyRef = useRef(onReady);
+  const onOcrTextRef = useRef(onOcrText);
   const readyRef = useRef(false);
+
+  const [ocrOpen, setOcrOpen] = useState(false);
+  const [selectedLangs, setSelectedLangs] = useState<string[]>(["eng"]);
+  const [installed, setInstalled] = useState<string[]>([]);
+  const [downloading, setDownloading] = useState<string | null>(null);
+  const [downloadProgress, setDownloadProgress] = useState<number | null>(null);
+  const [extracting, setExtracting] = useState(false);
+  const [ocrStatus, setOcrStatus] = useState<string | null>(null);
+  const downloadingRef = useRef<string | null>(null);
+  const extractingRef = useRef(false);
+
+  const showOcr = ocrEnabled || Boolean(onOcrText);
+
+  const refreshModels = useCallback(async () => {
+    const info = await window.readlynx?.ocr.getInfo();
+    if (info) setInstalled(info.installed);
+  }, []);
+
+  useEffect(() => {
+    onOcrTextRef.current = onOcrText;
+  }, [onOcrText]);
+
+  useEffect(() => {
+    if (!showOcr) return;
+    const unsubscribeDownload =
+      window.readlynx?.ocr.onDownloadProgress(({ lang, received, total }) => {
+        if (downloadingRef.current !== lang) return;
+        const ratio = total > 0 ? received / total : 0;
+        setDownloadProgress(ratio);
+        setOcrStatus(`Downloading ${lang} model… ${Math.round(ratio * 100)}%`);
+      });
+    const unsubscribeRecognize =
+      window.readlynx?.ocr.onRecognizeProgress(({ progress }) => {
+        if (extractingRef.current) {
+          setOcrStatus(`Recognizing page… ${Math.round(progress * 100)}%`);
+        }
+      });
+    return () => {
+      unsubscribeDownload?.();
+      unsubscribeRecognize?.();
+    };
+  }, [showOcr]);
+
+  /** Close the panel when clicking outside of it. */
+  useEffect(() => {
+    if (!ocrOpen) return;
+    const handlePointerDown = (event: PointerEvent) => {
+      if (toolbarRef.current && !toolbarRef.current.contains(event.target as Node)) {
+        setOcrOpen(false);
+      }
+    };
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, [ocrOpen]);
+
+  const handleDownload = useCallback(async (lang: string) => {
+    if (downloadingRef.current) return;
+    downloadingRef.current = lang;
+    setDownloading(lang);
+    setDownloadProgress(0);
+    setOcrStatus(`Downloading ${lang} model…`);
+    try {
+      const result = await window.readlynx?.ocr.downloadModel(lang);
+      if (!result || !result.ok) {
+        throw new Error(result?.error ?? `Could not download the ${lang} model.`);
+      }
+      setOcrStatus(`"${lang}" model installed.`);
+      await refreshModels();
+    } catch (err) {
+      setOcrStatus(err instanceof Error ? err.message : String(err));
+    } finally {
+      downloadingRef.current = null;
+      setDownloading(null);
+      setDownloadProgress(null);
+    }
+  }, [refreshModels]);
+
+  const handleDelete = useCallback(async (lang: string) => {
+    await window.readlynx?.ocr.deleteModel(lang);
+    await refreshModels();
+    setOcrStatus(`"${lang}" model removed.`);
+  }, [refreshModels]);
+
+  const handleExtract = useCallback(async () => {
+    const canvas = canvasRef.current;
+    if (!canvas) {
+      setOcrStatus("The page is still loading.");
+      return;
+    }
+    if (selectedLangs.length === 0) return;
+    extractingRef.current = true;
+    setExtracting(true);
+    setOcrStatus("Preparing page…");
+    try {
+      const dataUrl = canvas.toDataURL("image/png");
+      const result = await window.readlynx?.ocr.recognize({ dataUrl, langs: selectedLangs });
+      if (!result) throw new Error("OCR is unavailable.");
+      if (result.error) throw new Error(result.error);
+      const text = (result.text ?? "").trim();
+      if (!text) {
+        setOcrStatus("No text detected on this page.");
+      } else {
+        onOcrTextRef.current?.(text);
+        setOcrStatus(`${text.length.toLocaleString()} characters extracted and added to the editor.`);
+        setOcrOpen(false);
+      }
+    } catch (err) {
+      setOcrStatus(err instanceof Error ? err.message : String(err));
+    } finally {
+      extractingRef.current = false;
+      setExtracting(false);
+    }
+  }, [selectedLangs]);
+
+  const handleOcrToggle = useCallback(() => {
+    setOcrOpen((open) => !open);
+    void refreshModels();
+  }, [refreshModels]);
 
   useEffect(() => {
     onReadyRef.current = onReady;
@@ -236,6 +363,37 @@ const task = pageProxy.render({ canvas, viewport, transform });
         >
           <ZoomIn size={16} strokeWidth={2} aria-hidden="true" />
         </button>
+        {showOcr && (
+          <>
+            <span className={styles.divider} aria-hidden="true" />
+            <button
+              type="button"
+              className={styles.toolButton}
+              onClick={handleOcrToggle}
+              aria-label="Extract text with OCR"
+              title="Extract text from the current page"
+              aria-expanded={ocrOpen}
+            >
+              <ScanText size={16} strokeWidth={2} aria-hidden="true" />
+            </button>
+          </>
+        )}
+        {showOcr && (
+          <OcrPanel
+            open={ocrOpen}
+            installed={installed}
+            selected={selectedLangs}
+            onSelectedChange={setSelectedLangs}
+            downloading={downloading}
+            downloadProgress={downloadProgress}
+            onDownload={handleDownload}
+            onDelete={handleDelete}
+            onExtract={handleExtract}
+            extracting={extracting}
+            status={ocrStatus}
+            onClose={() => setOcrOpen(false)}
+          />
+        )}
       </div>
       )}
 
