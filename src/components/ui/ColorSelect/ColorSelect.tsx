@@ -8,15 +8,18 @@ interface ColorSelectProps {
   value: string;
   onChange: (color: string) => void;
   label?: string;
+  /** Optional palette to replace the default preset swatches. */
+  presets?: string[];
 }
 
-export function ColorSelect({ value, onChange, label }: ColorSelectProps) {
+export function ColorSelect({ value, onChange, label, presets }: ColorSelectProps) {
   const colorInputRef = useRef<HTMLInputElement>(null);
-  const isPreset = PRESET_COLORS.includes(value.toLowerCase());
+  const swatches = presets ?? PRESET_COLORS;
+  const isPreset = swatches.includes(value.toLowerCase());
 
   return (
     <div className={styles.wrap} role="radiogroup" aria-label={label ?? "Pick a color"}>
-      {PRESET_COLORS.map((color) => (
+      {swatches.map((color) => (
         <button
           key={color}
           type="button"

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, FileWarning, FolderOpen, Loader2, ZoomIn, ZoomOut } from "lucide-react";
+import { ChevronLeft, ChevronRight, FileWarning, Loader2, ZoomIn, ZoomOut } from "lucide-react";
 import * as pdfjsLib from "pdfjs-dist";
 import type { PDFDocumentLoadingTask, PDFDocumentProxy, PDFPageProxy, RenderTask } from "pdfjs-dist";
 import styles from "./PdfViewer.module.css";
@@ -17,10 +17,28 @@ interface PdfViewerProps {
   filePath: string;
   className?: string;
   ariaLabel?: string;
+  /** When true, fills the parent instead of using a fixed height. */
+  fill?: boolean;
+  /** Hide the controls toolbar (used for embedded first-page previews). */
+  toolbar?: boolean;
+  /** Scale the first page to fit the container (whole page visible). */
+  fit?: boolean;
+  /** Scale the first page to fit the container width (source-pane reading). */
+  fitWidth?: boolean;
+  /** Called once the first page has been painted. */
+  onReady?: () => void;
 }
 
-export function PdfViewer({ filePath, className = "", ariaLabel = "PDF document" }: PdfViewerProps) {
-  const [path, setPath] = useState(filePath);
+export function PdfViewer({
+  filePath,
+  className = "",
+  ariaLabel = "PDF document",
+  fill = false,
+  toolbar = true,
+  fit = false,
+  fitWidth = false,
+  onReady,
+}: PdfViewerProps) {
   const [doc, setDoc] = useState<PDFDocumentProxy | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pageNumber, setPageNumber] = useState(1);
@@ -28,8 +46,15 @@ export function PdfViewer({ filePath, className = "", ariaLabel = "PDF document"
   const [numPages, setNumPages] = useState(0);
   const [rendering, setRendering] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const loadTaskRef = useRef<PDFDocumentLoadingTask | null>(null);
   const renderTaskRef = useRef<RenderTask | null>(null);
+  const onReadyRef = useRef(onReady);
+  const readyRef = useRef(false);
+
+  useEffect(() => {
+    onReadyRef.current = onReady;
+  }, [onReady]);
 
   useEffect(() => {
     let cancelled = false;
@@ -42,9 +67,9 @@ export function PdfViewer({ filePath, className = "", ariaLabel = "PDF document"
         setNumPages(0);
         setRendering(true);
 
-        const data = await window.readlynx?.readFileBytes(path);
+        const data = await window.readlynx?.readFileBytes(filePath);
         if (!data) {
-          throw new Error(`Could not read "${path}". The file may not exist.`);
+          throw new Error(`Could not read "${filePath}". The file may not exist.`);
         }
         if (cancelled) return;
 
@@ -58,6 +83,21 @@ export function PdfViewer({ filePath, className = "", ariaLabel = "PDF document"
 
         setDoc(nextDoc);
         setNumPages(nextDoc.numPages);
+        if (fit || fitWidth) {
+          const firstPage = await nextDoc.getPage(1);
+          const viewport = firstPage.getViewport({ scale: 1 });
+          const scroll = scrollRef.current;
+          if (scroll) {
+            const pad = 48;
+            const availableWidth = Math.max(1, scroll.clientWidth - pad);
+            let fitted = availableWidth / viewport.width;
+            if (fit && !fitWidth) {
+              const availableHeight = Math.max(1, scroll.clientHeight - pad);
+              fitted = Math.min(fitted, availableHeight / viewport.height);
+            }
+            setScale(Math.max(0.1, Math.min(ZOOM_MAX, fitted)));
+          }
+        }
       } catch (err: unknown) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : String(err));
@@ -75,7 +115,7 @@ export function PdfViewer({ filePath, className = "", ariaLabel = "PDF document"
       void loadTaskRef.current?.destroy();
       loadTaskRef.current = null;
     };
-  }, [path]);
+  }, [filePath, fit, fitWidth]);
 
   const renderPage = useCallback(async (pdf: PDFDocumentProxy, page: number, s: number) => {
     const canvas = canvasRef.current;
@@ -92,10 +132,14 @@ export function PdfViewer({ filePath, className = "", ariaLabel = "PDF document"
       canvas.style.width = `${Math.floor(viewport.width)}px`;
       canvas.style.height = `${Math.floor(viewport.height)}px`;
       const transform: number[] | undefined = outputScale !== 1 ? [outputScale, 0, 0, outputScale, 0, 0] : undefined;
-      const task = pageProxy.render({ canvas, viewport, transform });
-      renderTaskRef.current = task;
-      await task.promise;
-    } catch (err: unknown) {
+const task = pageProxy.render({ canvas, viewport, transform });
+        renderTaskRef.current = task;
+        await task.promise;
+        if (page === 1 && !readyRef.current) {
+          readyRef.current = true;
+          onReadyRef.current?.();
+        }
+      } catch (err: unknown) {
       if (err instanceof Error && err.name === "RenderingCancelledException") return;
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -122,29 +166,13 @@ export function PdfViewer({ filePath, className = "", ariaLabel = "PDF document"
     setPageNumber(Math.min(Math.max(1, page), numPages));
   };
 
-  const handlePick = async () => {
-    const picked = await window.readlynx?.pickFile({
-      filters: [{ name: "PDF documents", extensions: ["pdf"] }],
-    });
-    if (picked) setPath(picked);
-  };
-
-  const classes = [styles.viewer, className].filter(Boolean).join(" ");
+  const classes = [styles.viewer, fill ? styles.fill : "", className].filter(Boolean).join(" ");
   const showCanvas = doc && !error;
 
   return (
     <div className={classes} aria-label={ariaLabel}>
-      <div className={styles.toolbar} role="toolbar" aria-label="PDF controls">
-        <button
-          type="button"
-          className={styles.toolButton}
-          onClick={() => void handlePick()}
-          aria-label="Open PDF file"
-          title="Open PDF file"
-        >
-          <FolderOpen size={16} strokeWidth={2} aria-hidden="true" />
-        </button>
-        <span className={styles.divider} aria-hidden="true" />
+      {toolbar && (
+        <div className={styles.toolbar} role="toolbar" aria-label="PDF controls">
         <button
           type="button"
           className={styles.toolButton}
@@ -209,8 +237,9 @@ export function PdfViewer({ filePath, className = "", ariaLabel = "PDF document"
           <ZoomIn size={16} strokeWidth={2} aria-hidden="true" />
         </button>
       </div>
+      )}
 
-      <div className={styles.scroll}>
+      <div className={styles.scroll} ref={scrollRef}>
         {error ? (
           <div className={styles.error} role="alert">
             <FileWarning size={28} strokeWidth={1.8} aria-hidden="true" />

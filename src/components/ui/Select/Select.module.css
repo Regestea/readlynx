@@ -39,6 +39,13 @@
   color: var(--color-text);
 }
 
+.select.selectCompact {
+  height: 34px;
+  padding: 0 34px 0 12px;
+  font-size: var(--font-size-sm);
+  border-radius: var(--radius-small);
+}
+
 .chevron {
   position: absolute;
   right: 20px;

@@ -1,29 +1,140 @@
-import { useEffect, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, FileWarning, FolderOpen, Loader2, Minus, Plus } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ChevronLeft, ChevronRight, FileWarning, Loader2, Minus, Plus, Settings2 } from "lucide-react";
 import ePub from "epubjs";
-import type { Book, Location, Rendition } from "epubjs";
+import type { Book, Contents, Location, Rendition } from "epubjs";
+import { useTheme } from "../../app/providers/theme/ThemeContext";
+import { Select } from "../ui/Select/Select";
+import type { SelectOption } from "../ui/Select/Select";
+import { ColorSelect } from "../ui/ColorSelect/ColorSelect";
 import styles from "./EpubViewer.module.css";
 
 const FONT_STEP = 10;
 const FONT_MIN = 60;
 const FONT_MAX = 200;
 
+interface FontMetadata {
+  family: string;
+  fullName: string;
+  postscriptName: string;
+  style: string;
+}
+
+declare global {
+  interface Window {
+    queryLocalFonts?: () => Promise<FontMetadata[]>;
+  }
+}
+
+const FONT_FORCE_SELECTOR =
+  "html, body, p, div, span, li, td, th, blockquote, h1, h2, h3, h4, h5, h6, a, em, strong, cite, i, b";
+
+const FONT_OPTIONS: SelectOption[] = [
+  { value: "", label: "Book font" },
+  { value: "system-ui, sans-serif", label: "System UI" },
+  { value: "Georgia, 'Times New Roman', serif", label: "Georgia" },
+  { value: "Palatino, 'Palatino Linotype', serif", label: "Palatino" },
+  { value: "'Times New Roman', Times, serif", label: "Times New Roman" },
+  { value: "Arial, Helvetica, sans-serif", label: "Arial" },
+  { value: "Helvetica, Arial, sans-serif", label: "Helvetica" },
+  { value: "Verdana, Geneva, sans-serif", label: "Verdana" },
+  { value: "'Trebuchet MS', 'Segoe UI', sans-serif", label: "Trebuchet MS" },
+  { value: "Tahoma, Geneva, sans-serif", label: "Tahoma" },
+  { value: "Segoe UI, system-ui, sans-serif", label: "Segoe UI" },
+  { value: "'Courier New', Courier, monospace", label: "Courier New" },
+];
+
+const BG_PRESETS = ["#ffffff", "#f7f2ea", "#e6ded0", "#cbb99b", "#1c2945", "#162033", "#2b2b33"];
+const TEXT_PRESETS = ["#322b26", "#111111", "#1c2945", "#5b6b50", "#cbb99b", "#eef2f7", "#ffffff"];
+
 interface EpubViewerProps {
   filePath: string;
   className?: string;
   ariaLabel?: string;
+  /** When true, fills the parent instead of using a fixed height. */
+  fill?: boolean;
+  /** Hide the controls toolbar (used for embedded first-page previews). */
+  toolbar?: boolean;
+  /** Called once the first page has been rendered. */
+  onReady?: () => void;
 }
 
-export function EpubViewer({ filePath, className = "", ariaLabel = "EPUB document" }: EpubViewerProps) {
-  const [path, setPath] = useState(filePath);
+export function EpubViewer({
+  filePath,
+  className = "",
+  ariaLabel = "EPUB document",
+  fill = false,
+  toolbar = true,
+  onReady,
+}: EpubViewerProps) {
+  const { theme } = useTheme();
   const [book, setBook] = useState<Book | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pageNumber, setPageNumber] = useState(0);
   const [numPages, setNumPages] = useState(0);
   const [fontPct, setFontPct] = useState(100);
+  const [fontFamily, setFontFamily] = useState("");
+  const [fontOptions, setFontOptions] = useState<SelectOption[]>(FONT_OPTIONS);
+  const [customBg, setCustomBg] = useState<string | null>(null);
+  const [customText, setCustomText] = useState<string | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
   const hostRef = useRef<HTMLDivElement>(null);
+  const controlsWrapRef = useRef<HTMLDivElement>(null);
   const bookRef = useRef<Book | null>(null);
   const renditionRef = useRef<Rendition | null>(null);
+  const fontCssRef = useRef("");
+  const onReadyRef = useRef(onReady);
+
+  useEffect(() => {
+    onReadyRef.current = onReady;
+  }, [onReady]);
+
+  /** Enumerates the fonts installed on this computer (Local Font Access API).
+   *  Falls back to a static list when unavailable (e.g. permission denied). */
+  useEffect(() => {
+    let cancelled = false;
+    const loadSystemFonts = async () => {
+      try {
+        if (typeof window.queryLocalFonts !== "function") return;
+        const fonts = await window.queryLocalFonts();
+        if (cancelled) return;
+        const seen = new Set<string>();
+        const options = fonts
+          .map((font) => font.family.trim())
+          .filter((family) => {
+            if (!family) return false;
+            const key = family.toLowerCase();
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          })
+          .sort((a, b) => a.localeCompare(b))
+          .map((family) => ({
+            value: /\s/.test(family) ? `"${family}"` : family,
+            label: family,
+          }));
+        setFontOptions([{ value: "", label: "Book font" }, ...options]);
+      } catch {
+        // Enumeration unavailable — the static FONT_OPTIONS list stays.
+      }
+    };
+    void loadSystemFonts();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  /** Injects/replaces a forced font-family stylesheet into an EPUB document. */
+  const injectFontStyle = useCallback((content: Contents) => {
+    const doc = content.document;
+    let style = doc.getElementById("readlynx-font");
+    if (!style) {
+      style = doc.createElement("style");
+      style.id = "readlynx-font";
+      const head = doc.head;
+      if (head) head.appendChild(style);
+    }
+    style.textContent = fontCssRef.current;
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -35,9 +146,9 @@ export function EpubViewer({ filePath, className = "", ariaLabel = "EPUB documen
         setPageNumber(0);
         setNumPages(0);
 
-        const data = await window.readlynx?.readFileBytes(path);
+        const data = await window.readlynx?.readFileBytes(filePath);
         if (!data) {
-          throw new Error(`Could not read "${path}". The file may not exist.`);
+          throw new Error(`Could not read "${filePath}". The file may not exist.`);
         }
         if (cancelled) return;
 
@@ -71,7 +182,9 @@ export function EpubViewer({ filePath, className = "", ariaLabel = "EPUB documen
         renditionRef.current = rendition;
         rendition.themes.fontSize("100%");
         rendition.on("relocated", handleRelocated);
+        rendition.hooks.content.register(injectFontStyle);
         await rendition.display();
+        onReadyRef.current?.();
 
         setBook(nextBook);
         setNumPages(nextBook.locations.length());
@@ -98,7 +211,7 @@ export function EpubViewer({ filePath, className = "", ariaLabel = "EPUB documen
       bookRef.current?.destroy();
       bookRef.current = null;
     };
-  }, [path]);
+  }, [filePath, injectFontStyle]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -113,6 +226,59 @@ export function EpubViewer({ filePath, className = "", ariaLabel = "EPUB documen
     observer.observe(host);
     return () => observer.disconnect();
   }, [book]);
+
+  /** Matches the EPUB page (background + text) to the app theme, unless the
+   *  user picked custom colors which then take precedence. */
+  useEffect(() => {
+    const rendition = renditionRef.current;
+    if (!rendition) return;
+    const rootStyle = getComputedStyle(document.documentElement);
+    const readVar = (name: string) => rootStyle.getPropertyValue(name).trim();
+    const background = customBg ?? (readVar("--color-page") || "#ffffff");
+    const text = customText ?? (readVar("--color-text") || "#322b26");
+    rendition.themes.override("background-color", background, true);
+    rendition.themes.override("color", text, true);
+  }, [theme, book, customBg, customText]);
+
+  /** Applies the chosen font family to the whole book by injecting a forced
+   *  `!important` stylesheet into every content document. */
+  useEffect(() => {
+    const rendition = renditionRef.current;
+    if (!rendition) return;
+    fontCssRef.current = fontFamily
+      ? `${FONT_FORCE_SELECTOR} { font-family: ${fontFamily} !important; }`
+      : "";
+    (rendition.getContents() as unknown as Contents[]).forEach((content) =>
+      injectFontStyle(content),
+    );
+  }, [fontFamily, book, injectFontStyle]);
+
+  /** Closes the settings dropdown on outside click or Escape. */
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onDown = (event: MouseEvent) => {
+      const wrap = controlsWrapRef.current;
+      if (wrap && !wrap.contains(event.target as Node)) {
+        setMenuOpen(false);
+      }
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMenuOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [menuOpen]);
+
+  const handleResetSettings = () => {
+    setFontFamily("");
+    setCustomBg(null);
+    setCustomText(null);
+    setMenuOpen(false);
+  };
 
   const goTo = (delta: number) => {
     const rendition = renditionRef.current;
@@ -129,28 +295,17 @@ export function EpubViewer({ filePath, className = "", ariaLabel = "EPUB documen
     rendition.themes.fontSize(`${next}%`);
   };
 
-  const handlePick = async () => {
-    const picked = await window.readlynx?.pickFile({
-      filters: [{ name: "EPUB books", extensions: ["epub"] }],
-    });
-    if (picked) setPath(picked);
-  };
+  const classes = [styles.viewer, fill ? styles.fill : "", className].filter(Boolean).join(" ");
 
-  const classes = [styles.viewer, className].filter(Boolean).join(" ");
+  const rootStyle = getComputedStyle(document.documentElement);
+  const readVar = (name: string) => rootStyle.getPropertyValue(name).trim();
+  const backgroundColor = customBg ?? (readVar("--color-page") || "#ffffff");
+  const textColor = customText ?? (readVar("--color-text") || "#322b26");
 
   return (
     <div className={classes} aria-label={ariaLabel}>
-      <div className={styles.toolbar} role="toolbar" aria-label="EPUB controls">
-        <button
-          type="button"
-          className={styles.toolButton}
-          onClick={() => void handlePick()}
-          aria-label="Open EPUB file"
-          title="Open EPUB file"
-        >
-          <FolderOpen size={16} strokeWidth={2} aria-hidden="true" />
-        </button>
-        <span className={styles.divider} aria-hidden="true" />
+      {toolbar && (
+        <div className={styles.toolbar} role="toolbar" aria-label="EPUB controls">
         <button
           type="button"
           className={styles.toolButton}
@@ -208,7 +363,58 @@ export function EpubViewer({ filePath, className = "", ariaLabel = "EPUB documen
         >
           <Plus size={16} strokeWidth={2} aria-hidden="true" />
         </button>
+        <span className={styles.divider} aria-hidden="true" />
+        <div className={styles.controlsWrap} ref={controlsWrapRef}>
+          <button
+            type="button"
+            className={`${styles.toolButton} ${menuOpen ? styles.toolButtonActive : ""}`}
+            onClick={() => setMenuOpen((open) => !open)}
+            disabled={!book}
+            aria-label="Reader settings"
+            title="Reader settings"
+            aria-haspopup="true"
+            aria-expanded={menuOpen}
+          >
+            <Settings2 size={16} strokeWidth={2} aria-hidden="true" />
+          </button>
+          {menuOpen && (
+            <div className={styles.menuPanel} role="menu" aria-label="Reader settings">
+              <div className={styles.menuGroup}>
+                <span className={styles.menuLabel}>Font family</span>
+                <Select
+                  compact
+                  value={fontFamily}
+                  onChange={(event) => setFontFamily(event.target.value)}
+                  options={fontOptions}
+                  aria-label="Font family"
+                />
+              </div>
+              <div className={styles.menuGroup}>
+                <span className={styles.menuLabel}>Background color</span>
+                <ColorSelect
+                  value={customBg ?? backgroundColor}
+                  onChange={setCustomBg}
+                  presets={BG_PRESETS}
+                  label="Background color"
+                />
+              </div>
+              <div className={styles.menuGroup}>
+                <span className={styles.menuLabel}>Text color</span>
+                <ColorSelect
+                  value={customText ?? textColor}
+                  onChange={setCustomText}
+                  presets={TEXT_PRESETS}
+                  label="Text color"
+                />
+              </div>
+              <button type="button" className={styles.menuReset} onClick={handleResetSettings}>
+                Reset to theme
+              </button>
+            </div>
+          )}
+        </div>
       </div>
+      )}
 
       <div className={styles.hostWrap}>
         {error ? (

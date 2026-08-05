@@ -10,15 +10,21 @@ export interface SelectOption {
 
 interface SelectProps extends Omit<SelectHTMLAttributes<HTMLSelectElement>, "children"> {
   options: SelectOption[];
+  /** Smaller sizing for compact toolbars / dropdowns. */
+  compact?: boolean;
 }
 
 export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select(
-  { options, className = "", ...rest },
+  { options, className = "", compact = false, ...rest },
   ref,
 ) {
   return (
     <div className={styles.wrapper}>
-      <select ref={ref} className={`${styles.select} ${className}`} {...rest}>
+      <select
+        ref={ref}
+        className={`${styles.select} ${compact ? styles.selectCompact : ""} ${className}`}
+        {...rest}
+      >
         {options.map((option) => (
           <option key={option.value} value={option.value}>
             {option.label}
