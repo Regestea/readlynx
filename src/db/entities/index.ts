@@ -1,3 +1,4 @@
+export * from "./AiModel.ts";
 export * from "./AppSettings.ts";
 export * from "./Book.ts";
 export * from "./BookDocument.ts";

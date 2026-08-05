@@ -1,4 +1,5 @@
 import { Worker } from "node:worker_threads";
+import type { AiModel } from "../../src/db/entities/AiModel.ts";
 import type {
   BookListItem,
   CreateBookResult,
@@ -85,6 +86,22 @@ export class DbWorkerClient {
 
   updateAppSettings(theme: string): Promise<{ theme: string }> {
     return this.exec("update-app-settings", { theme });
+  }
+
+  listAiModels(): Promise<AiModel[]> {
+    return this.exec("ai-models-list");
+  }
+
+  createAiModel(model: AiModel): Promise<boolean> {
+    return this.exec("ai-model-create", model);
+  }
+
+  updateAiModel(model: AiModel): Promise<boolean> {
+    return this.exec("ai-model-update", model);
+  }
+
+  deleteAiModel(id: string): Promise<boolean> {
+    return this.exec("ai-model-delete", id);
   }
 
   close(): void {

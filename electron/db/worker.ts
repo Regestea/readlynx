@@ -3,11 +3,10 @@ import { parentPort, workerData } from "node:worker_threads";
 import { createConnection } from "../../src/db/connection.ts";
 import { applySchema } from "../../src/db/schema.ts";
 import { seedDatabase } from "../../src/db/seed/seedDatabase.ts";
-import type {
-  CreateTranslatedBookPayload,
-  SaveDocumentPayload,
-} from "../../src/db/entities/types.ts";
+import type { CreateTranslatedBookPayload, SaveDocumentPayload } from "../../src/db/entities/types.ts";
+import type { AiModel } from "../../src/db/entities/AiModel.ts";
 import {
+  AiModelRepository,
   AppSettingsRepository,
   BookRepository,
   BookSourceRepository,
@@ -48,6 +47,7 @@ const documents = new DocumentRepository(db);
 const documentSettings = new DocumentSettingsRepository(db);
 const bookSources = new BookSourceRepository(db);
 const appSettings = new AppSettingsRepository(db);
+const aiModels = new AiModelRepository(db);
 
 function handleCreateBook(): { bookId: string; documentId: string } {
   const bookId = randomUUID();
@@ -131,6 +131,19 @@ const handlers: Record<string, (payload: unknown) => unknown> = {
     const { theme } = payload as { theme: string };
     appSettings.updateTheme(theme);
     return { theme };
+  },
+  "ai-models-list": () => aiModels.list(),
+  "ai-model-create": (payload) => {
+    aiModels.insert(payload as AiModel);
+    return true;
+  },
+  "ai-model-update": (payload) => {
+    aiModels.update(payload as AiModel);
+    return true;
+  },
+  "ai-model-delete": (payload) => {
+    aiModels.remove(payload as string);
+    return true;
   },
 };
 

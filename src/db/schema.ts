@@ -47,6 +47,15 @@ CREATE TABLE IF NOT EXISTS ReadingState (
 CREATE TABLE IF NOT EXISTS AppSettings (
   theme TEXT NOT NULL DEFAULT 'light'
 );
+
+CREATE TABLE IF NOT EXISTS AiModels (
+  Id          TEXT PRIMARY KEY,
+  DisplayName TEXT,
+  URL         TEXT,
+  ModelName   TEXT,
+  APIKey      TEXT,
+  Provider    TEXT NOT NULL
+);
 `;
 
 /** Runs `fn` with SQLite's foreign-key enforcement switched off, restoring it

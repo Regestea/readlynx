@@ -1,3 +1,4 @@
+export * from "./AiModelRepository.ts";
 export * from "./AppSettingsRepository.ts";
 export * from "./BookRepository.ts";
 export * from "./BookSourceRepository.ts";
