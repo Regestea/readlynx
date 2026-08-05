@@ -29,6 +29,24 @@ declare global {
         width: number;
         height: number;
       }): Promise<string | null>;
+      ocr: {
+        getInfo(): Promise<{ dir: string; installed: string[] }>;
+        downloadModel(lang: string): Promise<{
+          ok: boolean;
+          lang: string;
+          bytes?: number;
+          error?: string;
+        }>;
+        deleteModel(lang: string): Promise<{ ok: boolean; lang: string }>;
+        recognize(payload: {
+          dataUrl: string;
+          langs: string[];
+        }): Promise<{ text?: string; error?: string }>;
+        onDownloadProgress(
+          callback: (data: { lang: string; received: number; total: number }) => void,
+        ): () => void;
+        onRecognizeProgress(callback: (data: { progress: number }) => void): () => void;
+      };
       db: {
         createBook(): Promise<CreateBookResult>;
         createTranslatedBook(payload: CreateTranslatedBookPayload): Promise<CreateBookResult>;
