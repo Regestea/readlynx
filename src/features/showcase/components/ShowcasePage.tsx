@@ -26,6 +26,7 @@ import { Input } from "../../../components/ui/Input/Input";
 import { List } from "../../../components/ui/List/List";
 import type { ListItemData } from "../../../components/ui/List/List";
 import { Markdown } from "../../../components/ui/Markdown/Markdown";
+import { PdfViewer } from "../../../components/PdfViewer/PdfViewer";
 import { DocumentEditor } from "../../../components/ui/DocumentEditor";
 import { Modal } from "../../../components/ui/Modal/Modal";
 import { Mermaid } from "../../../components/ui/Mermaid/Mermaid";
@@ -747,6 +748,13 @@ export function ShowcasePage() {
       {/* ---------- StatisticsCard ---------- */}
       <Section title="StatisticsCard" description="Weekly reading chart with CSS bars.">
         <StatisticsCard stats={weekStats} />
+      </Section>
+
+      {/* ---------- PdfViewer ---------- */}
+      <Section title="PdfViewer" description="pdfjs-dist renderer for a PDF on disk. The path is passed to the component and read through the Electron bridge.">
+        <div className={styles.stackFull}>
+          <PdfViewer filePath="D:\The-Anxious-Generation.pdf" />
+        </div>
       </Section>
     </main>
   );

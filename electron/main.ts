@@ -77,6 +77,15 @@ const PDF_PAGINATOR_SRC = `(() => {
 })();`;
 
 function registerIpc(db: DbWorkerClient) {
+  ipcMain.handle("pdf:read-file", async (_event, filePath: string) => {
+    try {
+      const data = await fs.promises.readFile(filePath);
+      return data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
+    } catch {
+      return null;
+    }
+  });
+
   ipcMain.handle("db:create-book", () => db.createBook());
 
   ipcMain.handle("db:save-document", (_event, payload: SaveDocumentPayload) =>

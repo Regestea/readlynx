@@ -1,0 +1,169 @@
+.viewer {
+  display: flex;
+  flex-direction: column;
+  height: 520px;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-card);
+  box-shadow: var(--shadow-md);
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-glass);
+}
+
+.toolButton {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  color: var(--color-text-muted);
+  transition:
+    background-color var(--transition-base) ease,
+    color var(--transition-base) ease;
+}
+
+.toolButton:hover:not(:disabled) {
+  background: var(--color-hover);
+  color: var(--color-primary);
+}
+
+.toolButton:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.pageInfo {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 86px;
+  justify-content: center;
+}
+
+.pageInput {
+  width: 48px;
+  padding: 4px 6px;
+  text-align: center;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-card);
+  transition:
+    border-color var(--transition-base) ease,
+    box-shadow var(--transition-base) ease;
+}
+
+.pageInput:focus-visible {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 4px var(--color-glow);
+}
+
+.pageOf {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.zoomValue {
+  min-width: 52px;
+  padding: 5px 8px;
+  border-radius: 8px;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-secondary);
+  text-align: center;
+  cursor: default;
+}
+
+.zoomValue:hover {
+  background: var(--color-hover);
+  color: var(--color-primary);
+}
+
+.divider {
+  width: 1px;
+  height: 20px;
+  margin: 0 var(--space-1);
+  background: var(--color-border);
+}
+
+.scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: var(--space-6);
+  background: var(--color-active);
+}
+
+.page {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.16);
+}
+
+.canvas {
+  display: block;
+  background: #ffffff;
+  border-radius: 2px;
+}
+
+.renderingOverlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  align-self: center;
+  margin: auto;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  align-self: center;
+  margin: auto;
+  max-width: 420px;
+  text-align: center;
+  color: var(--color-terracotta);
+}
+
+.errorText {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.spinner {
+  animation: pdfviewer-spin 0.9s linear infinite;
+}
+
+@keyframes pdfviewer-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
