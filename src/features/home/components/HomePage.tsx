@@ -4,6 +4,7 @@ import { AddModeCard } from "../widgets/AddModeCard/AddModeCard";
 import { Shelf } from "../widgets/Shelf/Shelf";
 import { CreateBookDialog } from "../../create/components/CreateBookDialog";
 import type { CreateBookDetails } from "../../create/components/CreateBookDialog";
+import { TranslateBookDialog } from "./TranslateBookDialog";
 import { Modal } from "../../../components/ui/Modal/Modal";
 import { Button } from "../../../components/ui/Button/Button";
 import { coverUrl } from "../../../shared/coverUrl";
@@ -39,6 +40,7 @@ function toBook(row: BookListItem): Book {
 
 export function HomePage({ onCreateBook, onOpenBook }: HomePageProps) {
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [translateOpen, setTranslateOpen] = useState(false);
   const [books, setBooks] = useState<Book[] | null>(null);
   const [bookToDelete, setBookToDelete] = useState<Book | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -93,6 +95,7 @@ export function HomePage({ onCreateBook, onOpenBook }: HomePageProps) {
             icon={<Languages size={22} strokeWidth={1.8} />}
             title="Translate Book"
             description="Translate a book to another language"
+            onClick={() => setTranslateOpen(true)}
           />
           <AddModeCard
             icon={<BookOpen size={22} strokeWidth={1.8} />}
@@ -118,6 +121,15 @@ export function HomePage({ onCreateBook, onOpenBook }: HomePageProps) {
         onConfirm={(details) => {
           setDialogOpen(false);
           onCreateBook?.(details);
+        }}
+      />
+
+      <TranslateBookDialog
+        open={translateOpen}
+        onClose={() => setTranslateOpen(false)}
+        onConfirm={(bookId) => {
+          setTranslateOpen(false);
+          onOpenBook?.(bookId);
         }}
       />
 
