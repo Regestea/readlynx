@@ -2,6 +2,7 @@ import { Worker } from "node:worker_threads";
 import type {
   BookListItem,
   CreateBookResult,
+  CreateTranslatedBookPayload,
   GetBookResult,
   SaveDocumentPayload,
 } from "../../src/db/entities/types.ts";
@@ -56,6 +57,10 @@ export class DbWorkerClient {
 
   createBook(): Promise<CreateBookResult> {
     return this.exec("create-book");
+  }
+
+  createTranslatedBook(payload: CreateTranslatedBookPayload): Promise<CreateBookResult> {
+    return this.exec("create-translated-book", payload);
   }
 
   saveDocument(payload: SaveDocumentPayload): Promise<{ documentId: string } | null> {

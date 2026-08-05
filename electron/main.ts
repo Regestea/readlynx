@@ -1,4 +1,5 @@
-import { app, BrowserWindow, dialog, ipcMain, protocol } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, protocol, session } from "electron";
+import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { DbWorkerClient } from "./db/client.ts";
@@ -98,7 +99,49 @@ function registerIpc(db: DbWorkerClient) {
     return filePaths[0];
   });
 
+  ipcMain.handle("fs:capture-rect", async (event, rect: { x: number; y: number; width: number; height: number }) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win) return null;
+    try {
+      const image = await win.webContents.capturePage({
+        x: Math.round(rect.x),
+        y: Math.round(rect.y),
+        width: Math.round(rect.width),
+        height: Math.round(rect.height),
+      });
+      if (image.isEmpty()) return null;
+      return image.toDataURL();
+    } catch {
+      return null;
+    }
+  });
+
+  /** Copies the chosen PDF/EPUB into the app's books directory (next to the
+   *  database) and returns the new path, or null when the file is missing. */
+  ipcMain.handle("fs:import-source", async (_event, options: { sourcePath: string; sourceType: string }) => {
+    try {
+      const extension =
+        options.sourceType === "pdf"
+          ? ".pdf"
+          : options.sourceType === "epub"
+            ? ".epub"
+            : null;
+      if (!extension) return null;
+      const dir = path.join(app.getPath("userData"), "books");
+      await fs.promises.mkdir(dir, { recursive: true });
+      const dest = path.join(dir, `${randomUUID()}${extension}`);
+      await fs.promises.copyFile(options.sourcePath, dest);
+      return dest;
+    } catch {
+      return null;
+    }
+  });
+
   ipcMain.handle("db:create-book", () => db.createBook());
+
+  ipcMain.handle("db:create-translated-book", (_event, payload) =>
+    db.createTranslatedBook(payload),
+  );
 
   ipcMain.handle("db:save-document", (_event, payload: SaveDocumentPayload) =>
     db.saveDocument(payload),
@@ -190,6 +233,12 @@ let dbClient: DbWorkerClient | null = null;
 
 app.whenReady().then(() => {
   registerCoverProtocol();
+  session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
+    callback((permission as string) === "font-access");
+  });
+  session.defaultSession.setPermissionCheckHandler((_webContents, permission) => {
+    return (permission as string) === "font-access";
+  });
   const dbPath = path.join(app.getPath("userData"), "readlynx.db");
   dbClient = new DbWorkerClient(dbPath);
   registerIpc(dbClient);

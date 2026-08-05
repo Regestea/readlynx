@@ -3,14 +3,19 @@ import { parentPort, workerData } from "node:worker_threads";
 import { createConnection } from "../../src/db/connection.ts";
 import { applySchema } from "../../src/db/schema.ts";
 import { seedDatabase } from "../../src/db/seed/seedDatabase.ts";
-import type { SaveDocumentPayload } from "../../src/db/entities/types.ts";
+import type {
+  CreateTranslatedBookPayload,
+  SaveDocumentPayload,
+} from "../../src/db/entities/types.ts";
 import {
   AppSettingsRepository,
   BookRepository,
+  BookSourceRepository,
   DocumentRepository,
   DocumentSettingsRepository,
 } from "../../src/db/repositories/index.ts";
 import { migrateLegacyCovers, persistCoverImage, removeCoverFile } from "./covers.ts";
+import { removeSourceFile } from "./sources.ts";
 
 interface DbWorkerData {
   dbPath: string;
@@ -41,6 +46,7 @@ seedDatabase(db);
 const books = new BookRepository(db);
 const documents = new DocumentRepository(db);
 const documentSettings = new DocumentSettingsRepository(db);
+const bookSources = new BookSourceRepository(db);
 const appSettings = new AppSettingsRepository(db);
 
 function handleCreateBook(): { bookId: string; documentId: string } {
@@ -50,6 +56,26 @@ function handleCreateBook(): { bookId: string; documentId: string } {
     books.insert(bookId);
     documents.insert(documentId, bookId);
     documentSettings.insert(documentId);
+  })();
+  return { bookId, documentId };
+}
+
+/** Creates a translated book: a regular book (with title + cover) plus a
+ *  `BookSources` row pointing at the already-copied PDF/EPUB file. */
+function handleCreateTranslatedBook(payload: CreateTranslatedBookPayload): {
+  bookId: string;
+  documentId: string;
+} {
+  const bookId = randomUUID();
+  const documentId = randomUUID();
+  const sourceId = randomUUID();
+  const storedCover = persistCoverImage(payload.coverImage, dbPath, null);
+  db.transaction(() => {
+    books.insert(bookId, payload.title);
+    documents.insert(documentId, bookId);
+    documentSettings.insert(documentId);
+    if (storedCover) books.update(bookId, { title: payload.title, coverImage: storedCover });
+    bookSources.insert(sourceId, bookId, payload.sourceType, payload.sourcePath);
   })();
   return { bookId, documentId };
 }
@@ -73,23 +99,29 @@ function handleGetBook(bookId: string) {
   if (!book) return null;
   const document = documents.findByBookId(bookId) ?? null;
   const settings = document ? (documentSettings.findByDocumentId(document.id) ?? null) : null;
-  return { book, document, settings };
+  const source = bookSources.findByBookId(bookId) ?? null;
+  return { book, document, settings, source };
 }
 
-/** Deletes a book and everything that cascades from it. The cover file is
- *  removed from disk too. Returns false when the book does not exist. */
+/** Deletes a book and everything that cascades from it. The cover file and
+ *  any imported source file are removed from disk too. Returns false when the
+ *  book does not exist. */
 function handleDeleteBook(bookId: string): boolean {
   const book = books.findById(bookId);
   if (!book) return false;
+  const source = bookSources.findByBookId(bookId);
   db.transaction(() => {
     books.remove(bookId);
   })();
   removeCoverFile(book.coverImage, dbPath);
+  if (source) removeSourceFile(source.filePath, dbPath);
   return true;
 }
 
 const handlers: Record<string, (payload: unknown) => unknown> = {
   "create-book": handleCreateBook,
+  "create-translated-book": (payload) =>
+    handleCreateTranslatedBook(payload as CreateTranslatedBookPayload),
   "save-document": (payload) => handleSaveDocument(payload as SaveDocumentPayload),
   "list-books": () => books.list(),
   "get-book": (payload) => handleGetBook(payload as string),

@@ -1,11 +1,24 @@
 import type { BookEntity } from "./Book.ts";
 import type { BookDocumentEntity } from "./BookDocument.ts";
+import type { BookSourceEntity } from "./BookSource.ts";
 import type { DocumentSettingsEntity } from "./DocumentSettings.ts";
 
 /** Result of `db:create-book`: a new book with its document. */
 export interface CreateBookResult {
   bookId: string;
   documentId: string;
+}
+
+export type BookSourceType = "pdf" | "epub";
+
+/** Payload of `db:create-translated-book`: creates a book backed by an
+ *  imported PDF/EPUB source. `sourcePath` is the copied file; `coverImage`
+ *  is a data URL of the first page screenshot (or null). */
+export interface CreateTranslatedBookPayload {
+  title: string;
+  sourceType: BookSourceType;
+  sourcePath: string;
+  coverImage: string | null;
 }
 
 /** Payload of `db:save-document`. `coverImage` is a data URL, an existing
@@ -23,6 +36,8 @@ export interface GetBookResult {
   book: BookEntity;
   document: BookDocumentEntity | null;
   settings: DocumentSettingsEntity | null;
+  /** Present when the book was created from an imported PDF/EPUB file. */
+  source: BookSourceEntity | null;
 }
 
 /** Row of `db:list-books`. `coverImage` is a relative path like
