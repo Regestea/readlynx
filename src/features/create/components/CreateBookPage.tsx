@@ -3,6 +3,7 @@ import { AlignJustify, ArrowLeft, BookOpen, ChevronDown, ChevronUp, Columns2, Fi
 import { DocumentEditor } from "../../../components/ui/DocumentEditor";
 import { PdfViewer } from "../../../components/PdfViewer/PdfViewer";
 import { EpubViewer } from "../../../components/EpubViewer/EpubViewer";
+import { ocrTextToMarkdown } from "../../../components/PdfViewer/ocr";
 import { Button } from "../../../components/ui/Button/Button";
 import { Select } from "../../../components/ui/Select/Select";
 import type { EditorAPI } from "../../../components/ui/DocumentEditor/types";
@@ -185,6 +186,17 @@ export function CreateBookPage({
   const handleBack = () => {
     onBack?.();
   };
+
+  /** Appends OCR-recognized text (from the source PDF) to the document. */
+  const handleOcrText = useCallback(
+    (text: string) => {
+      const markdown = ocrTextToMarkdown(text);
+      if (!markdown) return;
+      apiRef.current?.appendMarkdown(markdown);
+      void saveNow();
+    },
+    [saveNow],
+  );
 
   const zoom = ZOOM_OPTIONS[Math.min(ZOOM_OPTIONS.length - 1, Math.max(0, zoomIndex))];
 
@@ -407,7 +419,7 @@ export function CreateBookPage({
               style={sourceMode === "split" ? { flex: `0 0 ${sourceRatio * 100}%` } : undefined}
             >
               {source.sourceType === "pdf" ? (
-                <PdfViewer filePath={source.filePath} fill fitWidth />
+                <PdfViewer filePath={source.filePath} fill fitWidth onOcrText={handleOcrText} />
               ) : (
                 <EpubViewer filePath={source.filePath} fill />
               )}

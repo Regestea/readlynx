@@ -17,6 +17,7 @@ import { TableCellNode, TableNode, TableRowNode } from "@lexical/table";
 import { createEmptyHistoryState } from "@lexical/history";
 import type { HistoryState } from "@lexical/history";
 import {
+  $createParagraphNode,
   $getRoot,
   $getSelection,
   $isElementNode,
@@ -30,7 +31,7 @@ import {
 import { $isLinkNode } from "@lexical/link";
 import { $findMatchingParent } from "@lexical/utils";
 import { $getSelectionStyleValueForProperty } from "@lexical/selection";
-import { $convertFromMarkdownString, $convertToMarkdownString } from "@lexical/markdown";
+import { $convertFromMarkdownString, $convertToMarkdownString, $generateNodesFromMarkdownString } from "@lexical/markdown";
 import { mdTransformers } from "./plugins/MarkdownPlugin";
 import { AutoFocusPlugin } from "./plugins/AutoFocusPlugin";
 import { AutoDirectionPlugin } from "./plugins/AutoDirectionPlugin";
@@ -251,6 +252,23 @@ function EditorApiBridge({
       },
       importMarkdown: (markdown: string) => {
         editor.update(() => $convertFromMarkdownString(markdown, mdTransformers));
+      },
+      appendMarkdown: (markdown: string) => {
+        if (!markdown.trim()) return;
+        editor.update(() => {
+          const nodes = $generateNodesFromMarkdownString(markdown, mdTransformers);
+          if (nodes.length === 0) return;
+          const root = $getRoot();
+          const last = root.getLastChild();
+          // Keep the appended text on its own paragraph.
+          const needsSeparator =
+            last !== null &&
+            (last.getType() !== "paragraph" ||
+              ($isElementNode(last) && last.getTextContent() !== ""));
+          if (needsSeparator) root.append($createParagraphNode());
+          root.append(...nodes);
+          root.selectEnd();
+        });
       },
       exportMarkdown: () => editor.read(() => $convertToMarkdownString(mdTransformers)),
       exportHtml: () => exportHtml(editor, { fontFamily: defaultFontFamily }),

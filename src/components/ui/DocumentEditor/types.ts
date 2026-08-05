@@ -13,6 +13,8 @@ export interface EditorAPI {
   loadState(json: string): void;
   newDocument(): void;
   importMarkdown(markdown: string): void;
+  /** Appends parsed markdown at the end of the document (used by OCR import). */
+  appendMarkdown(markdown: string): void;
   exportMarkdown(): string;
   exportHtml(): string;
   exportDocx(): Promise<Blob>;
