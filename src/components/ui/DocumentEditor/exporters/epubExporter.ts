@@ -2,6 +2,7 @@ import type { LexicalEditor } from "lexical";
 import { $generateHtmlFromNodes } from "@lexical/html";
 import { zipSync } from "fflate";
 import type { EpubFile, EpubMetadata, ExportThemeOptions } from "../types";
+import { highlightBodyCode, HIGHLIGHT_THEME_CSS } from "./epubHighlight";
 
 const XML_DECL = '<?xml version="1.0" encoding="UTF-8"?>';
 const NS_XHTML = "http://www.w3.org/1999/xhtml";
@@ -30,6 +31,22 @@ function extractFirstHeading(html: string): string {
   const match = /<h1[^>]*>([\s\S]*?)<\/h1>/i.exec(html);
   if (!match) return "";
   return match[1].replace(/<[^>]+>/g, "").trim();
+}
+
+/**
+ * XHTML requires void elements (hr, br, img, …) to be self-closed. Lexical's
+ * DOM serializer emits them via HTML serialization (`<hr>`, `<img src="…">`),
+ * which strict EPUB readers reject as XML errors. Attribute values are matched
+ * as quoted strings so `>` inside an attribute (e.g. an SVG data URL) is safe.
+ */
+const VOID_ELEMENT_RE =
+  /<(area|base|br|col|embed|hr|img|input|link|meta|param|source|track|wbr)\b((?:"[^"]*"|'[^']*'|[^>])*)>/gi;
+
+function selfCloseVoidElements(html: string): string {
+  return html.replace(VOID_ELEMENT_RE, (match, tag: string, attrs: string) => {
+    if (attrs.trimEnd().endsWith("/")) return match;
+    return `<${tag}${attrs} />`;
+  });
 }
 
 /** Splits the body HTML into chapters at top-level <h1> boundaries. */
@@ -94,7 +111,7 @@ export function exportEpub(
   const uid = metadata.identifier?.trim() || `urn:uuid:${makeUuid()}`;
 
   const bodyHtml = editor.read(() => $generateHtmlFromNodes(editor));
-  const chapters = splitChapters(bodyHtml);
+  const chapters = splitChapters(selfCloseVoidElements(highlightBodyCode(bodyHtml)));
   const chapterTitles = chapters.map(
     (chapter, i) => extractFirstHeading(chapter) || (chapters.length > 1 ? `Chapter ${i + 1}` : title),
   );
@@ -120,6 +137,7 @@ export function exportEpub(
     `    <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>`,
     `    <item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>`,
     `    <item id="css" href="style.css" media-type="text/css"/>`,
+    `    <item id="highlight-css" href="highlight.css" media-type="text/css"/>`,
     ...chapterHrefs.map(
       (href) =>
         `    <item id="${href.replace(".xhtml", "")}" href="${href}" media-type="application/xhtml+xml"/>`,
@@ -215,6 +233,7 @@ ${navPoints}
   <head>
     <title>${xmlEscape(chapterTitles[i])}</title>
     <link rel="stylesheet" type="text/css" href="style.css"/>
+    <link rel="stylesheet" type="text/css" href="highlight.css"/>
   </head>
   <body>
     <section epub:type="chapter">
@@ -229,6 +248,12 @@ ${chapter}
     path: "OEBPS/style.css",
     mime: "text/css",
     content: bookCss(options),
+  });
+
+  files.push({
+    path: "OEBPS/highlight.css",
+    mime: "text/css",
+    content: HIGHLIGHT_THEME_CSS,
   });
 
   return files;
