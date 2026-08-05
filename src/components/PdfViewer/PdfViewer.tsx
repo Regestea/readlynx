@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, FileWarning, Loader2, ZoomIn, ZoomOut } from "lucide-react";
+import { ChevronLeft, ChevronRight, FileWarning, FolderOpen, Loader2, ZoomIn, ZoomOut } from "lucide-react";
 import * as pdfjsLib from "pdfjs-dist";
 import type { PDFDocumentLoadingTask, PDFDocumentProxy, PDFPageProxy, RenderTask } from "pdfjs-dist";
 import styles from "./PdfViewer.module.css";
@@ -20,6 +20,7 @@ interface PdfViewerProps {
 }
 
 export function PdfViewer({ filePath, className = "", ariaLabel = "PDF document" }: PdfViewerProps) {
+  const [path, setPath] = useState(filePath);
   const [doc, setDoc] = useState<PDFDocumentProxy | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pageNumber, setPageNumber] = useState(1);
@@ -41,9 +42,9 @@ export function PdfViewer({ filePath, className = "", ariaLabel = "PDF document"
         setNumPages(0);
         setRendering(true);
 
-        const data = await window.readlynx?.readPdfFile(filePath);
+        const data = await window.readlynx?.readFileBytes(path);
         if (!data) {
-          throw new Error(`Could not read "${filePath}". The file may not exist.`);
+          throw new Error(`Could not read "${path}". The file may not exist.`);
         }
         if (cancelled) return;
 
@@ -74,7 +75,7 @@ export function PdfViewer({ filePath, className = "", ariaLabel = "PDF document"
       void loadTaskRef.current?.destroy();
       loadTaskRef.current = null;
     };
-  }, [filePath]);
+  }, [path]);
 
   const renderPage = useCallback(async (pdf: PDFDocumentProxy, page: number, s: number) => {
     const canvas = canvasRef.current;
@@ -121,12 +122,29 @@ export function PdfViewer({ filePath, className = "", ariaLabel = "PDF document"
     setPageNumber(Math.min(Math.max(1, page), numPages));
   };
 
+  const handlePick = async () => {
+    const picked = await window.readlynx?.pickFile({
+      filters: [{ name: "PDF documents", extensions: ["pdf"] }],
+    });
+    if (picked) setPath(picked);
+  };
+
   const classes = [styles.viewer, className].filter(Boolean).join(" ");
   const showCanvas = doc && !error;
 
   return (
     <div className={classes} aria-label={ariaLabel}>
       <div className={styles.toolbar} role="toolbar" aria-label="PDF controls">
+        <button
+          type="button"
+          className={styles.toolButton}
+          onClick={() => void handlePick()}
+          aria-label="Open PDF file"
+          title="Open PDF file"
+        >
+          <FolderOpen size={16} strokeWidth={2} aria-hidden="true" />
+        </button>
+        <span className={styles.divider} aria-hidden="true" />
         <button
           type="button"
           className={styles.toolButton}

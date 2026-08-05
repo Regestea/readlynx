@@ -77,13 +77,25 @@ const PDF_PAGINATOR_SRC = `(() => {
 })();`;
 
 function registerIpc(db: DbWorkerClient) {
-  ipcMain.handle("pdf:read-file", async (_event, filePath: string) => {
+  ipcMain.handle("fs:read-bytes", async (_event, filePath: string) => {
     try {
       const data = await fs.promises.readFile(filePath);
       return data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
     } catch {
       return null;
     }
+  });
+
+  ipcMain.handle("fs:pick-file", async (event, options?: { filters?: { name: string; extensions: string[] }[] }) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win) return null;
+    const { canceled, filePaths } = await dialog.showOpenDialog(win, {
+      title: "Open file",
+      properties: ["openFile"],
+      filters: options?.filters,
+    });
+    if (canceled || filePaths.length === 0) return null;
+    return filePaths[0];
   });
 
   ipcMain.handle("db:create-book", () => db.createBook());

@@ -14,7 +14,10 @@ declare global {
         defaultPath: string;
         html: string;
       }): Promise<string | null>;
-      readPdfFile(filePath: string): Promise<ArrayBuffer | null>;
+      readFileBytes(filePath: string): Promise<ArrayBuffer | null>;
+      pickFile(options?: {
+        filters?: { name: string; extensions: string[] }[];
+      }): Promise<string | null>;
       db: {
         createBook(): Promise<CreateBookResult>;
         saveDocument(payload: SaveDocumentPayload): Promise<{ documentId: string } | null>;

@@ -2,7 +2,8 @@ const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("readlynx", {
   exportPdf: (options) => ipcRenderer.invoke("export-pdf", options),
-  readPdfFile: (filePath) => ipcRenderer.invoke("pdf:read-file", filePath),
+  readFileBytes: (filePath) => ipcRenderer.invoke("fs:read-bytes", filePath),
+  pickFile: (options) => ipcRenderer.invoke("fs:pick-file", options),
   db: {
     createBook: () => ipcRenderer.invoke("db:create-book"),
     saveDocument: (payload) => ipcRenderer.invoke("db:save-document", payload),

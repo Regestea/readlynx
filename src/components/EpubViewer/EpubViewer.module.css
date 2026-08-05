@@ -1,0 +1,138 @@
+.viewer {
+  display: flex;
+  flex-direction: column;
+  height: 520px;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-card);
+  box-shadow: var(--shadow-md);
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-glass);
+}
+
+.toolButton {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  color: var(--color-text-muted);
+  transition:
+    background-color var(--transition-base) ease,
+    color var(--transition-base) ease;
+}
+
+.toolButton:hover:not(:disabled) {
+  background: var(--color-hover);
+  color: var(--color-primary);
+}
+
+.toolButton:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.pageInfo {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-1);
+  min-width: 86px;
+  justify-content: center;
+}
+
+.pageCurrent {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+  min-width: 24px;
+  text-align: right;
+}
+
+.pageOf {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.zoomValue {
+  min-width: 52px;
+  padding: 5px 8px;
+  border-radius: 8px;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-secondary);
+  text-align: center;
+  cursor: default;
+}
+
+.zoomValue:hover {
+  background: var(--color-hover);
+  color: var(--color-primary);
+}
+
+.divider {
+  width: 1px;
+  height: 20px;
+  margin: 0 var(--space-1);
+  background: var(--color-border);
+}
+
+.hostWrap {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  background: var(--color-active);
+}
+
+.host {
+  position: absolute;
+  inset: 0;
+}
+
+.loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.error {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  max-width: 420px;
+  margin: 0 auto;
+  text-align: center;
+  color: var(--color-terracotta);
+}
+
+.errorText {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.spinner {
+  animation: epubviewer-spin 0.9s linear infinite;
+}
+
+@keyframes epubviewer-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

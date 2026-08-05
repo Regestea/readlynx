@@ -27,6 +27,7 @@ import { List } from "../../../components/ui/List/List";
 import type { ListItemData } from "../../../components/ui/List/List";
 import { Markdown } from "../../../components/ui/Markdown/Markdown";
 import { PdfViewer } from "../../../components/PdfViewer/PdfViewer";
+import { EpubViewer } from "../../../components/EpubViewer/EpubViewer";
 import { DocumentEditor } from "../../../components/ui/DocumentEditor";
 import { Modal } from "../../../components/ui/Modal/Modal";
 import { Mermaid } from "../../../components/ui/Mermaid/Mermaid";
@@ -754,6 +755,13 @@ export function ShowcasePage() {
       <Section title="PdfViewer" description="pdfjs-dist renderer for a PDF on disk. The path is passed to the component and read through the Electron bridge.">
         <div className={styles.stackFull}>
           <PdfViewer filePath="D:\The-Anxious-Generation.pdf" />
+        </div>
+      </Section>
+
+      {/* ---------- EpubViewer ---------- */}
+      <Section title="EpubViewer" description="epub.js renderer for an EPUB on disk, with paged flow and font size controls.">
+        <div className={styles.stackFull}>
+          <EpubViewer filePath="C:\Users\reges\Desktop\Microsoft_Certified_Azure_Developer_Associate_(AZ-204)_Study_Guide_(Early_Release)-asbook.ir.epub" />
         </div>
       </Section>
     </main>
