@@ -5,6 +5,7 @@ import type {
   GetBookResult,
   SaveDocumentPayload,
 } from "./db/entities/types.ts";
+import type { AiModel } from "./db/entities/AiModel.ts";
 
 export {};
 
@@ -56,6 +57,31 @@ declare global {
         deleteBook(bookId: string): Promise<boolean>;
         getAppSettings(): Promise<{ theme: string } | null>;
         updateAppSettings(theme: string): Promise<{ theme: string }>;
+        listAiModels(): Promise<AiModel[]>;
+        createAiModel(model: AiModel): Promise<boolean>;
+        updateAiModel(model: AiModel): Promise<boolean>;
+        deleteAiModel(id: string): Promise<boolean>;
+      };
+      ai: {
+        testConnection(input: {
+          url: string;
+          apiKey: string;
+          modelName: string;
+        }): Promise<{ ok: boolean; message?: string; error?: string }>;
+        listGeminiModels(apiKey: string): Promise<{ value: string; label: string }[]>;
+        chat(payload: {
+          input: { url: string; apiKey: string; modelName: string };
+          messages: { role: "system" | "user" | "assistant"; content: string }[];
+        }): Promise<string>;
+        structured(payload: {
+          input: { url: string; apiKey: string; modelName: string };
+          options: {
+            systemPrompt?: string;
+            prompt: string;
+            images?: string[];
+            jsonSchema: Record<string, unknown>;
+          };
+        }): Promise<unknown>;
       };
     };
   }

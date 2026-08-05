@@ -5,6 +5,18 @@ import path from "node:path";
 import Tesseract from "tesseract.js";
 import { DbWorkerClient } from "./db/client.ts";
 import { resolveCoverUrl } from "./db/covers.ts";
+import {
+  chatCompletion,
+  listGeminiModels,
+  structuredCompletion,
+  testConnection,
+} from "./ai.ts";
+import type {
+  AiChatMessage,
+  AiConnectionInput,
+  AiStructuredOptions,
+} from "./ai.ts";
+import type { AiModel } from "../src/db/entities/AiModel.ts";
 import type { SaveDocumentPayload } from "../src/db/entities/types.ts";
 
 protocol.registerSchemesAsPrivileged([
@@ -281,6 +293,34 @@ function registerIpc(db: DbWorkerClient) {
   ipcMain.handle("db:get-app-settings", () => db.getAppSettings());
 
   ipcMain.handle("db:update-app-settings", (_event, theme: string) => db.updateAppSettings(theme));
+
+  ipcMain.handle("db:ai-models-list", () => db.listAiModels());
+
+  ipcMain.handle("db:ai-model-create", (_event, model: AiModel) => db.createAiModel(model));
+
+  ipcMain.handle("db:ai-model-update", (_event, model: AiModel) => db.updateAiModel(model));
+
+  ipcMain.handle("db:ai-model-delete", (_event, id: string) => db.deleteAiModel(id));
+
+  /* ---------- AI (native requests, no CORS) ---------- */
+
+  ipcMain.handle("ai:test", (_event, input: AiConnectionInput) => testConnection(input));
+
+  ipcMain.handle("ai:list-gemini-models", (_event, apiKey: string) =>
+    listGeminiModels(apiKey),
+  );
+
+  ipcMain.handle(
+    "ai:chat",
+    (_event, payload: { input: AiConnectionInput; messages: AiChatMessage[] }) =>
+      chatCompletion(payload.input, payload.messages),
+  );
+
+  ipcMain.handle(
+    "ai:structured",
+    (_event, payload: { input: AiConnectionInput; options: AiStructuredOptions }) =>
+      structuredCompletion(payload.input, payload.options),
+  );
 
   ipcMain.handle("export-pdf", async (event, options: ExportPdfOptions) => {
     const win = BrowserWindow.fromWebContents(event.sender);
