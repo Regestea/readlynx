@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AlignJustify, ArrowLeft, BookOpen, ChevronDown, ChevronUp, FileText, Search, X, ZoomIn, ZoomOut } from "lucide-react";
+import { AlignJustify, ArrowLeft, BookOpen, ChevronDown, ChevronUp, Columns2, FileText, GripVertical, PanelLeft, PanelRight, Search, X, ZoomIn, ZoomOut } from "lucide-react";
 import { DocumentEditor } from "../../../components/ui/DocumentEditor";
+import { PdfViewer } from "../../../components/PdfViewer/PdfViewer";
+import { EpubViewer } from "../../../components/EpubViewer/EpubViewer";
 import { Button } from "../../../components/ui/Button/Button";
 import { Select } from "../../../components/ui/Select/Select";
 import type { EditorAPI } from "../../../components/ui/DocumentEditor/types";
 import { DEFAULT_FONT_SIZE_VALUE, PAGE_MARGIN_MM, PAGE_FORMATS, uniformMargins, ZOOM_OPTIONS } from "../../../components/ui/DocumentEditor/constants";
 import type { PageFormat, PageMargins } from "../../../components/ui/DocumentEditor/constants";
-import type { SaveDocumentPayload } from "../../../db/entities/types";
+import type { BookSourceType, SaveDocumentPayload } from "../../../db/entities/types";
 import styles from "./CreateBookPage.module.css";
 
 interface CreateBookPageProps {
@@ -16,6 +18,8 @@ interface CreateBookPageProps {
   initialTitle: string;
   initialMarkdown: string;
   initialCover: string | null;
+  /** Called when the split view (editor + source) opens or closes. */
+  onSplitChange?: (split: boolean) => void;
 }
 
 export function CreateBookPage({
@@ -24,6 +28,7 @@ export function CreateBookPage({
   initialTitle,
   initialMarkdown,
   initialCover,
+  onSplitChange,
 }: CreateBookPageProps) {
   const apiRef = useRef<EditorAPI | null>(null);
   const [title, setTitle] = useState(initialTitle);
@@ -39,12 +44,21 @@ export function CreateBookPage({
   const [searchQuery, setSearchQuery] = useState("");
   const [searchIndex, setSearchIndex] = useState(0);
   const [searchCount, setSearchCount] = useState(0);
+  const [source, setSource] = useState<{ sourceType: BookSourceType; filePath: string } | null>(null);
+  const [sourceMode, setSourceMode] = useState<"split" | "editor" | "source">("split");
+  const [sourceRatio, setSourceRatio] = useState(0.4);
+  const [dragging, setDragging] = useState(false);
+  const splitRef = useRef<HTMLDivElement>(null);
 
   const idsRef = useRef<{ bookId: string; documentId: string } | null>(null);
   const savedKeyRef = useRef("");
   const savingRef = useRef(false);
   const readyRef = useRef(initialBookId == null);
   const firstRunRef = useRef(true);
+
+  useEffect(() => {
+    onSplitChange?.(source != null && sourceMode === "split");
+  }, [source, sourceMode, onSplitChange]);
 
   useEffect(() => {
     if (!initialBookId) return;
@@ -57,11 +71,19 @@ export function CreateBookPage({
         readyRef.current = true;
         return;
       }
-      const { book, document, settings } = result;
+      const { book, document, settings, source: bookSource } = result;
       idsRef.current = { bookId: book.id, documentId: document.id };
       setTitle(book.title);
       setCoverImage(book.coverImage);
       setInitialState(document.contentJson);
+      setSource(
+        bookSource
+          ? {
+              sourceType: bookSource.sourceType === "epub" ? "epub" : "pdf",
+              filePath: bookSource.filePath,
+            }
+          : null,
+      );
       if (settings) {
         setLayout(settings.layout);
         setPageFormat(settings.pageFormat);
@@ -181,6 +203,39 @@ export function CreateBookPage({
     }
   };
 
+  const clampRatio = (ratio: number) => Math.min(0.75, Math.max(0.2, ratio));
+
+  const handleSplitDragStart = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    const split = splitRef.current;
+    if (!split) return;
+    const move = (moveEvent: PointerEvent) => {
+      const rect = split.getBoundingClientRect();
+      if (rect.width <= 0) return;
+      setSourceRatio(clampRatio((moveEvent.clientX - rect.left) / rect.width));
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      setDragging(false);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    setDragging(true);
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  };
+
+  const handleDividerKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+      event.preventDefault();
+      setSourceRatio((ratio) => clampRatio(ratio + (event.key === "ArrowLeft" ? -0.05 : 0.05)));
+    }
+  };
+
   return (
     <main className={styles.page} aria-label="Create book">
       <header className={`${styles.topBar} animate-fade-up`}>
@@ -250,6 +305,41 @@ export function CreateBookPage({
           <span className={styles.stat}>{words.toLocaleString()} words</span>
         </div>
 
+        {source && (
+          <div className={styles.viewGroup} role="group" aria-label="View">
+            <button
+              type="button"
+              className={`${styles.viewButton} ${sourceMode === "editor" ? styles.viewButtonActive : ""}`}
+              aria-pressed={sourceMode === "editor"}
+              onClick={() => setSourceMode("editor")}
+              title="Show the editor only"
+            >
+              <PanelLeft size={15} strokeWidth={1.8} aria-hidden="true" />
+              Editor
+            </button>
+            <button
+              type="button"
+              className={`${styles.viewButton} ${sourceMode === "split" ? styles.viewButtonActive : ""}`}
+              aria-pressed={sourceMode === "split"}
+              onClick={() => setSourceMode("split")}
+              title="Show the editor and the source document side by side"
+            >
+              <Columns2 size={15} strokeWidth={1.8} aria-hidden="true" />
+              Split
+            </button>
+            <button
+              type="button"
+              className={`${styles.viewButton} ${sourceMode === "source" ? styles.viewButtonActive : ""}`}
+              aria-pressed={sourceMode === "source"}
+              onClick={() => setSourceMode("source")}
+              title="Show the source document only"
+            >
+              <PanelRight size={15} strokeWidth={1.8} aria-hidden="true" />
+              Source
+            </button>
+          </div>
+        )}
+
         <div className={styles.layout} role="group" aria-label="Layout">
           <button
             type="button"
@@ -310,27 +400,81 @@ export function CreateBookPage({
       </header>
 
       <div className={styles.editorArea}>
-        <DocumentEditor
-          className={styles.editorRoot}
-          apiRef={apiRef}
-          paged={layout === "paged"}
-          pageFormat={pageFormat}
-          margins={margins}
-          onMarginsChange={setMargins}
-          initialMarkdown={initialMarkdown}
-          initialState={initialState}
-          defaultFontFamily={fontFamily}
-          onDefaultFontFamilyChange={setFontFamily}
-          onSave={() => {
-            void saveNow();
-          }}
-          zoom={zoom}
-          onPageCountChange={setPages}
-          onWordCountChange={setWords}
-          searchQuery={searchQuery}
-          searchActiveIndex={searchIndex}
-          onSearchResultCount={setSearchCount}
-        />
+        {source ? (
+          <div ref={splitRef} className={sourceMode === "split" ? styles.split : styles.single}>
+            <div
+              className={sourceMode === "editor" ? styles.hidden : styles.sourcePanel}
+              style={sourceMode === "split" ? { flex: `0 0 ${sourceRatio * 100}%` } : undefined}
+            >
+              {source.sourceType === "pdf" ? (
+                <PdfViewer filePath={source.filePath} fill fitWidth />
+              ) : (
+                <EpubViewer filePath={source.filePath} fill />
+              )}
+            </div>
+            {sourceMode === "split" && (
+              <div
+                className={`${styles.divider} ${dragging ? styles.dividerActive : ""}`}
+                role="separator"
+                aria-orientation="vertical"
+                aria-label="Resize the source panel"
+                aria-valuenow={Math.round(sourceRatio * 100)}
+                aria-valuemin={20}
+                aria-valuemax={75}
+                tabIndex={0}
+                onPointerDown={handleSplitDragStart}
+                onKeyDown={handleDividerKeyDown}
+              >
+                <GripVertical size={14} strokeWidth={1.6} aria-hidden="true" />
+              </div>
+            )}
+            <DocumentEditor
+              className={
+                sourceMode === "source" ? `${styles.editorRoot} ${styles.hidden}` : styles.editorRoot
+              }
+              apiRef={apiRef}
+              paged={layout === "paged"}
+              pageFormat={pageFormat}
+              margins={margins}
+              onMarginsChange={setMargins}
+              initialMarkdown={initialMarkdown}
+              initialState={initialState}
+              defaultFontFamily={fontFamily}
+              onDefaultFontFamilyChange={setFontFamily}
+              onSave={() => {
+                void saveNow();
+              }}
+              zoom={zoom}
+              onPageCountChange={setPages}
+              onWordCountChange={setWords}
+              searchQuery={searchQuery}
+              searchActiveIndex={searchIndex}
+              onSearchResultCount={setSearchCount}
+            />
+          </div>
+        ) : (
+          <DocumentEditor
+            className={styles.editorRoot}
+            apiRef={apiRef}
+            paged={layout === "paged"}
+            pageFormat={pageFormat}
+            margins={margins}
+            onMarginsChange={setMargins}
+            initialMarkdown={initialMarkdown}
+            initialState={initialState}
+            defaultFontFamily={fontFamily}
+            onDefaultFontFamilyChange={setFontFamily}
+            onSave={() => {
+              void saveNow();
+            }}
+            zoom={zoom}
+            onPageCountChange={setPages}
+            onWordCountChange={setWords}
+            searchQuery={searchQuery}
+            searchActiveIndex={searchIndex}
+            onSearchResultCount={setSearchCount}
+          />
+        )}
       </div>
     </main>
   );

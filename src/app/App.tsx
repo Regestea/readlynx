@@ -15,8 +15,16 @@ export default function App() {
   const [activeId, setActiveId] = useState("home");
   const [createDetails, setCreateDetails] = useState<CreateBookDetails | null>(null);
   const [openBookId, setOpenBookId] = useState<string | null>(null);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const isHome = activeId === "home";
   const isFullWidth = !isHome;
+
+  const handleNavigate = (id: string) => {
+    if (id !== "create-book") {
+      setSidebarCollapsed(false);
+    }
+    setActiveId(id);
+  };
 
   return (
     <ThemeProvider>
@@ -26,8 +34,16 @@ export default function App() {
         <div className="app-background-overlay" />
       </div>
 
-      <div className={`${styles.shell} ${isFullWidth ? styles.shellFull : ""}`}>
-        <Sidebar activeId={activeId} onNavigate={setActiveId} />
+      <div
+        className={`${styles.shell} ${isFullWidth ? styles.shellFull : ""} ${sidebarCollapsed ? styles.shellGapNone : ""}`}
+      >
+        <div
+          className={`${styles.sidebarSlide} ${sidebarCollapsed ? styles.sidebarSlideCollapsed : ""}`}
+        >
+          <div className={styles.sidebarSlideInner}>
+            <Sidebar activeId={activeId} onNavigate={handleNavigate} />
+          </div>
+        </div>
 
         <div className={styles.main}>
           {isHome && <Header />}
@@ -47,11 +63,15 @@ export default function App() {
           )}
           {activeId === "create-book" && (
             <CreateBookPage
-              onBack={() => setActiveId("home")}
+              onBack={() => {
+                setSidebarCollapsed(false);
+                setActiveId("home");
+              }}
               initialBookId={openBookId}
               initialTitle={createDetails?.title ?? ""}
               initialMarkdown=""
               initialCover={createDetails?.coverSrc ?? null}
+              onSplitChange={setSidebarCollapsed}
             />
           )}
           {!isHome && activeId !== "create-book" && <ShowcasePage />}
