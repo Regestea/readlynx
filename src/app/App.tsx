@@ -4,6 +4,7 @@ import { Header } from "../components/Header/Header";
 import { Sidebar } from "../components/Sidebar/Sidebar";
 import { HomePage } from "../features/home/components/HomePage";
 import { ShowcasePage } from "../features/showcase/components/ShowcasePage";
+import { SettingsPage } from "../features/settings/components/SettingsPage";
 import { CreateBookPage } from "../features/create/components/CreateBookPage";
 import type { CreateBookDetails } from "../features/create/components/CreateBookDialog";
 import { Quote } from "../features/home/widgets/Quote/Quote";
@@ -74,7 +75,10 @@ export default function App() {
               onSplitChange={setSidebarCollapsed}
             />
           )}
-          {!isHome && activeId !== "create-book" && <ShowcasePage />}
+          {activeId === "settings" && <SettingsPage />}
+          {!isHome && activeId !== "create-book" && activeId !== "settings" && (
+            <ShowcasePage />
+          )}
         </div>
 
         {isHome && (
