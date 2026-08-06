@@ -1,0 +1,346 @@
+/* ==========================================================================
+   ReadLynx — Print stylesheet
+   Consumed by Paged.js for pagination, live preview and PDF export.
+
+   Layout contract
+   ---------------
+   Paged.js processes this sheet in the live window: the `break-before: page`
+   rule below is *consumed* by the engine (it becomes a data attribute on the
+   element) so the rest of the sheet stays inert in the app window. Every
+   visual rule is scoped to `.pagedjs_page` — the page container Paged.js
+   creates — so nothing leaks into the editor UI, and the same sheet works
+   verbatim in the standalone PDF document.
+
+   Theme
+   -----
+   `--rl-*` variables carry the exporter theme. Defaults are declared on
+   `.pagedjs_page`; `themeVariables()` (PaginationService) emits an override
+   rule that follows this sheet in the cascade.
+   ========================================================================== */
+
+html {
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+/* --------------------------------------------------------------------------
+   Chapter breaks (consumed by Paged.js; honoured by Chromium on export)
+   --------------------------------------------------------------------------
+   Deterministic variant of `h1 { break-before: page }`: LexicalToHtml marks
+   every h1 that starts a chapter (all but the document opener), so neither
+   the preview nor the printed PDF ever produces a leading blank page. */
+
+h1.rl-chapter-start {
+  break-before: page;
+  page-break-before: always;
+}
+
+/* --------------------------------------------------------------------------
+   Page surface
+   -------------------------------------------------------------------------- */
+
+.pagedjs_page {
+  /* theme defaults (overridable via `themeVariables()`) */
+  --rl-ink: #1f2430;
+  --rl-paper: #ffffff;
+  --rl-muted: #6b7280;
+  --rl-accent: #435542;
+  --rl-font-family: Georgia, "Times New Roman", serif;
+  --rl-font-size: 15px;
+  --rl-line-height: 1.65;
+  --rl-code-family: Consolas, "Courier New", monospace;
+
+  break-inside: avoid;
+  page-break-inside: avoid;
+  background-color: var(--rl-paper);
+  color: var(--rl-ink);
+  font-family: var(--rl-font-family);
+  font-size: var(--rl-font-size);
+  line-height: var(--rl-line-height);
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+.pagedjs_page_content p {
+  margin: 0 0 0.9em;
+  orphans: 3;
+  widows: 3;
+}
+
+.pagedjs_page_content strong {
+  font-weight: 700;
+}
+
+.pagedjs_page_content em {
+  font-style: italic;
+}
+
+.pagedjs_page_content del {
+  color: var(--rl-muted);
+}
+
+.pagedjs_page_content a {
+  color: var(--rl-accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* --------------------------------------------------------------------------
+   Headings
+   -------------------------------------------------------------------------- */
+
+.pagedjs_page_content h1,
+.pagedjs_page_content h2,
+.pagedjs_page_content h3,
+.pagedjs_page_content h4,
+.pagedjs_page_content h5,
+.pagedjs_page_content h6 {
+  break-after: avoid;
+  break-inside: avoid;
+  page-break-after: avoid;
+  font-weight: 700;
+  line-height: 1.25;
+  color: var(--rl-ink);
+}
+
+.pagedjs_page_content h1 {
+  font-size: 2em;
+  margin: 0 0 0.75em;
+  padding-top: 1.2em;
+}
+
+.pagedjs_page_content h1:first-child {
+  padding-top: 0;
+}
+
+.pagedjs_page_content h2 {
+  font-size: 1.5em;
+  margin: 1.4em 0 0.55em;
+}
+
+.pagedjs_page_content h3 {
+  font-size: 1.2em;
+  margin: 1.2em 0 0.5em;
+}
+
+.pagedjs_page_content h4,
+.pagedjs_page_content h5,
+.pagedjs_page_content h6 {
+  font-size: 0.85em;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin: 1.1em 0 0.45em;
+  color: var(--rl-muted);
+}
+
+/* --------------------------------------------------------------------------
+   Lists
+   -------------------------------------------------------------------------- */
+
+.pagedjs_page_content ul,
+.pagedjs_page_content ol {
+  margin: 0 0 0.9em;
+  padding-left: 1.5em;
+}
+
+.pagedjs_page_content li {
+  margin-bottom: 0.25em;
+}
+
+.pagedjs_page_content li > ul,
+.pagedjs_page_content li > ol {
+  margin-bottom: 0;
+}
+
+.pagedjs_page_content ul[type="check"] {
+  list-style: none;
+  padding-left: 0.2em;
+}
+
+.pagedjs_page_content ul[type="check"] li {
+  list-style: none;
+  padding-left: 1.5em;
+  position: relative;
+}
+
+.pagedjs_page_content ul[type="check"] li::before {
+  content: "☑";
+  position: absolute;
+  left: 0;
+}
+
+/* --------------------------------------------------------------------------
+   Quotes, code, callouts
+   -------------------------------------------------------------------------- */
+
+.pagedjs_page_content blockquote {
+  margin: 0 0 0.9em;
+  padding: 0.1em 1.2em;
+  border-left: 3px solid var(--rl-accent);
+  color: var(--rl-muted);
+  font-style: italic;
+  break-inside: avoid;
+}
+
+.pagedjs_page_content code {
+  font-family: var(--rl-code-family);
+  font-size: 0.85em;
+  background-color: rgba(120, 120, 120, 0.12);
+  border-radius: 3px;
+  padding: 0.12em 0.3em;
+}
+
+.pagedjs_page_content pre {
+  font-family: var(--rl-code-family);
+  font-size: 0.8em;
+  line-height: 1.5;
+  background-color: #f4f4f2;
+  border: 1px solid #e5e5e2;
+  border-radius: 6px;
+  padding: 0.9em 1em;
+  margin: 0 0 0.9em;
+  white-space: pre-wrap;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+.pagedjs_page_content pre code {
+  background: none;
+  padding: 0;
+}
+
+/* Callout block produced by CalloutNode's exportDOM */
+.pagedjs_page_content aside[data-callout-tone] {
+  break-inside: avoid;
+  margin: 0 0 0.9em;
+  padding: 0.7em 1em;
+  border-radius: 6px;
+  border-left: 3px solid var(--rl-accent);
+  background-color: rgba(67, 85, 66, 0.08);
+}
+
+.pagedjs_page_content aside[data-callout-tone="warning"] {
+  border-left-color: #b9794c;
+  background-color: rgba(185, 121, 76, 0.1);
+}
+
+.pagedjs_page_content aside[data-callout-tone="error"] {
+  border-left-color: #a63d2f;
+  background-color: rgba(166, 61, 47, 0.08);
+}
+
+.pagedjs_page_content aside[data-callout-tone="success"] {
+  border-left-color: #5b6b50;
+  background-color: rgba(91, 107, 80, 0.1);
+}
+
+/* Custom block produced by CustomBlockNode's exportDOM */
+.pagedjs_page_content section[data-block-kind] {
+  break-inside: avoid;
+  margin: 0 0 0.9em;
+  padding: 0.7em 1em;
+  border: 1px solid #e0e0dc;
+  border-radius: 6px;
+  background-color: #fafaf8;
+}
+
+.pagedjs_page_content section[data-block-kind="spoiler"] {
+  background-color: #efe9e1;
+}
+
+.pagedjs_page_content section[data-block-kind="insight"] {
+  background-color: #edf2e9;
+  border-left: 3px solid var(--rl-accent);
+}
+
+/* --------------------------------------------------------------------------
+   Tables
+   -------------------------------------------------------------------------- */
+
+.pagedjs_page_content table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 0 0 0.9em;
+  font-size: 0.92em;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+.pagedjs_page_content th,
+.pagedjs_page_content td {
+  border: 1px solid #d8d8d4;
+  padding: 0.4em 0.6em;
+  text-align: left;
+  vertical-align: top;
+}
+
+.pagedjs_page_content th {
+  background-color: #f1f1ee;
+  font-weight: 700;
+}
+
+/* --------------------------------------------------------------------------
+   Media
+   -------------------------------------------------------------------------- */
+
+.pagedjs_page_content img,
+.pagedjs_page_content svg,
+.pagedjs_page_content figure {
+  max-width: 100%;
+  height: auto;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+.pagedjs_page_content figure {
+  margin: 0 0 0.9em;
+  text-align: center;
+}
+
+.pagedjs_page_content figcaption {
+  font-size: 0.82em;
+  color: var(--rl-muted);
+  margin-top: 0.4em;
+  text-align: center;
+}
+
+.pagedjs_page_content hr {
+  border: none;
+  border-top: 1px solid #d8d8d4;
+  margin: 1.4em auto;
+  width: 40%;
+}
+
+/* --------------------------------------------------------------------------
+   Manual page breaks (PageBreakNode)
+   -------------------------------------------------------------------------- */
+
+[data-page-break] {
+  break-after: page;
+  page-break-after: always;
+}
+
+/* --------------------------------------------------------------------------
+   Paged.js generated chrome
+   -------------------------------------------------------------------------- */
+
+.pagedjs_sheet {
+  display: flex;
+}
+
+.pagedjs_margin {
+  font-size: 0.75em;
+  color: var(--rl-muted);
+  font-family: var(--rl-font-family);
+}
+
+.pagedjs_margin-content {
+  padding: 0 0.25em;
+}
+
+.pagedjs_footnote_area {
+  margin-top: 0.6em;
+  padding-top: 0.4em;
+  border-top: 1px solid #d8d8d4;
+  font-size: 0.85em;
+}
