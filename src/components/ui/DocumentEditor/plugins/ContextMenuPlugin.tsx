@@ -4,6 +4,7 @@ import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext
 import {
   $createParagraphNode,
   $createRangeSelectionFromDom,
+  $getNodeByKey,
   $getRoot,
   $getSelection,
   $isElementNode,
@@ -36,7 +37,7 @@ import { $isLinkNode, TOGGLE_LINK_COMMAND } from "@lexical/link";
 import { $findMatchingParent } from "@lexical/utils";
 import { $createHorizontalRuleNode } from "@lexical/react/LexicalHorizontalRuleNode";
 import type { HistoryState } from "@lexical/history";
-import { ArrowLeft, Check, Loader2, Send, Sparkles } from "lucide-react";
+import { ArrowLeft, Check, Loader2, Send, Sparkles, Trash2 } from "lucide-react";
 import type { BlockType } from "../types";
 import { $createPageBreakNode } from "../nodes/PageBreakNode";
 import { mdTransformers } from "./MarkdownPlugin";
@@ -71,6 +72,8 @@ interface MenuState {
   y: number;
   session: number;
   snapshot: MenuSnapshot;
+  /** Block that a right-click landed on and can be removed whole. */
+  deleteTarget: { key: string; label: string } | null;
 }
 
 function emptySnapshot(): MenuSnapshot {
@@ -227,6 +230,86 @@ function readSnapshot(editor: LexicalEditor, historyState: HistoryState): MenuSn
   return snapshot;
 }
 
+/**
+ * Whole-block nodes that can be removed from the right-click menu instead of
+ * deleting single characters/cells. Paragraphs and headings are intentionally
+ * left out — the regular Backspace/Delete keys already cover text.
+ */
+const DELETABLE_BLOCK_LABELS: Record<string, string> = {
+  code: "Code block",
+  callout: "Callout",
+  "custom-block": "Custom block",
+  table: "Table",
+  "html-block": "HTML block",
+  equation: "Equation",
+  horizontalrule: "Horizontal rule",
+  image: "Image",
+  "page-break": "Page break",
+};
+
+function resolveDeleteTarget(
+  editor: LexicalEditor,
+  startElement: Element,
+): { key: string; label: string } | null {
+  const rootEl = editor.getRootElement();
+  if (!rootEl || !rootEl.contains(startElement)) return null;
+  /* Lexical stashes each node key on its rendered DOM element
+   * (`__lexicalKey_<editorKey>`). Walk the click target up to the editor root
+   * so a right-click on any inner part of a block (a word inside a code
+   * block, a table cell, …) still targets the block itself. */
+  const prop = `__lexicalKey_${(editor as unknown as { _key: string })._key}`;
+  const keys: string[] = [];
+  let el: Element | null = startElement;
+  while (el !== null && el !== rootEl) {
+    const key = (el as unknown as Record<string, unknown>)[prop];
+    if (typeof key === "string") keys.push(key);
+    el = el.parentElement;
+  }
+  if (keys.length === 0) return null;
+  let found: { key: string; label: string } | null = null;
+  editor.getEditorState().read(() => {
+    /* keys are innermost-first; the outermost deletable ancestor wins. */
+    for (let i = keys.length - 1; i >= 0; i--) {
+      const node = $getNodeByKey(keys[i]);
+      if (node === null) continue;
+      const label = DELETABLE_BLOCK_LABELS[node.getType()];
+      if (label) {
+        found = { key: keys[i], label };
+        break;
+      }
+    }
+  });
+  return found;
+}
+
+/** Removes the whole block node and leaves the caret at a sensible spot. */
+function deleteBlockNode(editor: LexicalEditor, targetKey: string): void {
+  editor.update(() => {
+    const node = $getNodeByKey(targetKey);
+    if (node === null || !node.isAttached()) return;
+    const parent = node.getParent();
+    const next = node.getNextSibling();
+    const prev = node.getPreviousSibling();
+    node.remove();
+    if (next !== null && next.isAttached() && $isElementNode(next)) {
+      next.selectStart();
+    } else if (prev !== null && prev.isAttached() && $isElementNode(prev)) {
+      prev.selectEnd();
+    } else if (parent !== null && parent.isAttached() && $isElementNode(parent)) {
+      parent.selectStart();
+    } else {
+      const root = $getRoot();
+      if (root.getChildrenSize() === 0) {
+        const paragraph = $createParagraphNode();
+        root.append(paragraph);
+        paragraph.selectStart();
+      } else {
+        root.selectEnd();
+      }
+    }
+  });
+}
+
 /* ---------- Menu rendering ---------- */
 
 function Item({
@@ -272,11 +355,21 @@ interface ContextMenuPanelProps {
   session: number;
   paged: boolean;
   snapshot: MenuSnapshot;
+  deleteTarget: { key: string; label: string } | null;
   onClose: () => void;
   onAiRequest: (selection: RangeSelection | null, selectionText: string, response: string) => void;
 }
 
-function ContextMenuPanel({ x, y, session, paged, snapshot, onClose, onAiRequest }: ContextMenuPanelProps) {
+function ContextMenuPanel({
+  x,
+  y,
+  session,
+  paged,
+  snapshot,
+  deleteTarget,
+  onClose,
+  onAiRequest,
+}: ContextMenuPanelProps) {
   const [editor] = useLexicalComposerContext();
   const menuRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState({ x, y, measured: false });
@@ -701,6 +794,17 @@ function ContextMenuPanel({ x, y, session, paged, snapshot, onClose, onAiRequest
         {paged && <Item label="Page break" onSelect={() => run(insertPageBreak)} />}
         <Item label="Horizontal rule" onSelect={() => run(insertHorizontalRule)} />
       </div>
+      {deleteTarget !== null && (
+        <>
+          <div className={styles.contextMenuSeparator} />
+          <Item
+            label={`Delete ${deleteTarget.label}`}
+            icon={<Trash2 size={14} strokeWidth={1.8} aria-hidden="true" />}
+            shortcut="Del"
+            onSelect={() => run(() => deleteBlockNode(editor, deleteTarget.key))}
+          />
+        </>
+      )}
       <div className={styles.contextMenuSeparator} />
       <Item label="Clear formatting" onSelect={() => run(clearFormatting)} />
         </>
@@ -732,11 +836,13 @@ export function ContextMenuPlugin({ paged = false, historyState }: ContextMenuPl
 
       moveCaretToPoint(editor, event.clientX, event.clientY);
       const snapshot = readSnapshot(editor, historyState);
+      const deleteTarget = resolveDeleteTarget(editor, target);
       setMenu((prev) => ({
         x: event.clientX,
         y: event.clientY,
         session: (prev?.session ?? 0) + 1,
         snapshot,
+        deleteTarget,
       }));
     };
 
@@ -800,6 +906,7 @@ export function ContextMenuPlugin({ paged = false, historyState }: ContextMenuPl
             session={menu.session}
             paged={paged}
             snapshot={menu.snapshot}
+            deleteTarget={menu.deleteTarget}
             onClose={() => setMenu(null)}
             onAiRequest={handleAiRequest}
           />,
