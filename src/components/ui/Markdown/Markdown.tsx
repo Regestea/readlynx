@@ -12,7 +12,6 @@ import { Code } from "../Code/Code";
 import { Image } from "../Image/Image";
 import { List } from "../List/List";
 import type { ListItemData } from "../List/List";
-import { Mermaid } from "../Mermaid/Mermaid";
 import { Table } from "../Table/Table";
 import type { TableColumn } from "../Table/Table";
 import styles from "./Markdown.module.css";
@@ -230,9 +229,6 @@ const components: Components = {
   code: ({ className, children }) => {
     const match = /language-(\w+)/.exec(className ?? "");
     if (match) {
-      if (match[1] === "mermaid") {
-        return <Mermaid code={textContent(children)} />;
-      }
       return <Code code={textContent(children)} language={match[1]} />;
     }
     return <code className={styles.inlineCode}>{children}</code>;

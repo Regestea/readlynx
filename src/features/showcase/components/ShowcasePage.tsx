@@ -30,7 +30,6 @@ import { PdfViewer } from "../../../components/PdfViewer/PdfViewer";
 import { EpubViewer } from "../../../components/EpubViewer/EpubViewer";
 import { DocumentEditor } from "../../../components/ui/DocumentEditor";
 import { Modal } from "../../../components/ui/Modal/Modal";
-import { Mermaid } from "../../../components/ui/Mermaid/Mermaid";
 import { NumberInput } from "../../../components/ui/NumberInput/NumberInput";
 import { Progress } from "../../../components/ui/Progress/Progress";
 import { QuoteCard } from "../../../components/QuoteCard/QuoteCard";
@@ -105,28 +104,6 @@ const DEMO_TABS: TabItem[] = [
   { id: "highlights", label: "Highlights", icon: <Highlighter size={16} strokeWidth={1.8} />, content: <List items={HIGHLIGHT_ITEMS} /> },
   { id: "bookmarks", label: "Bookmarks", icon: <Bookmark size={16} strokeWidth={1.8} />, content: <List items={BOOKMARK_ITEMS} /> },
 ];
-
-const READING_FLOW: string = `
-graph TD
-  A[Pick a book] --> B{Genre?}
-  B -->|Fiction| C[Read aloud]
-  B -->|Nature| D[Take notes]
-  C --> E[Highlight quotes]
-  D --> E
-  E --> F[Add to collection]
-  F --> G(Finished)
-`;
-
-const SYNC_SEQUENCE: string = `
-sequenceDiagram
-  participant U as Reader
-  participant L as Library
-  participant C as Cloud
-  U->>L: Open book
-  L->>C: Fetch latest progress
-  C-->>L: Page 196 of 288
-  L-->>U: Resume reading
-`;
 
 const SAMPLE_TS_CODE: string = `
 // محاسبهی سهماهه مطالعه — reading stats for this month
@@ -392,15 +369,6 @@ $$`,
 | React | ⭐⭐⭐ |
 | Docker | ⭐⭐⭐⭐ |
 | Azure | ⭐⭐⭐ |`,
-
-  `## Mermaid Diagram
-
-\`\`\`mermaid
-graph TD
-A[Client] --> B[API]
-B --> C[Database]
-B --> D[Redis]
-\`\`\``,
 
   `## نقل قول چند خطی
 
@@ -708,14 +676,6 @@ export function ShowcasePage() {
         </Modal>
       </Section>
 
-      {/* ---------- Mermaid ---------- */}
-      <Section title="Mermaid" description="Renders diagram source in the app theme.">
-        <div className={styles.stack}>
-          <Mermaid code={READING_FLOW} ariaLabel="Reading journey flowchart" />
-          <Mermaid code={SYNC_SEQUENCE} ariaLabel="Reading progress sync sequence" />
-        </div>
-      </Section>
-
       {/* ---------- Code ---------- */}
       <Section title="Code" description="Prism syntax highlighting on the glass surface, following the theme. Persian and Arabic comments render with font fallback.">
         <div className={styles.stack}>
@@ -726,7 +686,7 @@ export function ShowcasePage() {
       </Section>
 
       {/* ---------- Markdown ---------- */}
-      <Section title="Markdown" description="Markdown rendered through the app's own components — Table, List, Code, Mermaid, Image — plus KaTeX math, raw HTML and task lists.">
+      <Section title="Markdown" description="Markdown rendered through the app's own components — Table, List, Code, Image — plus KaTeX math, raw HTML and task lists.">
         <div className={`${styles.stack} ${styles.stackFull}`}>
           {markdownSections.map((section, index) => (
             <Markdown key={index} content={section} />
