@@ -253,8 +253,13 @@ export function buildPrintCss(options: PdfExportOptions): string {
   const { pageFormat, margins } = options;
   const { cssSize } = PAGE_FORMATS[pageFormat];
 
-  const slot = (position: string, value?: string) =>
-    value ? `\n  @${position} { content: "${value}"; }` : "";
+  const slot = (position: string, value?: string) => {
+    if (!value) return "";
+    // `counter(page)` / `counter(pages)` must NOT be quoted or they render as
+    // literal text instead of the running page number.
+    const content = /^counter\([a-z]+\)$/i.test(value.trim()) ? value.trim() : `"${value}"`;
+    return `\n  @${position} { content: ${content}; }`;
+  };
 
   const headerFragments =
     options.headerLeft || options.headerCenter || options.headerRight
