@@ -10,6 +10,8 @@ import {
   inlineImages,
   themeVariables,
 } from "./PaginationService";
+import { scaleHtmlFontSizes } from "./fontScale";
+import { katexCssForExport } from "./katexExportCss";
 import printCss from "./PrintStyles.css?raw";
 import { DEFAULT_PDF_EXPORT_OPTIONS } from "./types";
 import type { PagedDocument, PdfExportOptions } from "./types";
@@ -74,16 +76,18 @@ export async function buildPdfDocument(
 ): Promise<PagedDocument> {
   const opts: PdfExportOptions = { ...DEFAULT_PDF_EXPORT_OPTIONS, ...options };
 
-  const contentHtml = toHtml(editor, { chapterBreaks: opts.chapterBreaks });
+  const contentHtml = scaleHtmlFontSizes(toHtml(editor, { chapterBreaks: opts.chapterBreaks }), opts.fontSizeScalePct);
   const m = opts.margins;
   const coverImage = opts.coverImage ? await fitCoverForExport(opts.coverImage) : undefined;
   const coverHtml = coverImage
     ? `<div class="rl-cover-page" style="display:flex;align-items:center;justify-content:center;overflow:hidden;height:calc(100% + ${m.top + m.bottom}mm);margin:-${m.top}mm -${m.right}mm -${m.bottom}mm -${m.left}mm;page-break-after:always;break-after:page;"><img src="${escapeHtml(coverImage)}" style="width:100%;height:100%;object-fit:cover;" /></div>`
     : "";
   const bodyHtml = `${coverHtml}${contentHtml}`;
+  const katexCss = katexCssForExport();
   const service = new PaginationService();
   const result = await service.paginate(bodyHtml, [
     printCss,
+    katexCss,
     themeVariables(opts),
     buildPrintCss(opts),
   ]);
@@ -100,7 +104,7 @@ export async function buildPdfDocument(
       themeCss: themeVariables(opts),
       fontFaces: collectFontFaces(),
       baseCss: printCss,
-      dynamicCss: buildPrintCss(opts),
+      dynamicCss: `${buildPrintCss(opts)}\n${katexCss}`,
       pagedCss: collectPagedStyles(),
       rootVarsCss: collectRootVariables(),
       pageCount: result.pageCount,

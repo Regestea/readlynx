@@ -1,6 +1,7 @@
 import type { PagedFlow } from "pagedjs";
 import { Previewer } from "pagedjs";
 import { PAGE_FORMATS } from "../components/ui/DocumentEditor/constants";
+import { fontScaleFactor } from "./fontScale";
 import type { PdfExportOptions } from "./types";
 
 /**
@@ -223,26 +224,37 @@ export function blobToDataUrl(blob: Blob): Promise<string> {
 
 /** Build the theme override block used by PrintStyles.css (page-scoped). */
 export function themeVariables(options: PdfExportOptions): string {
-  const parts: string[] = [];
+  const decls: string[] = [];
   if (options.textColor) {
-    parts.push(`--rl-ink: ${options.textColor};`);
+    // Emit BOTH the CSS variable (headings etc. read `var(--rl-ink)`) and a
+    // literal declaration on the page itself. The literal value wins over the
+    // `#ffffff` default in PrintStyles.css even if Paged.js re-inserts the
+    // sheets in an unexpected order; the variable keeps inner rules aligned.
+    decls.push(`--rl-ink: ${options.textColor};`, `color: ${options.textColor};`);
   }
   if (options.backgroundColor) {
-    parts.push(`--rl-paper: ${options.backgroundColor};`);
+    decls.push(
+      `--rl-paper: ${options.backgroundColor};`,
+      `background-color: ${options.backgroundColor};`,
+    );
   }
   if (options.fontFamily) {
-    parts.push(`--rl-font-family: ${options.fontFamily};`);
+    decls.push(`--rl-font-family: ${options.fontFamily};`, `font-family: ${options.fontFamily};`);
   }
-  if (options.fontSize) {
-    parts.push(`--rl-font-size: ${options.fontSize};`);
+  if (options.fontSizeScalePct) {
+    const size = Number((15 * fontScaleFactor(options.fontSizeScalePct)).toFixed(2));
+    decls.push(`--rl-font-size: ${size}px;`, `font-size: ${size}px;`);
   }
   if (options.lineHeight) {
-    parts.push(`--rl-line-height: ${options.lineHeight};`);
+    decls.push(`--rl-line-height: ${options.lineHeight};`, `line-height: ${options.lineHeight};`);
   }
-  if (parts.length === 0) {
+  if (decls.length === 0) {
     return "";
   }
-  return `.pagedjs_page { ${parts.join(" ")} }`;
+  // Double the class so the override always beats the `--rl-*` defaults in
+  // PrintStyles.css (0,2,0 vs 0,1,0) no matter which sheet lands later in the
+  // cascade — Paged.js re-inserts every sheet as its own <style> tag.
+  return `.pagedjs_page.pagedjs_page { ${decls.join(" ")} }`;
 }
 
 /**

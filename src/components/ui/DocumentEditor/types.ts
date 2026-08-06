@@ -1,4 +1,5 @@
 import type { LexicalEditor } from "lexical";
+import type { PageMargins } from "./constants";
 
 /** Result of an EPUB export: the container files of an EPUB 3 book (unzipped). */
 export interface EpubFile {
@@ -55,14 +56,14 @@ export type BlockType =
 export interface ExportThemeOptions {
   /** CSS font-family list ("" = document default). */
   fontFamily?: string;
-  /** CSS font-size ("" = document default). */
-  fontSize?: string;
+  /** Global font-size scale in percent (0 = keep the sizes as authored). */
+  fontSizeScalePct?: number;
   /** Text color, hex. */
   textColor?: string;
   /** Page / background color, hex. */
   backgroundColor?: string;
-  /** Page margin in millimeters. */
-  marginMm?: number;
+  /** Per-side page margins in millimeters. */
+  margins?: PageMargins;
 }
 
 export interface ToolbarState {

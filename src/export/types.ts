@@ -9,8 +9,8 @@ export interface PdfExportOptions {
   margins: PageMargins;
   /** CSS font-family list ("" = document default). */
   fontFamily?: string;
-  /** CSS font-size ("" = document default). */
-  fontSize?: string;
+  /** Global font-size scale in percent (0 = keep the sizes as authored). */
+  fontSizeScalePct?: number;
   /** Text colour, hex. */
   textColor?: string;
   /** Page / background colour, hex. */
@@ -35,7 +35,6 @@ export interface PdfExportOptions {
 
 export const DEFAULT_PDF_EXPORT_OPTIONS: Omit<PdfExportOptions, "pageFormat" | "margins"> = {
   fontFamily: "",
-  fontSize: "",
   textColor: "",
   backgroundColor: "",
   showPageNumbers: true,

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { LexicalEditor } from "lexical";
 import { toHtml } from "../export/LexicalToHtml";
 import { PaginationService, buildPrintCss, themeVariables } from "../export/PaginationService";
+import { scaleHtmlFontSizes } from "../export/fontScale";
 import type { PdfExportOptions } from "../export/types";
 import printCss from "../export/PrintStyles.css?raw";
 import styles from "./PdfPreview.module.css";
@@ -75,7 +76,10 @@ export function PdfPreview({ editor, options, onPageCountChange, className }: Pd
         setError(null);
 
         try {
-          const bodyHtml = toHtml(editor, { chapterBreaks: options.chapterBreaks });
+          const bodyHtml = scaleHtmlFontSizes(
+            toHtml(editor, { chapterBreaks: options.chapterBreaks }),
+            options.fontSizeScalePct,
+          );
           const result = await service.paginate(
             bodyHtml,
             [printCss, themeVariables(options), buildPrintCss(options)],
@@ -84,6 +88,19 @@ export function PdfPreview({ editor, options, onPageCountChange, className }: Pd
           if (cancelled) {
             service.dispose();
             return;
+          }
+          // Inline the paper/ink colours on the rendered page elements so the
+          // theme always shows in the preview, independent of how Paged.js
+          // re-emits the stylesheets into the document head.
+          if (options.backgroundColor) {
+            for (const page of result.pages) {
+              page.style.setProperty("background-color", options.backgroundColor);
+            }
+          }
+          if (options.textColor) {
+            for (const page of result.pages) {
+              page.style.setProperty("color", options.textColor);
+            }
           }
           onPageCountChange?.(result.pageCount);
           fitPagesToWidth(container);
