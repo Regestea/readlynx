@@ -25,12 +25,15 @@ import {
   TextRun,
   WidthType,
 } from "docx";
-import { PAGE_FORMATS } from "../constants";
+import { PAGE_FORMATS, uniformMargins } from "../constants";
 import type { PageFormat } from "../constants";
 import type { ExportThemeOptions } from "../types";
+import { fontScaleFactor } from "../../../../export/fontScale";
 import { isRtlDominant } from "../utils/direction";
 import { $isCalloutNode } from "../nodes/CalloutNode";
 import { $isCustomBlockNode } from "../nodes/CustomBlockNode";
+import { $isEquationNode } from "../nodes/EquationNode";
+import { $isHtmlBlockNode } from "../nodes/HtmlBlockNode";
 import { $isImageNode } from "../nodes/ImageNode";
 import type { ImageNode } from "../nodes/ImageNode";
 import { $isPageBreakNode } from "../nodes/PageBreakNode";
@@ -130,6 +133,9 @@ function fontSizeHalfPoints(value: string | undefined): number | undefined {
   return Math.round(points * 2);
 }
 
+/** Global font-size multiplier applied to every run, 1 when no scaling. */
+let activeFontFactor = 1;
+
 interface InlineStyle {
   fontFamily?: string;
   fontSize?: string;
@@ -163,6 +169,15 @@ function parseInlineStyle(style: string): InlineStyle {
   return out;
 }
 
+function inlineEquationRun(equation: string): TextRun {
+  return new TextRun({
+    text: equation,
+    italics: true,
+    font: MONO_FONT,
+    size: Math.round(20 * activeFontFactor),
+  });
+}
+
 function runFromTextNode(node: TextNode): TextRun {
   const format = node.getFormat();
   const style = parseInlineStyle(node.getStyle());
@@ -179,7 +194,10 @@ function runFromTextNode(node: TextNode): TextRun {
     subScript: Boolean(format & IS_SUBSCRIPT),
     highlight: format & IS_HIGHLIGHT ? "yellow" : undefined,
     font: isCode ? MONO_FONT : fontFamily && !generic.includes(fontFamily) ? fontFamily : undefined,
-    size: fontSizeHalfPoints(style.fontSize),
+    size: (() => {
+      const halfPoints = fontSizeHalfPoints(style.fontSize);
+      return halfPoints !== undefined ? Math.round(halfPoints * activeFontFactor) : undefined;
+    })(),
     color: parseColor(style.color),
     shading: style.backgroundColor
       ? {
@@ -200,6 +218,9 @@ function buildRuns(node: LexicalNode): (TextRun | ExternalHyperlink)[] {
         children: node.getChildren().flatMap((child) => buildRuns(child)) as TextRun[],
       }),
     ];
+  }
+  if ($isEquationNode(node) && node.isInline()) {
+    return [inlineEquationRun(node.getEquation())];
   }
   if ($isElementNode(node)) return node.getChildren().flatMap((child) => buildRuns(child));
   return [];
@@ -239,7 +260,7 @@ function codeParagraphs(node: LexicalNode): Paragraph[] {
     .map(
       (line) =>
         new Paragraph({
-          children: [new TextRun({ text: line || " ", font: MONO_FONT, size: 20 })],
+          children: [new TextRun({ text: line || " ", font: MONO_FONT, size: Math.round(20 * activeFontFactor) })],
           shading: { type: ShadingType.CLEAR, fill: "F5F5F4", color: "auto" },
           spacing: { after: 0 },
         }),
@@ -379,6 +400,18 @@ function nodeToDocx(node: LexicalNode): DocxChild[] {
       }),
     ];
   }
+  if ($isEquationNode(node)) {
+    return [
+      new Paragraph({
+        children: [new TextRun({ text: node.getEquation(), italics: true, font: MONO_FONT })],
+        alignment: AlignmentType.CENTER,
+      }),
+    ];
+  }
+  if ($isHtmlBlockNode(node)) {
+    const text = node.getTextContent();
+    return text ? [new Paragraph({ children: [new TextRun({ text })] })] : [];
+  }
   if ($isElementNode(node)) {
     return [
       new Paragraph({
@@ -435,14 +468,16 @@ export async function exportDocx(
   options: ExportThemeOptions = {},
   coverImage?: string,
 ): Promise<Blob> {
+  activeFontFactor = fontScaleFactor(options.fontSizeScalePct);
+
   const contentChildren = editor.getEditorState().read(() => {
     const root = $getRoot();
     return root.getChildren().flatMap((node) => nodeToDocx(node));
   });
 
   const { width, height } = PAGE_FORMATS[format];
-  const marginMm = options.marginMm ?? DEFAULT_MARGIN_MM;
-  const margin = Math.round((marginMm / 25.4) * 1440);
+  const margins = options.margins ?? uniformMargins(DEFAULT_MARGIN_MM);
+  const toTwips = (mm: number) => Math.round((mm / 25.4) * 1440);
 
   const coverChildren: DocxChild[] = [];
   if (coverImage) {
@@ -486,9 +521,8 @@ export async function exportDocx(
     size?: number;
     color?: string;
   } = { font: concreteFont(options.fontFamily, "Calibri") };
-  if (options.fontSize) {
-    const size = fontSizeHalfPoints(options.fontSize);
-    if (size !== undefined) defaultRun.size = size;
+  if (options.fontSizeScalePct) {
+    defaultRun.size = Math.round(22 * activeFontFactor);
   }
   if (options.textColor) {
     const color = parseColor(options.textColor);
@@ -529,7 +563,12 @@ export async function exportDocx(
         properties: {
           page: {
             size: pageSize,
-            margin: { top: margin, right: margin, bottom: margin, left: margin },
+            margin: {
+              top: toTwips(margins.top),
+              right: toTwips(margins.right),
+              bottom: toTwips(margins.bottom),
+              left: toTwips(margins.left),
+            },
           },
         },
         children: contentChildren,

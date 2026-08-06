@@ -1,8 +1,9 @@
 import type { LexicalEditor } from "lexical";
 import { $generateHtmlFromNodes } from "@lexical/html";
-import { PAGE_FORMATS } from "../constants";
+import { PAGE_FORMATS, uniformMargins } from "../constants";
 import type { PageFormat } from "../constants";
 import type { ExportThemeOptions } from "../types";
+import { scaleHtmlFontSizes, scaledBaseFontSize } from "../../../../export/fontScale";
 
 /** CSS pixels per millimeter at the browser's 96dpi base. */
 const PX_PER_MM = 96 / 25.4;
@@ -34,12 +35,13 @@ export function exportPdfHtml(
   options: ExportThemeOptions = {},
   pageFormat: PageFormat = "a4",
 ): string {
-  const body = editor.read(() => $generateHtmlFromNodes(editor));
+  const body = scaleHtmlFontSizes(editor.read(() => $generateHtmlFromNodes(editor)), options.fontSizeScalePct);
 
   const { widthMm, heightMm } = parseCssSize(PAGE_FORMATS[pageFormat].cssSize);
   const pageWpx = mmToPx(widthMm);
   const pageHpx = mmToPx(heightMm);
-  const pageMargin = options.marginMm ?? 12.7;
+  const margins = options.margins ?? uniformMargins(12.7);
+  const baseFontSize = scaledBaseFontSize(options.fontSizeScalePct, 16);
 
   const rootProps = [
     "margin: 0",
@@ -55,14 +57,14 @@ export function exportPdfHtml(
     "-webkit-print-color-adjust: exact",
     "print-color-adjust: exact",
     ...(options.fontFamily ? [`font-family: ${options.fontFamily}`] : []),
-    ...(options.fontSize ? [`font-size: ${options.fontSize}`] : []),
+    ...(baseFontSize ? [`font-size: ${baseFontSize}`] : []),
     ...(options.textColor ? [`color: ${options.textColor}`] : []),
   ].join("; ");
 
   const pageProps = [
     `width: ${pageWpx}px`,
     "box-sizing: border-box",
-    `padding: ${pageMargin}mm`,
+    `padding: ${margins.top}mm ${margins.right}mm ${margins.bottom}mm ${margins.left}mm`,
     "break-after: page",
     "page-break-after: always",
     "-webkit-print-color-adjust: exact",

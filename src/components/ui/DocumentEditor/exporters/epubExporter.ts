@@ -2,8 +2,11 @@ import type { LexicalEditor } from "lexical";
 import { $generateHtmlFromNodes } from "@lexical/html";
 import { zipSync } from "fflate";
 import type { EpubFile, EpubMetadata, ExportThemeOptions } from "../types";
+import { uniformMargins } from "../constants";
 import { isRtlDominant } from "../utils/direction";
+import { scaleHtmlFontSizes, scaledBaseFontSize } from "../../../../export/fontScale";
 import { highlightBodyCode, HIGHLIGHT_THEME_CSS } from "./epubHighlight";
+import { katexCssForExport } from "../../../../export/katexExportCss";
 
 const XML_DECL = '<?xml version="1.0" encoding="UTF-8"?>';
 const NS_XHTML = "http://www.w3.org/1999/xhtml";
@@ -94,17 +97,20 @@ section[data-block-kind="insight"] { margin: 0.9em 0; padding: 0.5em 1em; backgr
 
 /** Body CSS built from the export theme options (serif/white by default). */
 function bookCss(options: ExportThemeOptions = {}): string {
+  const m = options.margins ?? uniformMargins(12.7);
+  const baseFontSize = scaledBaseFontSize(options.fontSizeScalePct, 16);
   const bodyProps = [
     options.fontFamily ? `font-family: ${options.fontFamily}` : "font-family: serif",
-    ...(options.fontSize ? [`font-size: ${options.fontSize}`] : []),
+    ...(baseFontSize ? [`font-size: ${baseFontSize}`] : []),
     ...(options.textColor ? [`color: ${options.textColor}`] : []),
     ...(options.backgroundColor ? [`background-color: ${options.backgroundColor}`] : []),
     "line-height: 1.6",
     "margin: 0",
   ].join("; ");
-  return `@page { margin: ${options.marginMm ?? 12.7}mm; }
+  return `@page { margin: ${m.top}mm ${m.right}mm ${m.bottom}mm ${m.left}mm; }
 body { ${bodyProps}; }
-${BOOK_CSS_BASE}`;
+${BOOK_CSS_BASE}
+${katexCssForExport()}`;
 }
 
 export function exportEpub(
@@ -118,7 +124,10 @@ export function exportEpub(
   const language = metadata.language?.trim() || "en";
   const uid = metadata.identifier?.trim() || `urn:uuid:${makeUuid()}`;
 
-  const bodyHtml = editor.read(() => $generateHtmlFromNodes(editor));
+  const bodyHtml = scaleHtmlFontSizes(
+    editor.read(() => $generateHtmlFromNodes(editor)),
+    options.fontSizeScalePct,
+  );
   const chapters = splitChapters(selfCloseVoidElements(highlightBodyCode(bodyHtml)));
   const bookDir = chapterDirection(bodyHtml);
   const chapterTitles = chapters.map(
@@ -144,6 +153,10 @@ export function exportEpub(
 
   const hasCover = Boolean(coverImage);
   const coverHref = "cover.xhtml";
+  const titleHref = "title.xhtml";
+  // Reading order starts with a front page (the cover image, or a title page
+  // when the book has no cover) so the Table of Contents is the second page.
+  const frontHref = hasCover ? coverHref : titleHref;
 
   const manifest = [
     `    <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>`,
@@ -152,7 +165,7 @@ export function exportEpub(
     `    <item id="highlight-css" href="highlight.css" media-type="text/css"/>`,
     ...(hasCover
       ? [`    <item id="cover" href="${coverHref}" media-type="application/xhtml+xml" properties="cover-image"/>`]
-      : []),
+      : [`    <item id="title" href="${titleHref}" media-type="application/xhtml+xml"/>`]),
     ...chapterHrefs.map(
       (href) =>
         `    <item id="${href.replace(".xhtml", "")}" href="${href}" media-type="application/xhtml+xml"/>`,
@@ -160,8 +173,8 @@ export function exportEpub(
   ].join("\n");
 
   const spine = [
+    `    <itemref idref="${frontHref.replace(".xhtml", "")}"/>`,
     `    <itemref idref="nav"/>`,
-    ...(hasCover ? [`    <itemref idref="cover"/>`] : []),
     ...chapterHrefs.map((href) => `    <itemref idref="${href.replace(".xhtml", "")}"/>`),
   ].join("\n");
 
@@ -256,6 +269,28 @@ ${navPoints}
   </head>
   <body>
     <img src="${xmlEscape(coverImage)}" alt="Cover" />
+  </body>
+</html>`,
+    });
+  } else {
+    files.push({
+      path: `OEBPS/${titleHref}`,
+      mime: "application/xhtml+xml",
+      content: `${XML_DECL}
+<!DOCTYPE html>
+<html xmlns="${NS_XHTML}" xmlns:epub="${NS_EPUB}" xml:lang="${xmlEscape(language)}" lang="${xmlEscape(language)}" dir="${bookDir}">
+  <head>
+    <title>${xmlEscape(title)}</title>
+    <style>
+      html, body { margin: 0; padding: 0; height: 100%; }
+      body { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 10%; }
+      h1 { margin: 0 0 0.4em; font-size: 1.8em; }
+      p.author { margin: 0; color: #555; font-size: 1.05em; }
+    </style>
+  </head>
+  <body>
+    <h1>${xmlEscape(title)}</h1>
+    ${author && author !== "Unknown Author" ? `<p class="author">${xmlEscape(author)}</p>` : ""}
   </body>
 </html>`,
     });
