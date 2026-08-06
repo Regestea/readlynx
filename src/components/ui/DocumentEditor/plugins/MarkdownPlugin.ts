@@ -16,6 +16,7 @@ import {
   UNORDERED_LIST,
   type ElementTransformer,
   type MultilineElementTransformer,
+  type TextMatchTransformer,
   type Transformer,
 } from "@lexical/markdown";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
@@ -45,6 +46,17 @@ import {
   CustomBlockNode,
 } from "../nodes/CustomBlockNode";
 import { $createImageNode, $isImageNode, ImageNode } from "../nodes/ImageNode";
+import {
+  $createEquationNode,
+  $isEquationNode,
+  EquationNode,
+} from "../nodes/EquationNode";
+import {
+  $createHtmlBlockNode,
+  $isHtmlBlockNode,
+  HtmlBlockNode,
+  sanitizeHtmlBlock,
+} from "../nodes/HtmlBlockNode";
 import type { CalloutTone, CustomBlockKind } from "../types";
 
 const TEXT_ONLY_TRANSFORMERS: Transformer[] = [
@@ -262,9 +274,109 @@ const CUSTOM_BLOCK: MultilineElementTransformer = {
   },
 };
 
+/* ---------- Block equation ($$ … $$) ---------- */
+
+const BLOCK_EQUATION: MultilineElementTransformer = {
+  type: "multiline-element",
+  dependencies: [EquationNode],
+  regExpStart: /^\$\$/,
+  handleImportAfterStartMatch({ lines, startLineIndex, rootNode }) {
+    const line = lines[startLineIndex];
+    const rest = line.slice(2);
+
+    // Single-line form: $$…$$
+    if (rest.endsWith("$$") && rest.length > 2) {
+      const equation = rest.slice(0, -2).trim();
+      if (!equation) return null;
+      rootNode.append($createEquationNode(equation, false));
+      return [true, startLineIndex];
+    }
+
+    // Only the exact "$$" opener starts a multi-line block.
+    if (rest.trim() !== "") return null;
+
+    const content: string[] = [];
+    for (let i = startLineIndex + 1; i < lines.length; i++) {
+      const l = lines[i];
+      if (/^\$\$/.test(l)) {
+        if (content.length === 0) return null;
+        rootNode.append($createEquationNode(content.join("\n"), false));
+        return [true, i];
+      }
+      content.push(l);
+    }
+    return null;
+  },
+  replace() {
+    return false;
+  },
+  export(node) {
+    if (!$isEquationNode(node) || node.isInline()) return null;
+    return `$$\n${node.getEquation()}\n$$`;
+  },
+};
+
+/* ---------- Inline equation ($…$) ---------- */
+
+const INLINE_EQUATION: TextMatchTransformer = {
+  type: "text-match",
+  dependencies: [EquationNode],
+  importRegExp: /(?<!\$)\$([^$\n]+)\$(?!\$)/,
+  regExp: /(?<!\$)\$([^$\n]+)\$(?!\$)/,
+  trigger: "$",
+  replace(textNode, match) {
+    const equation = match[1];
+    if (!equation || equation !== equation.trim()) return undefined;
+    textNode.replace($createEquationNode(equation.trim(), true));
+  },
+  export(node) {
+    if (!$isEquationNode(node) || !node.isInline()) return null;
+    return `$${node.getEquation()}$`;
+  },
+};
+
+/* ---------- Raw HTML block ---------- */
+
+const HTML_BLOCK_TAG_RE =
+  /^(!--|div|p|section|article|aside|header|footer|main|nav|table|thead|tbody|tfoot|tr|td|th|ul|ol|li|dl|dt|dd|figure|figcaption|blockquote|pre|iframe|video|audio|canvas|details|summary|h[1-6]|hr|form|fieldset)\b/i;
+
+export const HTML_BLOCK_START_RE = /^\s{0,3}<(?:[/!]?)(?:[a-zA-Z][\w-]*|--|!)/;
+
+const HTML_BLOCK: MultilineElementTransformer = {
+  type: "multiline-element",
+  dependencies: [HtmlBlockNode],
+  regExpStart: HTML_BLOCK_START_RE,
+  handleImportAfterStartMatch({ lines, startLineIndex, rootNode }) {
+    const first = lines[startLineIndex].trimStart();
+    if (first.startsWith("</") || !HTML_BLOCK_TAG_RE.test(first.slice(1))) {
+      return null;
+    }
+    const htmlLines: string[] = [];
+    let i = startLineIndex;
+    while (i < lines.length) {
+      const l = lines[i];
+      if (l.trim() === "") break;
+      htmlLines.push(l);
+      i += 1;
+    }
+    const html = sanitizeHtmlBlock(htmlLines.join("\n"));
+    if (!html.trim()) return null;
+    rootNode.append($createHtmlBlockNode(html));
+    return [true, i - 1];
+  },
+  replace() {
+    return false;
+  },
+  export(node) {
+    return $isHtmlBlockNode(node) ? node.getHtml() : null;
+  },
+};
+
 /* ---------- Public helpers ---------- */
 
 export const mdTransformers: Transformer[] = [
+  BLOCK_EQUATION,
+  HTML_BLOCK,
   TABLE,
   IMAGE,
   HR,
@@ -278,6 +390,7 @@ export const mdTransformers: Transformer[] = [
   CODE,
   ...TEXT_FORMAT_TRANSFORMERS,
   ...TEXT_MATCH_TRANSFORMERS,
+  INLINE_EQUATION,
 ];
 
 export function importMarkdownString(target: ElementNode, markdown: string): void {

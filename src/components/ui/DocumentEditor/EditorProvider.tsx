@@ -37,6 +37,8 @@ import { AutoFocusPlugin } from "./plugins/AutoFocusPlugin";
 import { AutoDirectionPlugin } from "./plugins/AutoDirectionPlugin";
 import { MarkdownPlugin } from "./plugins/MarkdownPlugin";
 import { MarkdownPastePlugin } from "./plugins/MarkdownPastePlugin";
+import { MarkdownTypedBlockPlugin } from "./plugins/MarkdownTypedBlockPlugin";
+import { ExtendedCodeHighlightingPlugin } from "./plugins/ExtendedCodeHighlightingPlugin";
 import { ShortcutsPlugin } from "./plugins/ShortcutsPlugin";
 import { ContextMenuPlugin } from "./plugins/ContextMenuPlugin";
 import { PaginationPlugin } from "./plugins/PaginationPlugin";
@@ -51,6 +53,8 @@ import { createEditorTheme } from "./theme";
 import { $setBlockDirections, isRtlDominant } from "./utils/direction";
 import { CalloutNode } from "./nodes/CalloutNode";
 import { CustomBlockNode } from "./nodes/CustomBlockNode";
+import { EquationNode } from "./nodes/EquationNode";
+import { HtmlBlockNode } from "./nodes/HtmlBlockNode";
 import { ImageNode } from "./nodes/ImageNode";
 import { PageBreakNode } from "./nodes/PageBreakNode";
 import { SearchHighlightNode } from "./nodes/SearchHighlightNode";
@@ -353,6 +357,8 @@ export function EditorProvider({
         ImageNode,
         CalloutNode,
         CustomBlockNode,
+        EquationNode,
+        HtmlBlockNode,
         PageBreakNode,
         SearchHighlightNode,
       ],
@@ -469,7 +475,9 @@ function EditorCore({
       <CheckListPlugin />
       <TablePlugin />
       <MarkdownPlugin shortcuts />
+      <MarkdownTypedBlockPlugin />
       <MarkdownPastePlugin />
+      <ExtendedCodeHighlightingPlugin />
       <ShortcutsPlugin onSave={onSave} />
       <ContextMenuPlugin paged={paged} historyState={historyState} />
       <AutoDirectionPlugin />

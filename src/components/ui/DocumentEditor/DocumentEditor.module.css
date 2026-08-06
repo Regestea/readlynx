@@ -1313,3 +1313,110 @@
   border-radius: var(--radius-small);
   object-fit: contain;
 }
+
+/* ---------- Equations ---------- */
+
+.equationInline {
+  display: inline-block;
+  vertical-align: middle;
+  margin-inline: 0.15em;
+}
+
+.equationBlock {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  margin: var(--space-2) 0;
+}
+
+.equationRendererInline :global(.katex-display) {
+  margin: 0;
+}
+
+.equationRendererBlock :global(.katex-display) {
+  margin: 0;
+}
+
+.equationEdit {
+  width: 100%;
+  min-height: 48px;
+  padding: var(--space-2);
+  background: var(--color-glass);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-small);
+  color: var(--color-text);
+  font-family: "Courier New", monospace;
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
+  resize: vertical;
+  outline: none;
+
+  &:focus {
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 2px var(--color-primary-soft);
+  }
+}
+
+/* ---------- Raw HTML blocks ---------- */
+
+.htmlBlock {
+  display: block;
+  width: 100%;
+}
+
+.htmlBlockPreview {
+  position: relative;
+  border: 1px dashed var(--color-page-edge);
+  border-radius: var(--radius-small);
+  padding: var(--space-3);
+  margin: var(--space-2) 0;
+  background: transparent;
+}
+
+.htmlBlockBadge {
+  position: absolute;
+  top: -9px;
+  right: var(--space-2);
+  padding: 1px 8px;
+  background: var(--color-glass);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  color: var(--color-text-muted);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  pointer-events: none;
+}
+
+.htmlBlockEditWrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: var(--space-2) 0;
+}
+
+.htmlBlockEdit {
+  width: 100%;
+  min-height: 96px;
+  padding: var(--space-2);
+  background: var(--color-glass);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-small);
+  color: var(--color-text);
+  font-family: "Courier New", monospace;
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
+  resize: vertical;
+  outline: none;
+
+  &:focus {
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 2px var(--color-primary-soft);
+  }
+}
+
+.htmlBlockHint {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+}

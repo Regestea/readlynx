@@ -24,10 +24,14 @@ const BLOCK_SIGNALS: RegExp[] = [
   /^\s{0,3}[-*+]\s+/, // bullet list
   /^\s{0,3}\d+[.)]\s+/, // ordered list
   /^\s{0,3}```/, // fenced code block
+  /^\s{0,3}\$\$\s/, // display equation ($$ …$$)
+  /^\$\$[\s\S]*\$\$/, // display equation on one line
+  /^\s{0,3}\$$\s*$/, // multi-line display equation opener ($$)
   /^\s{0,3}\|.*\|/, // table row
   /^\s{0,3}:::\s*[a-z]+/, // custom block
   /^\s{0,3}!\[[^\]]*\]\([^)\s]+\)/, // image
   /^\s{0,3}([-*_]){3,}\s*$/, // thematic break
+  /^\s{0,3}<(?:[/!]?)(?:[a-zA-Z][\w-]*|--|!)/, // raw HTML block
 ];
 
 const INLINE_SIGNALS: RegExp[] = [
@@ -37,6 +41,7 @@ const INLINE_SIGNALS: RegExp[] = [
   /__[^_]+__/, // bold
   /`[^`\n]+`/, // inline code
   /~~[^~]+~~/, // strikethrough
+  /\$[^$\n]+\$/, // inline math
 ];
 
 function looksLikeMarkdown(text: string): boolean {
