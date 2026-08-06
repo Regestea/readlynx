@@ -21,6 +21,8 @@ interface ImageEditorDialogProps {
   open: boolean;
   onClose: () => void;
   onInsert: (src: string, width: number | null) => void;
+  /** Load this image instead of requiring an upload (e.g. a captured cover). */
+  initialSrc?: string | null;
 }
 
 interface CropRect {
@@ -40,7 +42,7 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
-export function ImageEditorDialog({ open, onClose, onInsert }: ImageEditorDialogProps) {
+export function ImageEditorDialog({ open, onClose, onInsert, initialSrc }: ImageEditorDialogProps) {
   const [img, setImg] = useState<HTMLImageElement | null>(null);
   const [steps, setSteps] = useState(0);
   const [flipH, setFlipH] = useState(false);
@@ -74,30 +76,39 @@ export function ImageEditorDialog({ open, onClose, onInsert }: ImageEditorDialog
 
   const viewScale = displayScale * zoom;
 
+  const loadDataUrl = (data: string) => {
+    const image = new Image();
+    image.onload = () => {
+      setImg(image);
+      setSteps(0);
+      setFlipH(false);
+      setFlipV(false);
+      setCrop({ x: 0, y: 0, w: image.naturalWidth, h: image.naturalHeight });
+      setWidth(image.naturalWidth);
+      setHeight(image.naturalHeight);
+      setSizeTouched(false);
+      setBrightness(100);
+      setContrast(100);
+      setGrayscale(false);
+      setZoom(1);
+    };
+    image.src = data;
+  };
+
   const onFile = (file: File | null | undefined) => {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = () => {
-      const data = String(reader.result ?? "");
-      const image = new Image();
-      image.onload = () => {
-        setImg(image);
-        setSteps(0);
-        setFlipH(false);
-        setFlipV(false);
-        setCrop({ x: 0, y: 0, w: image.naturalWidth, h: image.naturalHeight });
-        setWidth(image.naturalWidth);
-        setHeight(image.naturalHeight);
-        setSizeTouched(false);
-        setBrightness(100);
-        setContrast(100);
-        setGrayscale(false);
-        setZoom(1);
-      };
-      image.src = data;
+      loadDataUrl(String(reader.result ?? ""));
     };
     reader.readAsDataURL(file);
   };
+
+  useEffect(() => {
+    if (open && initialSrc) {
+      loadDataUrl(initialSrc);
+    }
+  }, [open, initialSrc]);
 
   useEffect(() => {
     const canvas = previewRef.current;

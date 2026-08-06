@@ -28,6 +28,10 @@ interface PdfViewerProps {
   fitWidth?: boolean;
   /** Called once the first page has been painted. */
   onReady?: () => void;
+  /** When set, renders page 1 offscreen at high resolution and reports the
+   *  PNG data URL (used for cover capture — quality independent of the
+   *  on-screen size). */
+  onPageSnapshot?: (dataUrl: string | null) => void;
   /** When true, show the OCR toolbar button even without an `onOcrText` handler. */
   ocrEnabled?: boolean;
   /** Called with the text recognized from the current page. */
@@ -43,6 +47,7 @@ export function PdfViewer({
   fit = false,
   fitWidth = false,
   onReady,
+  onPageSnapshot,
   ocrEnabled = false,
   onOcrText,
 }: PdfViewerProps) {
@@ -59,7 +64,9 @@ export function PdfViewer({
   const renderTaskRef = useRef<RenderTask | null>(null);
   const onReadyRef = useRef(onReady);
   const onOcrTextRef = useRef(onOcrText);
+  const onPageSnapshotRef = useRef(onPageSnapshot);
   const readyRef = useRef(false);
+  const snapshottedRef = useRef(false);
 
   const [ocrOpen, setOcrOpen] = useState(false);
   const [selectedLangs, setSelectedLangs] = useState<string[]>(["eng"]);
@@ -184,6 +191,10 @@ export function PdfViewer({
   }, [onReady]);
 
   useEffect(() => {
+    onPageSnapshotRef.current = onPageSnapshot;
+  }, [onPageSnapshot]);
+
+  useEffect(() => {
     let cancelled = false;
 
     const load = async () => {
@@ -193,6 +204,7 @@ export function PdfViewer({
         setPageNumber(1);
         setNumPages(0);
         setRendering(true);
+        snapshottedRef.current = false;
 
         const data = await window.readlynx?.readFileBytes(filePath);
         if (!data) {
@@ -265,6 +277,30 @@ const task = pageProxy.render({ canvas, viewport, transform });
         if (page === 1 && !readyRef.current) {
           readyRef.current = true;
           onReadyRef.current?.();
+        }
+        if (page === 1 && !snapshottedRef.current) {
+          snapshottedRef.current = true;
+          const report = onPageSnapshotRef.current;
+          if (report) {
+            try {
+              const base = pageProxy.getViewport({ scale: 1 });
+              const snapshotScale = 1240 / base.width;
+              const snapViewport = pageProxy.getViewport({ scale: snapshotScale });
+              const snap = document.createElement("canvas");
+              snap.width = Math.floor(snapViewport.width);
+              snap.height = Math.floor(snapViewport.height);
+              const snapCtx = snap.getContext("2d");
+              if (snapCtx) {
+                await pageProxy.render({ canvas: snap, viewport: snapViewport }).promise;
+                report(snap.toDataURL("image/png"));
+              } else {
+                report(null);
+              }
+            } catch (err: unknown) {
+              if (err instanceof Error && err.name === "RenderingCancelledException") return;
+              report(null);
+            }
+          }
         }
       } catch (err: unknown) {
       if (err instanceof Error && err.name === "RenderingCancelledException") return;

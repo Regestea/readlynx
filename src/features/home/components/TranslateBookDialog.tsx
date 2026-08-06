@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import { FileText, FolderOpen, Languages, Loader2, RefreshCw } from "lucide-react";
+import { createPortal } from "react-dom";
+import { FileText, FolderOpen, Languages, Loader2, Pencil, RefreshCw } from "lucide-react";
 import { Modal } from "../../../components/ui/Modal/Modal";
 import { Button } from "../../../components/ui/Button/Button";
 import { Input } from "../../../components/ui/Input/Input";
 import { PdfViewer } from "../../../components/PdfViewer/PdfViewer";
 import { EpubViewer } from "../../../components/EpubViewer/EpubViewer";
+import { ImageEditorDialog } from "../../../components/ui/ImageEditorDialog/ImageEditorDialog";
 import type { BookSourceType } from "../../../db/entities/types";
 import styles from "./TranslateBookDialog.module.css";
 
@@ -17,6 +19,24 @@ interface TranslateBookDialogProps {
 
 const PREVIEW_WAIT_TIMEOUT = 10000;
 
+function waitUntil(predicate: () => boolean, timeout: number): Promise<boolean> {
+  const start = Date.now();
+  return new Promise((resolve) => {
+    const tick = () => {
+      if (predicate()) {
+        resolve(true);
+        return;
+      }
+      if (Date.now() - start >= timeout) {
+        resolve(false);
+        return;
+      }
+      setTimeout(tick, 80);
+    };
+    tick();
+  });
+}
+
 export function TranslateBookDialog({ open, onClose, onConfirm }: TranslateBookDialogProps) {
   const [title, setTitle] = useState("");
   const [sourcePath, setSourcePath] = useState<string | null>(null);
@@ -25,8 +45,17 @@ export function TranslateBookDialog({ open, onClose, onConfirm }: TranslateBookD
   const [previewReady, setPreviewReady] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [coverImage, setCoverImage] = useState<string | null>(null);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [editorKey, setEditorKey] = useState(0);
+  const [editSrc, setEditSrc] = useState<string | null>(null);
+  const [captureOpen, setCaptureOpen] = useState(false);
+  const [captureKey, setCaptureKey] = useState(0);
   const previewRef = useRef<HTMLDivElement>(null);
   const previewReadyRef = useRef(false);
+  const snapshotRef = useRef<string | null>(null);
+  const captureReadyRef = useRef(false);
+  const captureViewportRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     previewReadyRef.current = previewReady;
@@ -39,6 +68,12 @@ export function TranslateBookDialog({ open, onClose, onConfirm }: TranslateBookD
     setPreviewKey(0);
     setPreviewReady(false);
     previewReadyRef.current = false;
+    snapshotRef.current = null;
+    setCoverImage(null);
+    setEditSrc(null);
+    setEditorOpen(false);
+    setCaptureOpen(false);
+    captureReadyRef.current = false;
     setBusy(false);
     setError(null);
   };
@@ -57,16 +92,14 @@ export function TranslateBookDialog({ open, onClose, onConfirm }: TranslateBookD
     setSourceType(picked.toLowerCase().endsWith(".pdf") ? "pdf" : "epub");
     setPreviewReady(false);
     previewReadyRef.current = false;
+    snapshotRef.current = null;
+    setCoverImage(null);
+    setEditSrc(null);
     setPreviewKey((key) => key + 1);
   };
 
-  const captureCover = async (): Promise<string | null> => {
-    const el = previewRef.current;
+  const captureStage = async (el: HTMLElement | null): Promise<string | null> => {
     if (!el) return null;
-    const deadline = Date.now() + PREVIEW_WAIT_TIMEOUT;
-    while (!previewReadyRef.current && Date.now() < deadline) {
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    }
     const rect = el.getBoundingClientRect();
     for (let attempt = 0; attempt < 2; attempt += 1) {
       const dataUrl = await window.readlynx?.captureRect({
@@ -81,6 +114,61 @@ export function TranslateBookDialog({ open, onClose, onConfirm }: TranslateBookD
     return null;
   };
 
+  /** High-resolution first-page image, used as the cover source. */
+  const captureHighRes = async (): Promise<string | null> => {
+    if (sourceType === "pdf") {
+      if (snapshotRef.current) return snapshotRef.current;
+      await waitUntil(() => Boolean(snapshotRef.current), 3000);
+      if (snapshotRef.current) return snapshotRef.current;
+      return captureStage(previewRef.current);
+    }
+    const viewport = captureViewportRef.current;
+    if (!viewport) return null;
+    captureReadyRef.current = false;
+    setCaptureOpen(true);
+    setCaptureKey((key) => key + 1);
+    const ready = await waitUntil(() => captureReadyRef.current, PREVIEW_WAIT_TIMEOUT);
+    if (!ready) {
+      setCaptureOpen(false);
+      return null;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    const rect = viewport.getBoundingClientRect();
+    let dataUrl: string | null = null;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const captured = await window.readlynx?.captureRect({
+        x: rect.x,
+        y: rect.y,
+        width: rect.width,
+        height: rect.height,
+      });
+      if (captured) {
+        dataUrl = captured;
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 300));
+    }
+    setCaptureOpen(false);
+    return dataUrl;
+  };
+
+  const openCoverEditor = async () => {
+    if (busy || !sourcePath) return;
+    setBusy(true);
+    try {
+      const hi = await captureHighRes();
+      if (!hi) {
+        setError("Could not capture the first page. Try again.");
+        return;
+      }
+      setEditSrc(hi);
+      setEditorKey((key) => key + 1);
+      setEditorOpen(true);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const handleConfirm = async () => {
     if (busy || !sourcePath || !title.trim()) return;
     setBusy(true);
@@ -90,12 +178,12 @@ export function TranslateBookDialog({ open, onClose, onConfirm }: TranslateBookD
       if (!imported) {
         throw new Error("Could not copy the book file into the app.");
       }
-      const coverImage = await captureCover();
+      const coverImageForSave = coverImage ?? (await captureHighRes());
       const result = await window.readlynx?.db.createTranslatedBook({
         title: title.trim(),
         sourceType,
         sourcePath: imported,
-        coverImage,
+        coverImage: coverImageForSave,
       });
       if (!result) {
         throw new Error("Could not create the book.");
@@ -149,26 +237,42 @@ export function TranslateBookDialog({ open, onClose, onConfirm }: TranslateBookD
                       fill
                       toolbar={false}
                       fit
-                      onReady={() => setPreviewReady(true)}
-                    />
-                  ) : (
-                    <EpubViewer
-                      key={`epub-${previewKey}`}
-                      filePath={sourcePath}
-                      fill
-                      toolbar={false}
-                      onReady={() => setPreviewReady(true)}
-                    />
-                  )}
-                </div>
-                {!previewReady && (
-                  <div className={styles.previewLoading} aria-hidden="true">
-                    <Loader2 size={18} strokeWidth={2} className={styles.spinner} />
-                    <span>Rendering first page…</span>
-                  </div>
-                )}
+onReady={() => setPreviewReady(true)}
+                  onPageSnapshot={(src) => {
+                    snapshotRef.current = src;
+                  }}
+                />
+              ) : (
+                <EpubViewer
+                  key={`epub-${previewKey}`}
+                  filePath={sourcePath}
+                  fill
+                  toolbar={false}
+                  onReady={() => setPreviewReady(true)}
+                />
+              )}
+              {coverImage && (
+                <img src={coverImage} alt="Edited cover" className={styles.coverPreview} />
+              )}
+            </div>
+            {!previewReady && (
+              <div className={styles.previewLoading} aria-hidden="true">
+                <Loader2 size={18} strokeWidth={2} className={styles.spinner} />
+                <span>Rendering first page…</span>
               </div>
-            ) : (
+            )}
+            <button
+              type="button"
+              className={styles.editCover}
+              onClick={() => void openCoverEditor()}
+              disabled={busy}
+            >
+              <Pencil size={13} strokeWidth={2} aria-hidden="true" />
+              {coverImage ? "Retake / edit cover" : "Edit cover"}
+            </button>
+            {coverImage && <span className={styles.coverBadge}>Edited</span>}
+          </div>
+        ) : (
               <button type="button" className={styles.previewEmpty} onClick={() => void handlePick()}>
                 <Languages size={26} strokeWidth={1.6} aria-hidden="true" />
                 <span>First page preview</span>
@@ -230,6 +334,39 @@ export function TranslateBookDialog({ open, onClose, onConfirm }: TranslateBookD
           )}
         </div>
       </div>
+
+      {captureOpen &&
+        createPortal(
+          <div className={styles.captureOverlay}>
+            <div className={styles.captureBar}>
+              <Loader2 size={16} strokeWidth={2} className={styles.spinner} aria-hidden="true" />
+              Capturing first page…
+            </div>
+            <div className={styles.captureViewport} ref={captureViewportRef}>
+              <EpubViewer
+                key={`cap-${captureKey}`}
+                filePath={sourcePath as string}
+                fill
+                toolbar={false}
+                onReady={() => {
+                  captureReadyRef.current = true;
+                }}
+              />
+            </div>
+          </div>,
+          document.body,
+        )}
+
+      <ImageEditorDialog
+        key={editorKey}
+        open={editorOpen}
+        initialSrc={editSrc}
+        onClose={() => setEditorOpen(false)}
+        onInsert={(src) => {
+          setCoverImage(src);
+          setEditorOpen(false);
+        }}
+      />
     </Modal>
   );
 }
