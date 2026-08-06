@@ -9,7 +9,6 @@ import {
   ChevronDown,
   Code,
   FileDown,
-  FileSearch,
   FileText,
   FolderOpen,
   List,
@@ -57,7 +56,6 @@ import { exportDocx } from "../exporters/docxExporter";
 import { exportEpub, zipEpubFiles } from "../exporters/epubExporter";
 import { exportHtml } from "../exporters/htmlExporter";
 import { buildPdfDocument } from "../../../../export/PdfExporter";
-import { DocumentExporter } from "../../../DocumentExporter";
 import { Modal } from "../../Modal/Modal";
 import { Button } from "../../Button/Button";
 import { Input } from "../../Input/Input";
@@ -71,6 +69,7 @@ interface ToolbarProps {
   margins?: PageMargins;
   onMarginsChange?: (margins: PageMargins) => void;
   onSave?: () => void | Promise<void>;
+  coverImage?: string;
 }
 
 interface PromptDialogState {
@@ -235,6 +234,7 @@ export function Toolbar({
   margins,
   onMarginsChange,
   onSave,
+  coverImage,
 }: ToolbarProps) {
   const [editor] = useLexicalComposerContext();
   const api = useEditorAPI();
@@ -248,8 +248,6 @@ export function Toolbar({
   const [imageEditorKey, setImageEditorKey] = useState(0);
   const [exportOpen, setExportOpen] = useState(false);
   const [exportSession, setExportSession] = useState(0);
-  const [pdfPreviewOpen, setPdfPreviewOpen] = useState(false);
-  const [pdfPreviewSession, setPdfPreviewSession] = useState(0);
   const [marginDialogOpen, setMarginDialogOpen] = useState(false);
   const [marginDialogSession, setMarginDialogSession] = useState(0);
   const [saving, setSaving] = useState(false);
@@ -310,18 +308,25 @@ export function Toolbar({
     downloadFile("document.md", api.exportMarkdown(), "text/markdown;charset=utf-8");
   };
 
-  const onExportPdf = async (settings: ExportSettings) => {
+  const onExportPdf = async (settings: ExportSettings, resolvedCover?: string) => {
     if (window.readlynx?.exportPdf) {
       const { html } = await buildPdfDocument(editor, {
-        pageFormat,
-        margins: pageMargins,
+        pageFormat: settings.pageFormat,
+        margins: uniformMargins(settings.marginMm),
         fontFamily: settings.fontFamily || defaultFontFamily,
         fontSize: settings.fontSize,
         textColor: settings.textColor,
         backgroundColor: settings.backgroundColor,
-        showPageNumbers: true,
-        chapterBreaks: true,
+        showPageNumbers: settings.showPageNumbers,
+        chapterBreaks: settings.chapterBreaks,
+        headerLeft: settings.headerLeft,
+        headerCenter: settings.headerCenter,
+        headerRight: settings.headerRight,
+        footerLeft: settings.footerLeft,
+        footerCenter: settings.footerCenter,
+        footerRight: settings.footerRight,
         inlineImages: true,
+        coverImage: resolvedCover,
       });
       await window.readlynx.exportPdf({
         defaultPath: "document.pdf",
@@ -338,36 +343,50 @@ export function Toolbar({
     }
   };
 
-  const onExportDocx = async (settings: ExportSettings) => {
-    downloadBlob("document.docx", await exportDocx(editor, pageFormat, settings));
+  const onExportDocx = async (settings: ExportSettings, resolvedCover?: string) => {
+    downloadBlob("document.docx", await exportDocx(editor, pageFormat, settings, resolvedCover));
   };
 
-  const onExportHtml = (settings: ExportSettings) => {
-    downloadFile("document.html", exportHtml(editor, settings), "text/html;charset=utf-8");
+  const onExportHtml = (settings: ExportSettings, resolvedCover?: string) => {
+    downloadFile("document.html", exportHtml(editor, settings, resolvedCover), "text/html;charset=utf-8");
   };
 
-  const onExportEpub = (settings: ExportSettings) => {
-    const files = exportEpub(editor, { title: "My Book", author: "ReadLynx" }, settings);
+  const onExportEpub = (settings: ExportSettings, resolvedCover?: string) => {
+    const files = exportEpub(editor, { title: "My Book", author: "ReadLynx" }, settings, resolvedCover);
     downloadBlob("document.epub", zipEpubFiles(files));
   };
 
-  const runExport = (settings: ExportSettings) => {
+  const resolveCoverDataUrl = async (image: string | undefined): Promise<string | undefined> => {
+    if (!image) return undefined;
+    if (image.startsWith("data:")) return image;
+    if (window.readlynx?.readCoverDataUrl) {
+      const relativePath = image.startsWith("readlynx-cover://")
+        ? decodeURIComponent(new URL(image).pathname.replace(/^\/+/, ""))
+        : image;
+      const dataUrl = await window.readlynx.readCoverDataUrl(relativePath);
+      if (dataUrl) return dataUrl;
+    }
+    return undefined;
+  };
+
+  const runExport = async (settings: ExportSettings) => {
     const effective: ExportSettings = {
       ...settings,
       fontFamily: settings.fontFamily || defaultFontFamily,
     };
+    const resolvedCover = await resolveCoverDataUrl(coverImage);
     switch (settings.format) {
       case "pdf":
-        void onExportPdf(effective);
+        void onExportPdf(effective, resolvedCover);
         break;
       case "docx":
-        void onExportDocx(effective);
+        void onExportDocx(effective, resolvedCover);
         break;
       case "html":
-        onExportHtml(effective);
+        onExportHtml(effective, resolvedCover);
         break;
       case "epub":
-        onExportEpub(effective);
+        onExportEpub(effective, resolvedCover);
         break;
     }
     setExportOpen(false);
@@ -537,15 +556,6 @@ export function Toolbar({
                 label="Export Markdown"
                 icon={<FileText size={14} strokeWidth={1.8} aria-hidden="true" />}
                 onSelect={onExportMarkdown}
-                close={close}
-              />
-              <MenuItem
-                label="PDF preview…"
-                icon={<FileSearch size={14} strokeWidth={1.8} aria-hidden="true" />}
-                onSelect={() => {
-                  setPdfPreviewSession((session) => session + 1);
-                  setPdfPreviewOpen(true);
-                }}
                 close={close}
               />
               <MenuItem
@@ -930,18 +940,12 @@ export function Toolbar({
       <ExportDialog
         key={`export-${exportSession}`}
         open={exportOpen}
+        editor={editor}
         onClose={() => setExportOpen(false)}
         onExport={runExport}
         defaultMarginMm={pageMargins.top}
-      />
-
-      <DocumentExporter
-        key={`pdf-preview-${pdfPreviewSession}`}
-        open={pdfPreviewOpen}
-        editor={editor}
         defaultPageFormat={pageFormat}
-        defaultMargins={pageMargins}
-        onClose={() => setPdfPreviewOpen(false)}
+        coverImage={coverImage}
       />
 
       <MarginDialog

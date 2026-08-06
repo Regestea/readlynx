@@ -35,6 +35,8 @@ export interface DocumentEditorProps {
   onSearchResultCount?: (count: number) => void;
   /** Called after the initial content has been applied to the editor. */
   onInitialContentLoaded?: () => void;
+  /** Cover image data URL or path — rendered as the first page on export. */
+  coverImage?: string;
 }
 
 const MIN_ZOOM = 0.5;
@@ -61,6 +63,7 @@ export function DocumentEditor({
   searchActiveIndex,
   onSearchResultCount,
   onInitialContentLoaded,
+  coverImage,
 }: DocumentEditorProps) {
   const [fullscreen, setFullscreen] = useState(false);
   const [snapshot, setSnapshot] = useState<string | null>(null);
@@ -155,6 +158,7 @@ export function DocumentEditor({
         margins={pageMargins}
         onMarginsChange={onMarginsChange}
         onSave={onSave}
+        coverImage={coverImage}
       />
       {paged && (
         <style>{`@page { size: ${PAGE_FORMATS[pageFormat].cssSize}; margin: ${pageMargins.top}mm ${pageMargins.right}mm ${pageMargins.bottom}mm ${pageMargins.left}mm; }`}</style>

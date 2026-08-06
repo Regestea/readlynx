@@ -1,7 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, Download, FileDown, FileOutput, FileText, FileType2 } from "lucide-react";
+import type { LexicalEditor } from "lexical";
 import { CURATED_FONT_OPTIONS, getInstalledFonts } from "../utils/systemFonts";
-import { FONT_SIZE_OPTIONS, TEXT_COLORS } from "../constants";
+import { FONT_SIZE_OPTIONS, TEXT_COLORS, PAGE_FORMATS, uniformMargins } from "../constants";
+import type { PageFormat } from "../constants";
+import { PdfPreview } from "../../../PdfPreview";
+import type { PdfExportOptions } from "../../../../export/types";
 import { Button } from "../../Button/Button";
 import { Modal } from "../../Modal/Modal";
 import styles from "./ExportDialog.module.css";
@@ -15,6 +19,18 @@ export interface ExportSettings {
   textColor: string;
   backgroundColor: string;
   marginMm: number;
+  /** PDF-only: physical page size. */
+  pageFormat: PageFormat;
+  /** PDF-only: run a centred page number in the footer. */
+  showPageNumbers: boolean;
+  /** PDF-only: start every H1 on a new page. */
+  chapterBreaks: boolean;
+  headerLeft: string;
+  headerCenter: string;
+  headerRight: string;
+  footerLeft: string;
+  footerCenter: string;
+  footerRight: string;
 }
 
 const DEFAULT_SETTINGS: ExportSettings = {
@@ -24,6 +40,15 @@ const DEFAULT_SETTINGS: ExportSettings = {
   textColor: "",
   backgroundColor: "",
   marginMm: 12.7,
+  pageFormat: "a4",
+  showPageNumbers: true,
+  chapterBreaks: true,
+  headerLeft: "",
+  headerCenter: "",
+  headerRight: "",
+  footerLeft: "",
+  footerCenter: "",
+  footerRight: "",
 };
 
 const FORMATS: { value: ExportFormat; label: string; icon: React.ReactNode }[] = [
@@ -102,21 +127,39 @@ const MARGIN_OPTIONS = [
   { value: 20, label: "Wide" },
 ];
 
+const PAGE_FORMAT_OPTIONS: { value: PageFormat; label: string }[] = (
+  Object.keys(PAGE_FORMATS) as PageFormat[]
+).map((key) => ({ value: key, label: PAGE_FORMATS[key].label }));
+
 interface ExportDialogProps {
   open: boolean;
   onClose: () => void;
+  editor: LexicalEditor;
   onExport: (settings: ExportSettings) => void;
   defaultMarginMm?: number;
+  defaultPageFormat?: PageFormat;
+  coverImage?: string;
 }
 
-export function ExportDialog({ open, onClose, onExport, defaultMarginMm }: ExportDialogProps) {
+export function ExportDialog({
+  open,
+  onClose,
+  editor,
+  onExport,
+  defaultMarginMm,
+  defaultPageFormat,
+  coverImage,
+}: ExportDialogProps) {
   const [settings, setSettings] = useState<ExportSettings>(() => ({
     ...DEFAULT_SETTINGS,
     marginMm: defaultMarginMm ?? DEFAULT_SETTINGS.marginMm,
+    pageFormat: defaultPageFormat ?? DEFAULT_SETTINGS.pageFormat,
   }));
   const [installed, setInstalled] = useState<string[]>([]);
   const textColorInputRef = useRef<HTMLInputElement>(null);
   const paperColorInputRef = useRef<HTMLInputElement>(null);
+  const [pageCount, setPageCount] = useState<number | null>(null);
+  const [resolvedCover, setResolvedCover] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     let cancelled = false;
@@ -127,6 +170,52 @@ export function ExportDialog({ open, onClose, onExport, defaultMarginMm }: Expor
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      await Promise.resolve();
+      if (cancelled) return;
+      if (!coverImage) {
+        setResolvedCover(undefined);
+        return;
+      }
+      if (coverImage.startsWith("data:")) {
+        setResolvedCover(coverImage);
+        return;
+      }
+      const relativePath = coverImage.startsWith("readlynx-cover://")
+        ? decodeURIComponent(new URL(coverImage).pathname.replace(/^\/+/, ""))
+        : coverImage;
+      const data = await window.readlynx?.readCoverDataUrl(relativePath);
+      if (!cancelled) setResolvedCover(data ?? undefined);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [coverImage]);
+
+  const previewOptions: PdfExportOptions = useMemo(
+    () => ({
+      pageFormat: settings.pageFormat,
+      margins: uniformMargins(settings.marginMm),
+      fontFamily: settings.fontFamily,
+      fontSize: settings.fontSize,
+      textColor: settings.textColor,
+      backgroundColor: settings.backgroundColor,
+      showPageNumbers: settings.showPageNumbers,
+      chapterBreaks: settings.chapterBreaks,
+      headerLeft: settings.headerLeft,
+      headerCenter: settings.headerCenter,
+      headerRight: settings.headerRight,
+      footerLeft: settings.footerLeft,
+      footerCenter: settings.footerCenter,
+      footerRight: settings.footerRight,
+      inlineImages: true,
+      coverImage: resolvedCover,
+    }),
+    [settings, resolvedCover],
+  );
 
   const fontOptions = useMemo(() => {
     const known = new Set(CURATED_FONT_OPTIONS.map((option) => option.value));
@@ -178,9 +267,6 @@ export function ExportDialog({ open, onClose, onExport, defaultMarginMm }: Expor
 
   const formatLabel = FORMATS.find((format) => format.value === settings.format)?.label ?? "PDF";
 
-  const previewTextColor = settings.textColor || "#1f2430";
-  const previewBgColor = settings.backgroundColor || "#ffffff";
-
   return (
     <Modal
       open={open}
@@ -189,6 +275,10 @@ export function ExportDialog({ open, onClose, onExport, defaultMarginMm }: Expor
       wide
       footer={
         <>
+          <span className={styles.meta}>
+            <FileDown size={14} strokeWidth={1.8} aria-hidden="true" />
+            {pageCount === null ? "Paginating…" : `${pageCount} page${pageCount === 1 ? "" : "s"}`}
+          </span>
           <Button variant="secondary" onClick={onClose}>
             Cancel
           </Button>
@@ -355,38 +445,107 @@ export function ExportDialog({ open, onClose, onExport, defaultMarginMm }: Expor
               ))}
             </div>
           </div>
+
+          {settings.format === "pdf" && (
+            <>
+              <div className={styles.section}>
+                <span className={styles.sectionLabel}>Page size</span>
+                <select
+                  className={styles.control}
+                  value={settings.pageFormat}
+                  title="Page size"
+                  aria-label="Page size"
+                  onChange={(event) => patch({ pageFormat: event.target.value as PageFormat })}
+                >
+                  {PAGE_FORMAT_OPTIONS.map(({ value, label }) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className={styles.section}>
+                <span className={styles.sectionLabel}>Running header</span>
+                <div className={styles.row}>
+                  {(
+                    [
+                      ["headerLeft", "Left"],
+                      ["headerCenter", "Center"],
+                      ["headerRight", "Right"],
+                    ] as const
+                  ).map(([key, placeholder]) => (
+                    <input
+                      key={key}
+                      className={styles.control}
+                      value={settings[key]}
+                      placeholder={placeholder}
+                      aria-label={`Header ${placeholder}`}
+                      onChange={(event) => patch({ [key]: event.target.value } as Partial<ExportSettings>)}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              <div className={styles.section}>
+                <span className={styles.sectionLabel}>Running footer</span>
+                <div className={styles.row}>
+                  {(
+                    [
+                      ["footerLeft", "Left"],
+                      ["footerCenter", "Center"],
+                      ["footerRight", "Right"],
+                    ] as const
+                  ).map(([key, placeholder]) => (
+                    <input
+                      key={key}
+                      className={styles.control}
+                      value={settings[key]}
+                      placeholder={placeholder}
+                      aria-label={`Footer ${placeholder}`}
+                      onChange={(event) => patch({ [key]: event.target.value } as Partial<ExportSettings>)}
+                    />
+                  ))}
+                </div>
+                <p className={styles.sectionHint}>
+                  Tip: write <code>counter(page)</code> to print the page number.
+                </p>
+              </div>
+
+              <div className={styles.section}>
+                <span className={styles.sectionLabel}>Options</span>
+                <label className={styles.toggleRow}>
+                  <input
+                    type="checkbox"
+                    checked={settings.showPageNumbers}
+                    onChange={(event) => patch({ showPageNumbers: event.target.checked })}
+                  />
+                  <span>Page numbers</span>
+                </label>
+                <label className={styles.toggleRow}>
+                  <input
+                    type="checkbox"
+                    checked={settings.chapterBreaks}
+                    onChange={(event) => patch({ chapterBreaks: event.target.checked })}
+                  />
+                  <span>Start each H1 chapter on a new page</span>
+                </label>
+              </div>
+            </>
+          )}
         </div>
 
         <div className={styles.preview}>
-          <div className={styles.previewHeader}>Preview</div>
-          <div className={styles.previewStage}>
-            <div
-              className={styles.previewPage}
-              style={{
-                fontFamily: settings.fontFamily || undefined,
-                fontSize: settings.fontSize || undefined,
-                color: previewTextColor,
-                backgroundColor: previewBgColor,
-                padding: `${settings.marginMm}mm`,
-              }}
-            >
-              <h1>The Mountain Keep</h1>
-              <p>
-                Mara pulled her hood tight and counted her steps — one for the heart, two for the
-                hearth, three for the road that never ends.
-              </p>
-              <blockquote>A mountain is not climbed. It is kept, until it keeps you.</blockquote>
-              <p>
-                The keep stood where two ridgelines met, its stones older than the trees, older than
-                the names carved into the gate.
-              </p>
-              <ul>
-                <li>The first promise was kept at dawn.</li>
-                <li>The second was kept at the river.</li>
-                <li>The third is kept still — by whoever reads this page.</li>
-              </ul>
-            </div>
+          <div className={styles.previewHeader}>
+            Preview
+            {pageCount !== null && <span className={styles.previewCount}>· {pageCount} page{pageCount === 1 ? "" : "s"}</span>}
           </div>
+          <PdfPreview
+            editor={editor}
+            options={previewOptions}
+            onPageCountChange={setPageCount}
+            className={styles.previewBody}
+          />
         </div>
       </div>
     </Modal>
