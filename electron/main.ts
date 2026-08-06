@@ -361,11 +361,17 @@ function registerIpc(db: DbWorkerClient) {
         backgroundThrottling: false,
       },
     });
+    // Write the export HTML to a temp file rather than a `data:` URL: the
+    // whole state is often > 2 MB (fonts/cover images) and Chromium rejects
+    // data URLs over that with ERR_INVALID_URL.
+    const tempDir = await fs.promises.mkdtemp(path.join(app.getPath("temp"), "readlynx-export-"));
+    const htmlPath = path.join(tempDir, "document.html");
+    await fs.promises.writeFile(htmlPath, options.html, "utf8");
     try {
       pdfWin.webContents.on("console-message", (event) => {
         console.log(`[pdf-renderer] ${event.level}: ${event.message}`);
       });
-      await pdfWin.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(options.html)}`);
+      await pdfWin.loadFile(htmlPath);
       await pdfWin.webContents.executeJavaScript(
         `Promise.all([
           document.fonts.ready,
@@ -384,6 +390,7 @@ function registerIpc(db: DbWorkerClient) {
       return filePath;
     } finally {
       pdfWin.destroy();
+      await fs.promises.rm(tempDir, { recursive: true, force: true }).catch(() => undefined);
     }
   });
 }
