@@ -1,3 +1,5 @@
+import { $isElementNode, type LexicalNode } from "lexical";
+
 export function isRtlCodePoint(cp: number): boolean {
   return (
     (cp >= 0x0590 && cp <= 0x05ff) || // Hebrew
@@ -47,4 +49,19 @@ export function isRtlDominant(text: string): boolean {
     return false;
   }
   return rtlWords > ltrWords;
+}
+
+/**
+ * Set explicit `dir` on each top-level block based on its dominant language.
+ * Used when mapping markdown (e.g. an AI response) to editor nodes, so newly
+ * created blocks carry their direction immediately — mirroring what
+ * {@link AutoDirectionPlugin} does per caret block. Without this the blocks
+ * stay `dir=null` and both the editor and any export render them LTR.
+ */
+export function $setBlockDirections(nodes: LexicalNode[]): void {
+  for (const node of nodes) {
+    if ($isElementNode(node)) {
+      node.setDirection(isRtlDominant(node.getTextContent()) ? "rtl" : "ltr");
+    }
+  }
 }

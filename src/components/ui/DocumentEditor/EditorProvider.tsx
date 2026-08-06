@@ -48,7 +48,7 @@ import { exportDocx } from "./exporters/docxExporter";
 import { exportEpub } from "./exporters/epubExporter";
 import { exportHtml } from "./exporters/htmlExporter";
 import { createEditorTheme } from "./theme";
-import { isRtlDominant } from "./utils/direction";
+import { $setBlockDirections, isRtlDominant } from "./utils/direction";
 import { CalloutNode } from "./nodes/CalloutNode";
 import { CustomBlockNode } from "./nodes/CustomBlockNode";
 import { ImageNode } from "./nodes/ImageNode";
@@ -251,13 +251,17 @@ function EditorApiBridge({
         editor.update(() => $getRoot().clear());
       },
       importMarkdown: (markdown: string) => {
-        editor.update(() => $convertFromMarkdownString(markdown, mdTransformers));
+        editor.update(() => {
+          $convertFromMarkdownString(markdown, mdTransformers);
+          $setBlockDirections($getRoot().getChildren());
+        });
       },
       appendMarkdown: (markdown: string) => {
         if (!markdown.trim()) return;
         editor.update(() => {
           const nodes = $generateNodesFromMarkdownString(markdown, mdTransformers);
           if (nodes.length === 0) return;
+          $setBlockDirections(nodes);
           const root = $getRoot();
           const last = root.getLastChild();
           // Keep the appended text on its own paragraph.

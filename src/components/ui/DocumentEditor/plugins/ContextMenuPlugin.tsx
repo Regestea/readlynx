@@ -43,6 +43,7 @@ import { mdTransformers } from "./MarkdownPlugin";
 import { AiPreviewModal } from "./AiPreviewModal";
 import { resolveProviderBaseUrl } from "../../../../services/aiProviderConfig.ts";
 import type { AiModel } from "../../../../db/entities/AiModel.ts";
+import { $setBlockDirections } from "../utils/direction";
 import styles from "../DocumentEditor.module.css";
 
 interface ContextMenuPluginProps {
@@ -758,6 +759,10 @@ export function ContextMenuPlugin({ paged = false, historyState }: ContextMenuPl
       editor.update(() => {
         const nodes = $generateNodesFromMarkdownString(response, mdTransformers);
         if (nodes.length === 0) return;
+        // The markdown mapping creates blocks without a direction; set it now
+        // so Persian-dominant blocks are `rtl` in the editor state (and thus
+        // in every export), not only the block under the caret after typing.
+        $setBlockDirections(nodes);
         if (selection) {
           $setSelection(selection);
           const current = $getSelection();
