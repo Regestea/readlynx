@@ -56,6 +56,11 @@ export function CreateBookPage({
   const savingRef = useRef(false);
   const readyRef = useRef(initialBookId == null);
   const firstRunRef = useRef(true);
+  /** False until the editor has applied the loaded `initialState` — prevents
+   *  autosaves from persisting the still-empty editor state over a document
+   *  that already has content (the settings-sync effect can race the
+   *  initial-content load microtask on open). */
+  const contentLoadedRef = useRef(initialBookId == null);
 
   useEffect(() => {
     onSplitChange?.(source != null && sourceMode === "split");
@@ -66,6 +71,7 @@ export function CreateBookPage({
     const db = window.readlynx?.db;
     if (!db) return;
     let cancelled = false;
+    contentLoadedRef.current = false;
     void db.getBook(initialBookId).then((result) => {
       if (cancelled) return;
       if (!result || !result.document) {
@@ -122,6 +128,11 @@ export function CreateBookPage({
     };
   }, [initialBookId]);
 
+  /** Called by the editor once the loaded `initialState` has been applied. */
+  const handleContentLoaded = useCallback(() => {
+    contentLoadedRef.current = true;
+  }, []);
+
   const buildPayload = useCallback(
     (json: string): Omit<SaveDocumentPayload, "bookId"> => ({
       title,
@@ -146,7 +157,7 @@ export function CreateBookPage({
    *  first save; every later save updates the existing record. */
   const saveNow = useCallback(async (): Promise<boolean> => {
     const db = window.readlynx?.db;
-    if (!db || savingRef.current || !readyRef.current) return false;
+    if (!db || savingRef.current || !readyRef.current || !contentLoadedRef.current) return false;
     const json = apiRef.current?.saveState() ?? "";
     const payload = buildPayload(json);
     const key = JSON.stringify(payload);
@@ -462,6 +473,7 @@ export function CreateBookPage({
               searchQuery={searchQuery}
               searchActiveIndex={searchIndex}
               onSearchResultCount={setSearchCount}
+              onInitialContentLoaded={handleContentLoaded}
             />
           </div>
         ) : (
@@ -485,6 +497,7 @@ export function CreateBookPage({
             searchQuery={searchQuery}
             searchActiveIndex={searchIndex}
             onSearchResultCount={setSearchCount}
+            onInitialContentLoaded={handleContentLoaded}
           />
         )}
       </div>

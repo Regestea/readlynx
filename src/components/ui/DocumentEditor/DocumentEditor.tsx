@@ -33,6 +33,8 @@ export interface DocumentEditorProps {
   searchQuery?: string;
   searchActiveIndex?: number;
   onSearchResultCount?: (count: number) => void;
+  /** Called after the initial content has been applied to the editor. */
+  onInitialContentLoaded?: () => void;
 }
 
 const MIN_ZOOM = 0.5;
@@ -58,6 +60,7 @@ export function DocumentEditor({
   searchQuery,
   searchActiveIndex,
   onSearchResultCount,
+  onInitialContentLoaded,
 }: DocumentEditorProps) {
   const [fullscreen, setFullscreen] = useState(false);
   const [snapshot, setSnapshot] = useState<string | null>(null);
@@ -142,6 +145,7 @@ export function DocumentEditor({
       searchQuery={searchQuery}
       searchActiveIndex={searchActiveIndex}
       onSearchResultCount={onSearchResultCount}
+      onInitialContentLoaded={onInitialContentLoaded}
     >
       <Toolbar
         fullscreen={fullscreen}

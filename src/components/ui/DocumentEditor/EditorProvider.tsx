@@ -82,6 +82,10 @@ interface EditorProviderProps {
   searchQuery?: string;
   searchActiveIndex?: number;
   onSearchResultCount?: (count: number) => void;
+  /** Called after the initial content (`initialState`/`initialMarkdown`) has
+   *  been applied to the editor. Lets the host skip saves until the editor
+   *  state is authoritative. */
+  onInitialContentLoaded?: () => void;
 }
 
 /* ---------- Toolbar state sync ---------- */
@@ -327,6 +331,7 @@ export function EditorProvider({
   searchQuery,
   searchActiveIndex,
   onSearchResultCount,
+  onInitialContentLoaded,
 }: EditorProviderProps) {
   const config: InitialConfigType = useMemo(
     () => ({
@@ -377,6 +382,7 @@ export function EditorProvider({
         searchQuery={searchQuery}
         searchActiveIndex={searchActiveIndex}
         onSearchResultCount={onSearchResultCount}
+        onInitialContentLoaded={onInitialContentLoaded}
       >
         {children}
       </EditorCore>
@@ -402,6 +408,7 @@ function EditorCore({
   searchQuery,
   searchActiveIndex,
   onSearchResultCount,
+  onInitialContentLoaded,
 }: {
   children: ReactNode;
   initialMarkdown?: string;
@@ -420,6 +427,7 @@ function EditorCore({
   searchQuery?: string;
   searchActiveIndex?: number;
   onSearchResultCount?: (count: number) => void;
+  onInitialContentLoaded?: () => void;
 }) {
   const [editor] = useLexicalComposerContext();
   const [historyState] = useState(() => createEmptyHistoryState());
@@ -434,17 +442,19 @@ function EditorCore({
       if (cancelled) return;
       if (initialState) {
         editor.setEditorState(editor.parseEditorState(initialState));
+        onInitialContentLoaded?.();
       } else if (initialMarkdown) {
         editor.update(() => {
           $getRoot().clear();
           $convertFromMarkdownString(initialMarkdown, mdTransformers);
         });
+        onInitialContentLoaded?.();
       }
     });
     return () => {
       cancelled = true;
     };
-  }, [editor, initialMarkdown, initialState]);
+  }, [editor, initialMarkdown, initialState, onInitialContentLoaded]);
 
   return (
     <>
