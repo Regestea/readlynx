@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, Download, FileDown, FileOutput, FileText, FileType2 } from "lucide-react";
 import type { LexicalEditor } from "lexical";
-import { CURATED_FONT_OPTIONS, getInstalledFonts } from "../utils/systemFonts";
-import { FONT_SIZE_OPTIONS, TEXT_COLORS, PAGE_FORMATS, uniformMargins } from "../constants";
+import { TEXT_COLORS, PAGE_FORMATS } from "../constants";
 import type { PageFormat } from "../constants";
 import { PdfPreview } from "../../../PdfPreview";
+import { EpubViewer } from "../../../EpubViewer/EpubViewer";
 import type { PdfExportOptions } from "../../../../export/types";
+import type { ExportThemeOptions } from "../types";
+import { exportHtml } from "../exporters/htmlExporter";
+import { exportEpub, zipEpubFiles } from "../exporters/epubExporter";
 import { Button } from "../../Button/Button";
 import { Modal } from "../../Modal/Modal";
 import styles from "./ExportDialog.module.css";
@@ -14,41 +17,34 @@ export type ExportFormat = "pdf" | "docx" | "html" | "epub";
 
 export interface ExportSettings {
   format: ExportFormat;
-  fontFamily: string;
-  fontSize: string;
+  /** Global font-size scale in percent (0 = keep the sizes as authored). */
+  fontSizeScalePct: number;
   textColor: string;
   backgroundColor: string;
-  marginMm: number;
+  marginTopMm: number;
+  marginRightMm: number;
+  marginBottomMm: number;
+  marginLeftMm: number;
   /** PDF-only: physical page size. */
   pageFormat: PageFormat;
   /** PDF-only: run a centred page number in the footer. */
   showPageNumbers: boolean;
   /** PDF-only: start every H1 on a new page. */
   chapterBreaks: boolean;
-  headerLeft: string;
-  headerCenter: string;
-  headerRight: string;
-  footerLeft: string;
-  footerCenter: string;
-  footerRight: string;
 }
 
 const DEFAULT_SETTINGS: ExportSettings = {
   format: "pdf",
-  fontFamily: "",
-  fontSize: "",
+  fontSizeScalePct: 0,
   textColor: "",
   backgroundColor: "",
-  marginMm: 12.7,
+  marginTopMm: 12.7,
+  marginRightMm: 12.7,
+  marginBottomMm: 12.7,
+  marginLeftMm: 12.7,
   pageFormat: "a4",
   showPageNumbers: true,
   chapterBreaks: true,
-  headerLeft: "",
-  headerCenter: "",
-  headerRight: "",
-  footerLeft: "",
-  footerCenter: "",
-  footerRight: "",
 };
 
 const FORMATS: { value: ExportFormat; label: string; icon: React.ReactNode }[] = [
@@ -62,10 +58,9 @@ interface Template {
   id: string;
   name: string;
   desc: string;
-  fontFamily: string;
-  fontSize: string;
   textColor: string;
   backgroundColor: string;
+  /** Uniform page margin in millimeters applied to every side. */
   marginMm: number;
 }
 
@@ -74,8 +69,6 @@ const TEMPLATES: Template[] = [
     id: "classic",
     name: "Classic",
     desc: "Serif on warm paper",
-    fontFamily: "Georgia, serif",
-    fontSize: "16px",
     textColor: "#3a2f27",
     backgroundColor: "#faf6ef",
     marginMm: 12.7,
@@ -84,8 +77,6 @@ const TEMPLATES: Template[] = [
     id: "modern",
     name: "Modern",
     desc: "Sans on clean white",
-    fontFamily: "Inter, sans-serif",
-    fontSize: "15px",
     textColor: "#1c2433",
     backgroundColor: "#ffffff",
     marginMm: 8,
@@ -94,8 +85,6 @@ const TEMPLATES: Template[] = [
     id: "editorial",
     name: "Editorial",
     desc: "High-contrast serif",
-    fontFamily: "Georgia, serif",
-    fontSize: "17px",
     textColor: "#111827",
     backgroundColor: "#f4f4f0",
     marginMm: 20,
@@ -104,8 +93,6 @@ const TEMPLATES: Template[] = [
     id: "draft",
     name: "Draft",
     desc: "Compact cool blue",
-    fontFamily: "",
-    fontSize: "13px",
     textColor: "#2b3448",
     backgroundColor: "#eef3f9",
     marginMm: 8,
@@ -121,15 +108,24 @@ const PAPER_COLORS = [
   { value: "#e9f1ec", label: "Mint", swatch: "#e9f1ec" },
 ];
 
-const MARGIN_OPTIONS = [
-  { value: 8, label: "Narrow" },
-  { value: 12.7, label: "Normal" },
-  { value: 20, label: "Wide" },
-];
-
 const PAGE_FORMAT_OPTIONS: { value: PageFormat; label: string }[] = (
   Object.keys(PAGE_FORMATS) as PageFormat[]
 ).map((key) => ({ value: key, label: PAGE_FORMATS[key].label }));
+
+const MARGIN_SIDES: { key: "marginTopMm" | "marginRightMm" | "marginBottomMm" | "marginLeftMm"; label: string }[] = [
+  { key: "marginTopMm", label: "Top" },
+  { key: "marginRightMm", label: "Right" },
+  { key: "marginBottomMm", label: "Bottom" },
+  { key: "marginLeftMm", label: "Left" },
+];
+
+const INCH_MIN = 0;
+const INCH_MAX = 2.4;
+const MM_PER_INCH = 25.4;
+const toInches = (mm: number): number => Math.round((mm / MM_PER_INCH) * 100) / 100;
+const toMm = (inch: number): number => Math.round(inch * MM_PER_INCH * 100) / 100;
+const clampInches = (value: number): number =>
+  Math.min(INCH_MAX, Math.max(INCH_MIN, Number.isFinite(value) ? value : INCH_MIN));
 
 interface ExportDialogProps {
   open: boolean;
@@ -152,24 +148,17 @@ export function ExportDialog({
 }: ExportDialogProps) {
   const [settings, setSettings] = useState<ExportSettings>(() => ({
     ...DEFAULT_SETTINGS,
-    marginMm: defaultMarginMm ?? DEFAULT_SETTINGS.marginMm,
+    marginTopMm: defaultMarginMm ?? DEFAULT_SETTINGS.marginTopMm,
+    marginRightMm: defaultMarginMm ?? DEFAULT_SETTINGS.marginRightMm,
+    marginBottomMm: defaultMarginMm ?? DEFAULT_SETTINGS.marginBottomMm,
+    marginLeftMm: defaultMarginMm ?? DEFAULT_SETTINGS.marginLeftMm,
     pageFormat: defaultPageFormat ?? DEFAULT_SETTINGS.pageFormat,
   }));
-  const [installed, setInstalled] = useState<string[]>([]);
   const textColorInputRef = useRef<HTMLInputElement>(null);
   const paperColorInputRef = useRef<HTMLInputElement>(null);
   const [pageCount, setPageCount] = useState<number | null>(null);
   const [resolvedCover, setResolvedCover] = useState<string | undefined>(undefined);
-
-  useEffect(() => {
-    let cancelled = false;
-    void getInstalledFonts().then((fonts) => {
-      if (!cancelled) setInstalled(fonts);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const [epubSrc, setEpubSrc] = useState<ArrayBuffer | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -195,69 +184,123 @@ export function ExportDialog({
     };
   }, [coverImage]);
 
+  const themeOptions: ExportThemeOptions = useMemo(
+    () => ({
+      textColor: settings.textColor,
+      backgroundColor: settings.backgroundColor,
+      fontSizeScalePct: settings.fontSizeScalePct,
+      margins: {
+        top: settings.marginTopMm,
+        right: settings.marginRightMm,
+        bottom: settings.marginBottomMm,
+        left: settings.marginLeftMm,
+      },
+    }),
+    [
+      settings.textColor,
+      settings.backgroundColor,
+      settings.fontSizeScalePct,
+      settings.marginTopMm,
+      settings.marginRightMm,
+      settings.marginBottomMm,
+      settings.marginLeftMm,
+    ],
+  );
+
+  const patch = (partial: Partial<ExportSettings>) => {
+    setSettings((prev) => ({ ...prev, ...partial }));
+    if (partial.format && partial.format !== settings.format) {
+      setPageCount(null);
+      setEpubSrc(null);
+    }
+  };
+
+  useEffect(() => {
+    if (!open || settings.format !== "epub") return;
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      try {
+        const files = exportEpub(editor, {}, themeOptions, resolvedCover);
+        void zipEpubFiles(files)
+          .arrayBuffer()
+          .then((buffer) => {
+            if (!cancelled) setEpubSrc(buffer);
+          })
+          .catch(() => {
+            if (!cancelled) setEpubSrc(null);
+          });
+      } catch {
+        if (!cancelled) setEpubSrc(null);
+      }
+    }, 300);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [open, settings.format, editor, themeOptions, resolvedCover]);
+
+  const htmlSrc = useMemo(
+    () =>
+      settings.format === "docx" || settings.format === "html"
+        ? exportHtml(editor, themeOptions, resolvedCover)
+        : "",
+    [editor, themeOptions, resolvedCover, settings.format],
+  );
+
   const previewOptions: PdfExportOptions = useMemo(
     () => ({
       pageFormat: settings.pageFormat,
-      margins: uniformMargins(settings.marginMm),
-      fontFamily: settings.fontFamily,
-      fontSize: settings.fontSize,
+      margins: {
+        top: settings.marginTopMm,
+        right: settings.marginRightMm,
+        bottom: settings.marginBottomMm,
+        left: settings.marginLeftMm,
+      },
       textColor: settings.textColor,
       backgroundColor: settings.backgroundColor,
+      fontSizeScalePct: settings.fontSizeScalePct,
       showPageNumbers: settings.showPageNumbers,
       chapterBreaks: settings.chapterBreaks,
-      headerLeft: settings.headerLeft,
-      headerCenter: settings.headerCenter,
-      headerRight: settings.headerRight,
-      footerLeft: settings.footerLeft,
-      footerCenter: settings.footerCenter,
-      footerRight: settings.footerRight,
       inlineImages: true,
       coverImage: resolvedCover,
     }),
     [settings, resolvedCover],
   );
 
-  const fontOptions = useMemo(() => {
-    const known = new Set(CURATED_FONT_OPTIONS.map((option) => option.value));
-    return [
-      { value: "", label: "Default" },
-      ...CURATED_FONT_OPTIONS,
-      ...installed
-        .filter((family) => !known.has(family))
-        .map((family) => ({ value: family, label: family })),
-    ];
-  }, [installed]);
-
   const applyTemplate = (template: Template) => {
     setSettings((prev) => ({
       ...prev,
-      fontFamily: template.fontFamily,
-      fontSize: template.fontSize,
       textColor: template.textColor,
       backgroundColor: template.backgroundColor,
-      marginMm: template.marginMm,
+      marginTopMm: template.marginMm,
+      marginRightMm: template.marginMm,
+      marginBottomMm: template.marginMm,
+      marginLeftMm: template.marginMm,
     }));
   };
 
   const activeTemplate = (() => {
-    if (!settings.fontFamily && !settings.fontSize && !settings.textColor && !settings.backgroundColor && settings.marginMm === 12.7) {
+    const allMarginsEqual =
+      settings.marginTopMm === 12.7 &&
+      settings.marginRightMm === 12.7 &&
+      settings.marginBottomMm === 12.7 &&
+      settings.marginLeftMm === 12.7;
+    if (
+      !settings.textColor &&
+      !settings.backgroundColor &&
+      allMarginsEqual
+    ) {
       return "custom";
     }
-    return (
-      TEMPLATES.find(
-        (template) =>
-          template.fontFamily === settings.fontFamily &&
-          template.fontSize === settings.fontSize &&
-          template.textColor === settings.textColor &&
-          template.backgroundColor === settings.backgroundColor &&
-          template.marginMm === settings.marginMm,
-      )?.id ?? "custom"
-    );
+    const matches = (template: Template) =>
+      template.textColor === settings.textColor &&
+      template.backgroundColor === settings.backgroundColor &&
+      template.marginMm === settings.marginTopMm &&
+      template.marginMm === settings.marginRightMm &&
+      template.marginMm === settings.marginBottomMm &&
+      template.marginMm === settings.marginLeftMm;
+    return TEMPLATES.find(matches)?.id ?? "custom";
   })();
-
-  const patch = (partial: Partial<ExportSettings>) => {
-    setSettings((prev) => ({ ...prev, ...partial }));
-  };
 
   const isCustomColor = (value: string, presets: readonly { value: string }[]): boolean =>
     value !== "" && !presets.some((preset) => preset.value.toLowerCase() === value.toLowerCase());
@@ -275,10 +318,12 @@ export function ExportDialog({
       wide
       footer={
         <>
-          <span className={styles.meta}>
-            <FileDown size={14} strokeWidth={1.8} aria-hidden="true" />
-            {pageCount === null ? "Paginating…" : `${pageCount} page${pageCount === 1 ? "" : "s"}`}
-          </span>
+          {settings.format !== "docx" && settings.format !== "html" && (
+            <span className={styles.meta}>
+              <FileDown size={14} strokeWidth={1.8} aria-hidden="true" />
+              {pageCount === null ? "Preparing preview…" : `${pageCount} page${pageCount === 1 ? "" : "s"}`}
+            </span>
+          )}
           <Button variant="secondary" onClick={onClose}>
             Cancel
           </Button>
@@ -331,35 +376,29 @@ export function ExportDialog({
           </div>
 
           <div className={styles.section}>
-            <span className={styles.sectionLabel}>Font</span>
+            <span className={styles.sectionLabel}>Font size</span>
             <div className={styles.row}>
-              <select
+              <input
+                type="number"
                 className={styles.control}
-                value={settings.fontFamily}
-                title="Font family"
-                aria-label="Export font family"
-                onChange={(event) => patch({ fontFamily: event.target.value })}
-              >
-                {fontOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-              <select
-                className={styles.control}
-                value={settings.fontSize}
-                title="Font size"
-                aria-label="Export font size"
-                onChange={(event) => patch({ fontSize: event.target.value })}
-              >
-                {FONT_SIZE_OPTIONS.map(({ value, label }) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </select>
+                min={0}
+                max={200}
+                step={5}
+                value={settings.fontSizeScalePct}
+                title="Font size scale (percent)"
+                aria-label="Font size scale (percent)"
+                onChange={(event) =>
+                  patch({
+                    fontSizeScalePct: Math.max(0, Math.min(200, Number(event.target.value) || 0)),
+                  })
+                }
+              />
+              <span className={styles.percentSuffix}>%</span>
             </div>
+            <p className={styles.sectionHint}>
+              0% keeps your heading and paragraph sizes as authored (e.g. 18px headings, 14px
+              paragraphs). 10% increases every size by 10%.
+            </p>
           </div>
 
           <div className={styles.section}>
@@ -429,19 +468,27 @@ export function ExportDialog({
           </div>
 
           <div className={styles.section}>
-            <span className={styles.sectionLabel}>Margins</span>
-            <div className={styles.marginGroup} role="group" aria-label="Page margins">
-              {MARGIN_OPTIONS.map(({ value, label }) => (
-                <button
-                  key={value}
-                  type="button"
-                  className={`${styles.marginChip} ${settings.marginMm === value ? styles.marginChipActive : ""}`}
-                  aria-pressed={settings.marginMm === value}
-                  title={`${value} mm`}
-                  onClick={() => patch({ marginMm: value })}
-                >
-                  {label}
-                </button>
+            <span className={styles.sectionLabel}>Margins (in)</span>
+            <div className={styles.marginGrid}>
+              {MARGIN_SIDES.map(({ key, label }) => (
+                <label key={key} className={styles.marginField}>
+                  <span className={styles.marginFieldLabel}>{label}</span>
+                  <input
+                    type="number"
+                    className={styles.control}
+                    min={INCH_MIN}
+                    max={INCH_MAX}
+                    step={0.1}
+                    value={toInches(settings[key])}
+                    title={`${label} margin in inches`}
+                    aria-label={`${label} margin`}
+                    onChange={(event) =>
+                      patch({
+                        [key]: toMm(clampInches(Number(event.target.value))),
+                      } as Partial<ExportSettings>)
+                    }
+                  />
+                </label>
               ))}
             </div>
           </div>
@@ -463,53 +510,6 @@ export function ExportDialog({
                     </option>
                   ))}
                 </select>
-              </div>
-
-              <div className={styles.section}>
-                <span className={styles.sectionLabel}>Running header</span>
-                <div className={styles.row}>
-                  {(
-                    [
-                      ["headerLeft", "Left"],
-                      ["headerCenter", "Center"],
-                      ["headerRight", "Right"],
-                    ] as const
-                  ).map(([key, placeholder]) => (
-                    <input
-                      key={key}
-                      className={styles.control}
-                      value={settings[key]}
-                      placeholder={placeholder}
-                      aria-label={`Header ${placeholder}`}
-                      onChange={(event) => patch({ [key]: event.target.value } as Partial<ExportSettings>)}
-                    />
-                  ))}
-                </div>
-              </div>
-
-              <div className={styles.section}>
-                <span className={styles.sectionLabel}>Running footer</span>
-                <div className={styles.row}>
-                  {(
-                    [
-                      ["footerLeft", "Left"],
-                      ["footerCenter", "Center"],
-                      ["footerRight", "Right"],
-                    ] as const
-                  ).map(([key, placeholder]) => (
-                    <input
-                      key={key}
-                      className={styles.control}
-                      value={settings[key]}
-                      placeholder={placeholder}
-                      aria-label={`Footer ${placeholder}`}
-                      onChange={(event) => patch({ [key]: event.target.value } as Partial<ExportSettings>)}
-                    />
-                  ))}
-                </div>
-                <p className={styles.sectionHint}>
-                  Tip: write <code>counter(page)</code> to print the page number.
-                </p>
               </div>
 
               <div className={styles.section}>
@@ -540,12 +540,36 @@ export function ExportDialog({
             Preview
             {pageCount !== null && <span className={styles.previewCount}>· {pageCount} page{pageCount === 1 ? "" : "s"}</span>}
           </div>
-          <PdfPreview
-            editor={editor}
-            options={previewOptions}
-            onPageCountChange={setPageCount}
-            className={styles.previewBody}
-          />
+          {settings.format === "pdf" && (
+            <PdfPreview
+              editor={editor}
+              options={previewOptions}
+              onPageCountChange={setPageCount}
+              className={styles.previewBody}
+            />
+          )}
+          {settings.format === "epub" &&
+            (epubSrc ? (
+              <EpubViewer
+                srcData={epubSrc}
+                toolbar={false}
+                showNav
+                fill
+                backgroundColorOverride={settings.backgroundColor || "#ffffff"}
+                textColorOverride={settings.textColor || "#111111"}
+                className={`${styles.previewBody} ${styles.epubPreview}`}
+                onPageCountChange={setPageCount}
+              />
+            ) : (
+              <div className={styles.previewPlaceholder}>Building EPUB preview…</div>
+            ))}
+          {(settings.format === "docx" || settings.format === "html") && (
+            <iframe
+              srcDoc={htmlSrc}
+              className={styles.htmlPreview}
+              title="Document preview"
+            />
+          )}
         </div>
       </div>
     </Modal>

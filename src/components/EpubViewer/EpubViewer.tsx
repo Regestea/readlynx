@@ -47,24 +47,41 @@ const BG_PRESETS = ["#ffffff", "#f7f2ea", "#e6ded0", "#cbb99b", "#1c2945", "#162
 const TEXT_PRESETS = ["#322b26", "#111111", "#1c2945", "#5b6b50", "#cbb99b", "#eef2f7", "#ffffff"];
 
 interface EpubViewerProps {
-  filePath: string;
+  /** Path of the EPUB to open; ignored when `srcData` is provided. */
+  filePath?: string;
+  /** Raw EPUB bytes (e.g. an in-memory export) to render instead of a file. */
+  srcData?: ArrayBuffer;
   className?: string;
   ariaLabel?: string;
   /** When true, fills the parent instead of using a fixed height. */
   fill?: boolean;
   /** Hide the controls toolbar (used for embedded first-page previews). */
   toolbar?: boolean;
+  /** When combined with `toolbar={false}`, shows only the page-turn buttons. */
+  showNav?: boolean;
+  /** Page/background colour override (png. themes), applied unless the user
+   *  picked a custom colour inside the reader. */
+  backgroundColorOverride?: string;
+  /** Text colour override (used by export previews). */
+  textColorOverride?: string;
   /** Called once the first page has been rendered. */
   onReady?: () => void;
+  /** Called with the total page count once the book has been laid out. */
+  onPageCountChange?: (numPages: number) => void;
 }
 
 export function EpubViewer({
   filePath,
+  srcData,
   className = "",
   ariaLabel = "EPUB document",
   fill = false,
   toolbar = true,
+  showNav = false,
+  backgroundColorOverride,
+  textColorOverride,
   onReady,
+  onPageCountChange,
 }: EpubViewerProps) {
   const { theme } = useTheme();
   const [book, setBook] = useState<Book | null>(null);
@@ -83,10 +100,15 @@ export function EpubViewer({
   const renditionRef = useRef<Rendition | null>(null);
   const fontCssRef = useRef("");
   const onReadyRef = useRef(onReady);
+  const onPageCountChangeRef = useRef(onPageCountChange);
 
   useEffect(() => {
     onReadyRef.current = onReady;
   }, [onReady]);
+
+  useEffect(() => {
+    onPageCountChangeRef.current = onPageCountChange;
+  }, [onPageCountChange]);
 
   /** Enumerates the fonts installed on this computer (Local Font Access API).
    *  Falls back to a static list when unavailable (e.g. permission denied). */
@@ -146,9 +168,9 @@ export function EpubViewer({
         setPageNumber(0);
         setNumPages(0);
 
-        const data = await window.readlynx?.readFileBytes(filePath);
+        const data = srcData ?? (filePath ? await window.readlynx?.readFileBytes(filePath) : undefined);
         if (!data) {
-          throw new Error(`Could not read "${filePath}". The file may not exist.`);
+          throw new Error("Could not read the EPUB. The file may not exist.");
         }
         if (cancelled) return;
 
@@ -188,6 +210,7 @@ export function EpubViewer({
 
         setBook(nextBook);
         setNumPages(nextBook.locations.length());
+        onPageCountChangeRef.current?.(nextBook.locations.length());
       } catch (err: unknown) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : String(err));
@@ -211,7 +234,7 @@ export function EpubViewer({
       bookRef.current?.destroy();
       bookRef.current = null;
     };
-  }, [filePath, injectFontStyle]);
+  }, [filePath, srcData, injectFontStyle]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -234,11 +257,11 @@ export function EpubViewer({
     if (!rendition) return;
     const rootStyle = getComputedStyle(document.documentElement);
     const readVar = (name: string) => rootStyle.getPropertyValue(name).trim();
-    const background = customBg ?? (readVar("--color-page") || "#ffffff");
-    const text = customText ?? (readVar("--color-text") || "#322b26");
+    const background = customBg ?? backgroundColorOverride ?? (readVar("--color-page") || "#ffffff");
+    const text = customText ?? textColorOverride ?? (readVar("--color-text") || "#322b26");
     rendition.themes.override("background-color", background, true);
     rendition.themes.override("color", text, true);
-  }, [theme, book, customBg, customText]);
+  }, [theme, book, customBg, customText, backgroundColorOverride, textColorOverride]);
 
   /** Applies the chosen font family to the whole book by injecting a forced
    *  `!important` stylesheet into every content document. */
@@ -414,6 +437,34 @@ export function EpubViewer({
           )}
         </div>
       </div>
+      )}
+      {!toolbar && showNav && (
+        <div className={styles.toolbar} role="toolbar" aria-label="EPUB page navigation">
+          <button
+            type="button"
+            className={styles.toolButton}
+            onClick={() => goTo(-1)}
+            disabled={!book}
+            aria-label="Previous page"
+            title="Previous page"
+          >
+            <ChevronLeft size={16} strokeWidth={2} aria-hidden="true" />
+          </button>
+          <span className={styles.pageInfo}>
+            <span className={styles.pageCurrent}>{numPages > 0 ? pageNumber : "—"}</span>
+            <span className={styles.pageOf}>/ {numPages > 0 ? numPages : "—"}</span>
+          </span>
+          <button
+            type="button"
+            className={styles.toolButton}
+            onClick={() => goTo(1)}
+            disabled={!book}
+            aria-label="Next page"
+            title="Next page"
+          >
+            <ChevronRight size={16} strokeWidth={2} aria-hidden="true" />
+          </button>
+        </div>
       )}
 
       <div className={styles.hostWrap}>

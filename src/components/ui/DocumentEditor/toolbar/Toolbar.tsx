@@ -51,7 +51,7 @@ import { ExportDialog, type ExportSettings } from "./ExportDialog";
 import { MarginDialog } from "./MarginDialog";
 import { DEFAULT_FONT_SIZE_VALUE, FONT_SIZE_OPTIONS, HEADING_OPTIONS, TEXT_COLORS, BACKGROUND_COLORS, PAGE_MARGIN_OPTIONS, PAGE_MARGIN_MM, uniformMargins } from "../constants";
 import type { PageFormat, PageMargins } from "../constants";
-import type { BlockType } from "../types";
+import type { BlockType, ExportThemeOptions } from "../types";
 import { exportDocx } from "../exporters/docxExporter";
 import { exportEpub, zipEpubFiles } from "../exporters/epubExporter";
 import { exportHtml } from "../exporters/htmlExporter";
@@ -312,19 +312,18 @@ export function Toolbar({
     if (window.readlynx?.exportPdf) {
       const { html } = await buildPdfDocument(editor, {
         pageFormat: settings.pageFormat,
-        margins: uniformMargins(settings.marginMm),
-        fontFamily: settings.fontFamily || defaultFontFamily,
-        fontSize: settings.fontSize,
+        margins: {
+          top: settings.marginTopMm,
+          right: settings.marginRightMm,
+          bottom: settings.marginBottomMm,
+          left: settings.marginLeftMm,
+        },
+        fontFamily: defaultFontFamily,
+        fontSizeScalePct: settings.fontSizeScalePct,
         textColor: settings.textColor,
         backgroundColor: settings.backgroundColor,
         showPageNumbers: settings.showPageNumbers,
         chapterBreaks: settings.chapterBreaks,
-        headerLeft: settings.headerLeft,
-        headerCenter: settings.headerCenter,
-        headerRight: settings.headerRight,
-        footerLeft: settings.footerLeft,
-        footerCenter: settings.footerCenter,
-        footerRight: settings.footerRight,
         inlineImages: true,
         coverImage: resolvedCover,
       });
@@ -343,16 +342,28 @@ export function Toolbar({
     }
   };
 
+  const themeFor = (settings: ExportSettings): ExportThemeOptions => ({
+    fontSizeScalePct: settings.fontSizeScalePct,
+    textColor: settings.textColor,
+    backgroundColor: settings.backgroundColor,
+    margins: {
+      top: settings.marginTopMm,
+      right: settings.marginRightMm,
+      bottom: settings.marginBottomMm,
+      left: settings.marginLeftMm,
+    },
+  });
+
   const onExportDocx = async (settings: ExportSettings, resolvedCover?: string) => {
-    downloadBlob("document.docx", await exportDocx(editor, pageFormat, settings, resolvedCover));
+    downloadBlob("document.docx", await exportDocx(editor, pageFormat, themeFor(settings), resolvedCover));
   };
 
   const onExportHtml = (settings: ExportSettings, resolvedCover?: string) => {
-    downloadFile("document.html", exportHtml(editor, settings, resolvedCover), "text/html;charset=utf-8");
+    downloadFile("document.html", exportHtml(editor, themeFor(settings), resolvedCover), "text/html;charset=utf-8");
   };
 
   const onExportEpub = (settings: ExportSettings, resolvedCover?: string) => {
-    const files = exportEpub(editor, { title: "My Book", author: "ReadLynx" }, settings, resolvedCover);
+    const files = exportEpub(editor, { title: "My Book", author: "ReadLynx" }, themeFor(settings), resolvedCover);
     downloadBlob("document.epub", zipEpubFiles(files));
   };
 
@@ -370,23 +381,19 @@ export function Toolbar({
   };
 
   const runExport = async (settings: ExportSettings) => {
-    const effective: ExportSettings = {
-      ...settings,
-      fontFamily: settings.fontFamily || defaultFontFamily,
-    };
     const resolvedCover = await resolveCoverDataUrl(coverImage);
     switch (settings.format) {
       case "pdf":
-        void onExportPdf(effective, resolvedCover);
+        void onExportPdf(settings, resolvedCover);
         break;
       case "docx":
-        void onExportDocx(effective, resolvedCover);
+        void onExportDocx(settings, resolvedCover);
         break;
       case "html":
-        onExportHtml(effective, resolvedCover);
+        onExportHtml(settings, resolvedCover);
         break;
       case "epub":
-        onExportEpub(effective, resolvedCover);
+        onExportEpub(settings, resolvedCover);
         break;
     }
     setExportOpen(false);
