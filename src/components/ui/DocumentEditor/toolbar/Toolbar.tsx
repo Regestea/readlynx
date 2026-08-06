@@ -9,6 +9,7 @@ import {
   ChevronDown,
   Code,
   FileDown,
+  FileSearch,
   FileText,
   FolderOpen,
   List,
@@ -55,7 +56,8 @@ import type { BlockType } from "../types";
 import { exportDocx } from "../exporters/docxExporter";
 import { exportEpub, zipEpubFiles } from "../exporters/epubExporter";
 import { exportHtml } from "../exporters/htmlExporter";
-import { exportPdfHtml } from "../exporters/pdfExporter";
+import { buildPdfDocument } from "../../../../export/PdfExporter";
+import { DocumentExporter } from "../../../DocumentExporter";
 import { Modal } from "../../Modal/Modal";
 import { Button } from "../../Button/Button";
 import { Input } from "../../Input/Input";
@@ -246,6 +248,8 @@ export function Toolbar({
   const [imageEditorKey, setImageEditorKey] = useState(0);
   const [exportOpen, setExportOpen] = useState(false);
   const [exportSession, setExportSession] = useState(0);
+  const [pdfPreviewOpen, setPdfPreviewOpen] = useState(false);
+  const [pdfPreviewSession, setPdfPreviewSession] = useState(0);
   const [marginDialogOpen, setMarginDialogOpen] = useState(false);
   const [marginDialogSession, setMarginDialogSession] = useState(0);
   const [saving, setSaving] = useState(false);
@@ -308,9 +312,20 @@ export function Toolbar({
 
   const onExportPdf = async (settings: ExportSettings) => {
     if (window.readlynx?.exportPdf) {
+      const { html } = await buildPdfDocument(editor, {
+        pageFormat,
+        margins: pageMargins,
+        fontFamily: settings.fontFamily || defaultFontFamily,
+        fontSize: settings.fontSize,
+        textColor: settings.textColor,
+        backgroundColor: settings.backgroundColor,
+        showPageNumbers: true,
+        chapterBreaks: true,
+        inlineImages: true,
+      });
       await window.readlynx.exportPdf({
         defaultPath: "document.pdf",
-        html: exportPdfHtml(editor, settings, pageFormat),
+        html,
       });
       return;
     }
@@ -522,6 +537,15 @@ export function Toolbar({
                 label="Export Markdown"
                 icon={<FileText size={14} strokeWidth={1.8} aria-hidden="true" />}
                 onSelect={onExportMarkdown}
+                close={close}
+              />
+              <MenuItem
+                label="PDF preview…"
+                icon={<FileSearch size={14} strokeWidth={1.8} aria-hidden="true" />}
+                onSelect={() => {
+                  setPdfPreviewSession((session) => session + 1);
+                  setPdfPreviewOpen(true);
+                }}
                 close={close}
               />
               <MenuItem
@@ -909,6 +933,15 @@ export function Toolbar({
         onClose={() => setExportOpen(false)}
         onExport={runExport}
         defaultMarginMm={pageMargins.top}
+      />
+
+      <DocumentExporter
+        key={`pdf-preview-${pdfPreviewSession}`}
+        open={pdfPreviewOpen}
+        editor={editor}
+        defaultPageFormat={pageFormat}
+        defaultMargins={pageMargins}
+        onClose={() => setPdfPreviewOpen(false)}
       />
 
       <MarginDialog
