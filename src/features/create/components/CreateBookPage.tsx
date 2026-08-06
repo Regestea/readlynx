@@ -194,8 +194,12 @@ export function CreateBookPage({
     });
   }, [layout, pageFormat, margins, zoomIndex, fontFamily, saveNow, buildPayload]);
 
-  const handleBack = () => {
-    onBack?.();
+  const handleBack = async () => {
+    try {
+      await saveNow();
+    } finally {
+      onBack?.();
+    }
   };
 
   /** Appends OCR-recognized text (from the source PDF) to the document. */
