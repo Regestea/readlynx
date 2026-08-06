@@ -37,6 +37,9 @@ const COVER_MIME_TYPES: Record<string, string> = {
   ".avif": "image/avif",
 };
 
+/** Cap for captured/edited cover images; PNG is used so quality stays at 100%. */
+const COVER_TARGET_WIDTH = 1240;
+
 /** Serves cover image files referenced by relative paths in the database. */
 function registerCoverProtocol() {
   protocol.handle("readlynx-cover", async (request) => {
@@ -123,7 +126,9 @@ function registerIpc(db: DbWorkerClient) {
         height: Math.round(rect.height),
       });
       if (image.isEmpty()) return null;
-      return image.toDataURL();
+      const size = image.getSize();
+      const resized = size.width > COVER_TARGET_WIDTH ? image.resize({ width: COVER_TARGET_WIDTH }) : image;
+      return `data:image/png;base64,${resized.toPNG().toString("base64")}`;
     } catch {
       return null;
     }
@@ -289,6 +294,22 @@ function registerIpc(db: DbWorkerClient) {
   ipcMain.handle("db:get-book", (_event, bookId: string) => db.getBook(bookId));
 
   ipcMain.handle("db:delete-book", (_event, bookId: string) => db.deleteBook(bookId));
+
+  ipcMain.handle("cover:read-data-url", async (_event, relativePath: string) => {
+    try {
+      const dbPath = path.join(app.getPath("userData"), "readlynx.db");
+      const root = path.resolve(path.dirname(dbPath), "covers");
+      const rel = relativePath.replace(/^covers\//, "");
+      const filePath = path.resolve(root, rel);
+      if (!filePath.startsWith(root + path.sep)) return null;
+      const data = await fs.promises.readFile(filePath);
+      const ext = path.extname(filePath).toLowerCase();
+      const mime = COVER_MIME_TYPES[ext] ?? "application/octet-stream";
+      return `data:${mime};base64,${data.toString("base64")}`;
+    } catch {
+      return null;
+    }
+  });
 
   ipcMain.handle("db:get-app-settings", () => db.getAppSettings());
 

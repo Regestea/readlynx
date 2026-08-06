@@ -17,6 +17,7 @@ declare global {
         html: string;
       }): Promise<string | null>;
       readFileBytes(filePath: string): Promise<ArrayBuffer | null>;
+      readCoverDataUrl(relativePath: string): Promise<string | null>;
       pickFile(options?: {
         filters?: { name: string; extensions: string[] }[];
       }): Promise<string | null>;

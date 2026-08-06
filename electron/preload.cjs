@@ -3,6 +3,7 @@ const { contextBridge, ipcRenderer } = require("electron");
 contextBridge.exposeInMainWorld("readlynx", {
   exportPdf: (options) => ipcRenderer.invoke("export-pdf", options),
   readFileBytes: (filePath) => ipcRenderer.invoke("fs:read-bytes", filePath),
+  readCoverDataUrl: (relativePath) => ipcRenderer.invoke("cover:read-data-url", relativePath),
   pickFile: (options) => ipcRenderer.invoke("fs:pick-file", options),
   importSource: (options) => ipcRenderer.invoke("fs:import-source", options),
   captureRect: (rect) => ipcRenderer.invoke("fs:capture-rect", rect),
