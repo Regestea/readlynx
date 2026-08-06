@@ -23,6 +23,19 @@ interface CreateBookPageProps {
   onSplitChange?: (split: boolean) => void;
 }
 
+/** True when a stored `contentJson` is a Lexical editor state the editor can
+ *  parse (a JSON string with a `root`). Anything else would crash
+ *  `parseEditorState` on open. */
+function isValidEditorStateJson(content: string): boolean {
+  if (!content || !content.trim().startsWith("{")) return false;
+  try {
+    const parsed: unknown = JSON.parse(content);
+    return parsed !== null && typeof parsed === "object" && "root" in (parsed as Record<string, unknown>);
+  } catch {
+    return false;
+  }
+}
+
 export function CreateBookPage({
   onBack,
   initialBookId,
@@ -82,7 +95,7 @@ export function CreateBookPage({
       idsRef.current = { bookId: book.id, documentId: document.id };
       setTitle(book.title);
       setCoverImage(book.coverImage);
-      setInitialState(document.contentJson);
+      setInitialState(isValidEditorStateJson(document.contentJson) ? document.contentJson : undefined);
       setSource(
         bookSource
           ? {
@@ -478,6 +491,7 @@ export function CreateBookPage({
               searchActiveIndex={searchIndex}
               onSearchResultCount={setSearchCount}
               onInitialContentLoaded={handleContentLoaded}
+              coverImage={coverImage ?? undefined}
             />
           </div>
         ) : (
@@ -502,6 +516,7 @@ export function CreateBookPage({
             searchActiveIndex={searchIndex}
             onSearchResultCount={setSearchCount}
             onInitialContentLoaded={handleContentLoaded}
+            coverImage={coverImage ?? undefined}
           />
         )}
       </div>

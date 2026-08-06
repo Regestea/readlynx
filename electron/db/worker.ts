@@ -13,6 +13,7 @@ import {
   DocumentRepository,
   DocumentSettingsRepository,
 } from "../../src/db/repositories/index.ts";
+import { EMPTY_DOCUMENT_STATE } from "../../src/db/repositories/DocumentRepository.ts";
 import { migrateLegacyCovers, persistCoverImage, removeCoverFile } from "./covers.ts";
 import { removeSourceFile } from "./sources.ts";
 
@@ -100,6 +101,21 @@ function handleGetBook(bookId: string) {
   const document = documents.findByBookId(bookId) ?? null;
   const settings = document ? (documentSettings.findByDocumentId(document.id) ?? null) : null;
   const source = bookSources.findByBookId(bookId) ?? null;
+  if (document) {
+    // Repair rows whose content never became a valid Lexical state (e.g.
+    // legacy `"{}"` rows that crash `parseEditorState` on the renderer).
+    let parsed: unknown = null;
+    try {
+      parsed = JSON.parse(document.contentJson);
+    } catch {
+      // keep `parsed` as null — the row is corrupt
+    }
+    const valid = parsed !== null && typeof parsed === "object" && "root" in (parsed as Record<string, unknown>);
+    if (!valid) {
+      document.contentJson = EMPTY_DOCUMENT_STATE;
+      documents.updateContent(document.id, EMPTY_DOCUMENT_STATE);
+    }
+  }
   return { book, document, settings, source };
 }
 
