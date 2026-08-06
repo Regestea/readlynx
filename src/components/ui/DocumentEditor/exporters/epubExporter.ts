@@ -2,6 +2,7 @@ import type { LexicalEditor } from "lexical";
 import { $generateHtmlFromNodes } from "@lexical/html";
 import { zipSync } from "fflate";
 import type { EpubFile, EpubMetadata, ExportThemeOptions } from "../types";
+import { isRtlDominant } from "../utils/direction";
 import { highlightBodyCode, HIGHLIGHT_THEME_CSS } from "./epubHighlight";
 
 const XML_DECL = '<?xml version="1.0" encoding="UTF-8"?>';
@@ -68,6 +69,12 @@ function splitChapters(bodyHtml: string): string[] {
   return chapters;
 }
 
+/** Dominant text direction of an HTML fragment, for document-level `dir`. */
+function chapterDirection(html: string): "rtl" | "ltr" {
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  return isRtlDominant(doc.body.textContent ?? "") ? "rtl" : "ltr";
+}
+
 const BOOK_CSS_BASE = `
 body { line-height: 1.6; margin: 0; }
 h1, h2, h3, h4, h5, h6 { line-height: 1.3; }
@@ -112,6 +119,7 @@ export function exportEpub(
 
   const bodyHtml = editor.read(() => $generateHtmlFromNodes(editor));
   const chapters = splitChapters(selfCloseVoidElements(highlightBodyCode(bodyHtml)));
+  const bookDir = chapterDirection(bodyHtml);
   const chapterTitles = chapters.map(
     (chapter, i) => extractFirstHeading(chapter) || (chapters.length > 1 ? `Chapter ${i + 1}` : title),
   );
@@ -182,7 +190,7 @@ ${spine}
     mime: "application/xhtml+xml",
     content: `${XML_DECL}
 <!DOCTYPE html>
-<html xmlns="${NS_XHTML}" xmlns:epub="${NS_EPUB}" xml:lang="${xmlEscape(language)}" lang="${xmlEscape(language)}">
+<html xmlns="${NS_XHTML}" xmlns:epub="${NS_EPUB}" xml:lang="${xmlEscape(language)}" lang="${xmlEscape(language)}" dir="${bookDir}">
   <head>
     <title>${xmlEscape(title)}</title>
   </head>
@@ -224,19 +232,20 @@ ${navPoints}
   });
 
   chapters.forEach((chapter, i) => {
+    const dir = chapterDirection(chapter);
     files.push({
       path: `OEBPS/${chapterHrefs[i]}`,
       mime: "application/xhtml+xml",
       content: `${XML_DECL}
 <!DOCTYPE html>
-<html xmlns="${NS_XHTML}" xmlns:epub="${NS_EPUB}" xml:lang="${xmlEscape(language)}" lang="${xmlEscape(language)}">
+<html xmlns="${NS_XHTML}" xmlns:epub="${NS_EPUB}" xml:lang="${xmlEscape(language)}" lang="${xmlEscape(language)}" dir="${dir}">
   <head>
     <title>${xmlEscape(chapterTitles[i])}</title>
     <link rel="stylesheet" type="text/css" href="style.css"/>
     <link rel="stylesheet" type="text/css" href="highlight.css"/>
   </head>
   <body>
-    <section epub:type="chapter">
+    <section epub:type="chapter" dir="${dir}">
 ${chapter}
     </section>
   </body>

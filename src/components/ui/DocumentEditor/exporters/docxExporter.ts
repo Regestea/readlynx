@@ -14,6 +14,7 @@ import {
   HeadingLevel,
   ImageRun,
   LevelFormat,
+  LineRuleType,
   PageBreak,
   Packer,
   Paragraph,
@@ -27,6 +28,7 @@ import {
 import { PAGE_FORMATS } from "../constants";
 import type { PageFormat } from "../constants";
 import type { ExportThemeOptions } from "../types";
+import { isRtlDominant } from "../utils/direction";
 import { $isCalloutNode } from "../nodes/CalloutNode";
 import { $isCustomBlockNode } from "../nodes/CustomBlockNode";
 import { $isImageNode } from "../nodes/ImageNode";
@@ -171,6 +173,15 @@ function buildRuns(node: LexicalNode): (TextRun | ExternalHyperlink)[] {
 type DocxAlignment = (typeof AlignmentType)[keyof typeof AlignmentType];
 type DocxHeadingLevel = (typeof HeadingLevel)[keyof typeof HeadingLevel];
 
+/**
+ * True when a block should render RTL: explicit `rtl` direction, or (for
+ * documents saved before directions were recorded) dominant RTL content.
+ */
+function isRtlBlock(node: ElementNode): boolean {
+  const dir = node.getDirection();
+  return dir === "rtl" || (dir === null && isRtlDominant(node.getTextContent()));
+}
+
 function alignmentFromNode(node: ElementNode): DocxAlignment | undefined {
   switch (node.getFormat()) {
     case 1:
@@ -182,7 +193,7 @@ function alignmentFromNode(node: ElementNode): DocxAlignment | undefined {
     case 4:
       return AlignmentType.JUSTIFIED;
     default:
-      return node.getDirection() === "rtl" ? AlignmentType.RIGHT : undefined;
+      return isRtlBlock(node) ? AlignmentType.RIGHT : undefined;
   }
 }
 
@@ -220,6 +231,7 @@ function listParagraphs(node: LexicalNode, depth: number): DocxChild[] {
       new Paragraph({
         children: runs,
         numbering: isCheck ? undefined : { reference, level: Math.min(depth, MAX_LIST_DEPTH) },
+        bidirectional: isRtlBlock(item),
       }),
     );
     for (const child of item.getChildren()) {
@@ -285,7 +297,7 @@ function nodeToDocx(node: LexicalNode): DocxChild[] {
         heading: heading[level],
         children: buildRuns(node),
         alignment: alignmentFromNode(node),
-        bidirectional: node.getDirection() === "rtl",
+        bidirectional: isRtlBlock(node),
       }),
     ];
   }
@@ -295,7 +307,7 @@ function nodeToDocx(node: LexicalNode): DocxChild[] {
         children: buildRuns(node),
         indent: { left: 720 },
         alignment: alignmentFromNode(node),
-        bidirectional: node.getDirection() === "rtl",
+        bidirectional: isRtlBlock(node),
       }),
     ];
   }
@@ -328,7 +340,7 @@ function nodeToDocx(node: LexicalNode): DocxChild[] {
         },
         indent: { left: 240, right: 240 },
         alignment: alignmentFromNode(node),
-        bidirectional: node.getDirection() === "rtl",
+        bidirectional: isRtlBlock(node),
       }),
     ];
   }
@@ -337,7 +349,7 @@ function nodeToDocx(node: LexicalNode): DocxChild[] {
       new Paragraph({
         children: buildRuns(node),
         alignment: alignmentFromNode(node),
-        bidirectional: node.getDirection() === "rtl",
+        bidirectional: isRtlBlock(node),
       }),
     ];
   }
@@ -419,6 +431,9 @@ export async function exportDocx(
       default: {
         document: {
           run: defaultRun,
+          paragraph: {
+            spacing: { line: 360, lineRule: LineRuleType.AUTO },
+          },
         },
       },
     },
