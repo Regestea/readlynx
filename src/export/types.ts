@@ -29,6 +29,8 @@ export interface PdfExportOptions {
   footerRight?: string;
   /** Resolve blob/data-dependency image URLs into data URLs before export. */
   inlineImages?: boolean;
+  /** Cover image data URL or path — rendered as the first page. */
+  coverImage?: string;
 }
 
 export const DEFAULT_PDF_EXPORT_OPTIONS: Omit<PdfExportOptions, "pageFormat" | "margins"> = {

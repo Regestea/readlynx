@@ -2,8 +2,13 @@ import type { LexicalEditor } from "lexical";
 import { $generateHtmlFromNodes } from "@lexical/html";
 import type { ExportThemeOptions } from "../types";
 
-export function exportHtml(editor: LexicalEditor, options: ExportThemeOptions = {}): string {
+export function exportHtml(editor: LexicalEditor, options: ExportThemeOptions = {}, coverImage?: string): string {
   const body = editor.read(() => $generateHtmlFromNodes(editor));
+
+  const marginMm = options.marginMm ?? 25;
+  const coverDiv = coverImage
+    ? `<div style="display:flex;align-items:center;justify-content:center;overflow:hidden;width:100vw;height:100vh;margin:-${marginMm}mm;page-break-after:always;"><img src="${coverImage}" style="width:100%;height:100%;object-fit:cover;" /></div>`
+    : "";
 
   const bodyProps = [
     "margin: 0 auto",
@@ -27,7 +32,7 @@ export function exportHtml(editor: LexicalEditor, options: ExportThemeOptions = 
     </style>
   </head>
   <body>
-    ${body}
+    ${coverDiv}${body}
   </body>
 </html>`;
 }

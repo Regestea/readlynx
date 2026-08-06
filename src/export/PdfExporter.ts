@@ -30,6 +30,43 @@ export interface BuildPdfOptions extends PdfExportOptions {
   defaultPath?: string;
 }
 
+/** Chromium rejects data URLs over ~2 MB (`ERR_INVALID_URL`). High-resolution
+ *  covers (e.g. a photographed first page) can exceed that, so before a cover
+ *  is embedded in the export HTML it is downscaled/re-encoded until it fits.
+ *  The stored cover file itself is untouched — this only affects the exported
+ *  PDF. */
+const MAX_COVER_EMBED_BYTES = 1_000_000;
+const COVER_EMBED_MAX_WIDTH = 1600;
+
+export async function fitCoverForExport(dataUrl: string): Promise<string> {
+  const match = /^data:(image\/[^;]+);base64,([A-Za-z0-9+/=]+)$/.exec(dataUrl);
+  if (!match) return dataUrl;
+  const approxBytes = Math.floor((match[2].length * 3) / 4);
+  if (approxBytes <= MAX_COVER_EMBED_BYTES) return dataUrl;
+  try {
+    const blob = await (await fetch(dataUrl)).blob();
+    const bitmap = await createImageBitmap(blob);
+    try {
+      const scale = Math.min(1, COVER_EMBED_MAX_WIDTH / bitmap.width);
+      const width = Math.max(1, Math.floor(bitmap.width * scale));
+      const height = Math.max(1, Math.floor(bitmap.height * scale));
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return dataUrl;
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
+      ctx.drawImage(bitmap, 0, 0, width, height);
+      return canvas.toDataURL("image/jpeg", 0.92);
+    } finally {
+      bitmap.close();
+    }
+  } catch {
+    return dataUrl;
+  }
+}
+
 /** Run the full pipeline and produce the standalone paginated HTML document. */
 export async function buildPdfDocument(
   editor: LexicalEditor,
@@ -37,7 +74,13 @@ export async function buildPdfDocument(
 ): Promise<PagedDocument> {
   const opts: PdfExportOptions = { ...DEFAULT_PDF_EXPORT_OPTIONS, ...options };
 
-  const bodyHtml = toHtml(editor, { chapterBreaks: opts.chapterBreaks });
+  const contentHtml = toHtml(editor, { chapterBreaks: opts.chapterBreaks });
+  const m = opts.margins;
+  const coverImage = opts.coverImage ? await fitCoverForExport(opts.coverImage) : undefined;
+  const coverHtml = coverImage
+    ? `<div class="rl-cover-page" style="display:flex;align-items:center;justify-content:center;overflow:hidden;height:calc(100% + ${m.top + m.bottom}mm);margin:-${m.top}mm -${m.right}mm -${m.bottom}mm -${m.left}mm;page-break-after:always;break-after:page;"><img src="${escapeHtml(coverImage)}" style="width:100%;height:100%;object-fit:cover;" /></div>`
+    : "";
+  const bodyHtml = `${coverHtml}${contentHtml}`;
   const service = new PaginationService();
   const result = await service.paginate(bodyHtml, [
     printCss,

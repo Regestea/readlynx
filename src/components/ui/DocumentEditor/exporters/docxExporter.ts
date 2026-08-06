@@ -65,6 +65,41 @@ function twipsFromPx(px: number): number {
   return Math.round((px / 96) * 1440);
 }
 
+type ImageType = "png" | "jpg" | "gif";
+
+/** Reads the intrinsic width/height of a PNG, JPEG, or GIF from its bytes. */
+function imageAspectRatio(type: ImageType, data: Uint8Array): { width: number; height: number } | null {
+  if (type === "png") {
+    if (data.length < 24) return null;
+    const width = (data[16] << 24) | (data[17] << 16) | (data[18] << 8) | data[19];
+    const height = (data[20] << 24) | (data[21] << 16) | (data[22] << 8) | data[23];
+    return width > 0 && height > 0 ? { width, height } : null;
+  }
+  if (type === "gif") {
+    if (data.length < 10) return null;
+    const width = data[6] | (data[7] << 8);
+    const height = data[8] | (data[9] << 8);
+    return width > 0 && height > 0 ? { width, height } : null;
+  }
+  let i = 2;
+  while (i + 4 <= data.length) {
+    if (data[i] !== 0xff) {
+      i += 1;
+      continue;
+    }
+    const marker = data[i + 1];
+    const length = (data[i + 2] << 8) | data[i + 3];
+    const isSof = marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc;
+    if (isSof && length >= 7 && i + 8 < data.length) {
+      const height = (data[i + 5] << 8) | data[i + 6];
+      const width = (data[i + 7] << 8) | data[i + 8];
+      if (width > 0 && height > 0) return { width, height };
+    }
+    i += 2 + length;
+  }
+  return null;
+}
+
 function parseColor(value: string | undefined): string | undefined {
   if (!value) return undefined;
   const trimmed = value.trim();
@@ -398,8 +433,9 @@ export async function exportDocx(
   editor: LexicalEditor,
   format: PageFormat,
   options: ExportThemeOptions = {},
+  coverImage?: string,
 ): Promise<Blob> {
-  const children = editor.getEditorState().read(() => {
+  const contentChildren = editor.getEditorState().read(() => {
     const root = $getRoot();
     return root.getChildren().flatMap((node) => nodeToDocx(node));
   });
@@ -407,6 +443,43 @@ export async function exportDocx(
   const { width, height } = PAGE_FORMATS[format];
   const marginMm = options.marginMm ?? DEFAULT_MARGIN_MM;
   const margin = Math.round((marginMm / 25.4) * 1440);
+
+  const coverChildren: DocxChild[] = [];
+  if (coverImage) {
+    const match = /^data:image\/(png|jpe?g|gif);base64,(.+)$/.exec(coverImage);
+    if (match) {
+      const type = match[1] === "jpeg" || match[1] === "jpg" ? "jpg" : (match[1] as ImageType);
+      const binary = atob(match[2]);
+      const data = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i += 1) data[i] = binary.charCodeAt(i);
+      const pageWidthPt = twipsFromPx(width) / 20;
+      const pageHeightPt = twipsFromPx(height) / 20;
+      const aspect = imageAspectRatio(type, data);
+      let imgWidthPt = pageWidthPt;
+      let imgHeightPt = pageHeightPt;
+      if (aspect) {
+        const scale = Math.min(pageWidthPt / aspect.width, pageHeightPt / aspect.height);
+        imgWidthPt = aspect.width * scale;
+        imgHeightPt = aspect.height * scale;
+      }
+      coverChildren.push(
+        new Paragraph({
+          alignment: AlignmentType.CENTER,
+          children: [
+            new ImageRun({
+              type,
+              data,
+              transformation: {
+                width: Math.round(imgWidthPt),
+                height: Math.round(imgHeightPt),
+              },
+            }),
+          ],
+          spacing: { after: 0 },
+        }),
+      );
+    }
+  }
 
   const defaultRun: {
     font: string;
@@ -422,6 +495,7 @@ export async function exportDocx(
     if (color) defaultRun.color = color;
   }
 
+  const pageSize = { width: twipsFromPx(width), height: twipsFromPx(height) };
   const document = new Document({
     numbering: { config: NUMBERING_CONFIG },
     ...(options.backgroundColor
@@ -438,14 +512,27 @@ export async function exportDocx(
       },
     },
     sections: [
+      ...(coverChildren.length > 0
+        ? [
+            {
+              properties: {
+                page: {
+                  size: pageSize,
+                  margin: { top: 0, right: 0, bottom: 0, left: 0 },
+                },
+              },
+              children: coverChildren,
+            },
+          ]
+        : []),
       {
         properties: {
           page: {
-            size: { width: twipsFromPx(width), height: twipsFromPx(height) },
+            size: pageSize,
             margin: { top: margin, right: margin, bottom: margin, left: margin },
           },
         },
-        children,
+        children: contentChildren,
       },
     ],
   });

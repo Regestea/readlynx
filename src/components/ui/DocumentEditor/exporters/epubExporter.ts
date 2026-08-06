@@ -111,6 +111,7 @@ export function exportEpub(
   editor: LexicalEditor,
   metadata: EpubMetadata = {},
   options: ExportThemeOptions = {},
+  coverImage?: string,
 ): EpubFile[] {
   const title = metadata.title?.trim() || "Untitled Book";
   const author = metadata.author?.trim() || "Unknown Author";
@@ -141,11 +142,17 @@ export function exportEpub(
 
   const chapterHrefs = chapters.map((_, i) => `chapter-${i + 1}.xhtml`);
 
+  const hasCover = Boolean(coverImage);
+  const coverHref = "cover.xhtml";
+
   const manifest = [
     `    <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>`,
     `    <item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>`,
     `    <item id="css" href="style.css" media-type="text/css"/>`,
     `    <item id="highlight-css" href="highlight.css" media-type="text/css"/>`,
+    ...(hasCover
+      ? [`    <item id="cover" href="${coverHref}" media-type="application/xhtml+xml" properties="cover-image"/>`]
+      : []),
     ...chapterHrefs.map(
       (href) =>
         `    <item id="${href.replace(".xhtml", "")}" href="${href}" media-type="application/xhtml+xml"/>`,
@@ -154,6 +161,7 @@ export function exportEpub(
 
   const spine = [
     `    <itemref idref="nav"/>`,
+    ...(hasCover ? [`    <itemref idref="cover"/>`] : []),
     ...chapterHrefs.map((href) => `    <itemref idref="${href.replace(".xhtml", "")}"/>`),
   ].join("\n");
 
@@ -230,6 +238,28 @@ ${navPoints}
   </navMap>
 </ncx>`,
   });
+
+  if (hasCover && coverImage) {
+    files.push({
+      path: `OEBPS/${coverHref}`,
+      mime: "application/xhtml+xml",
+      content: `${XML_DECL}
+<!DOCTYPE html>
+<html xmlns="${NS_XHTML}" xmlns:epub="${NS_EPUB}" xml:lang="${xmlEscape(language)}" lang="${xmlEscape(language)}">
+  <head>
+    <title>${xmlEscape(title)}</title>
+    <style>
+      html, body { margin: 0; padding: 0; width: 100%; height: 100%; }
+      body { display: flex; align-items: center; justify-content: center; overflow: hidden; }
+      img { width: 100%; height: 100%; object-fit: cover; }
+    </style>
+  </head>
+  <body>
+    <img src="${xmlEscape(coverImage)}" alt="Cover" />
+  </body>
+</html>`,
+    });
+  }
 
   chapters.forEach((chapter, i) => {
     const dir = chapterDirection(chapter);
