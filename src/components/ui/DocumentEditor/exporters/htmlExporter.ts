@@ -6,7 +6,10 @@ import { scaleHtmlFontSizes, scaledBaseFontSize } from "../../../../export/fontS
 import { katexCssForExport } from "../../../../export/katexExportCss";
 
 export function exportHtml(editor: LexicalEditor, options: ExportThemeOptions = {}, coverImage?: string): string {
-  const body = scaleHtmlFontSizes($generateHtmlFromNodes(editor), options.fontSizeScalePct);
+  const body = scaleHtmlFontSizes(
+    editor.read(() => $generateHtmlFromNodes(editor)),
+    options.fontSizeScalePct,
+  );
   const m = options.margins ?? uniformMargins(25);
   const baseFontSize = scaledBaseFontSize(options.fontSizeScalePct, 16);
 
