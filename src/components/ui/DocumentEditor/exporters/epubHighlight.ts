@@ -3,7 +3,6 @@ import powershell from "highlight.js/lib/languages/powershell";
 import dockerfile from "highlight.js/lib/languages/dockerfile";
 import http from "highlight.js/lib/languages/http";
 import scala from "highlight.js/lib/languages/scala";
-import githubDarkCss from "highlight.js/styles/github-dark.min.css?raw";
 
 /*
  * Syntax highlighting for EPUB export.
@@ -13,7 +12,8 @@ import githubDarkCss from "highlight.js/styles/github-dark.min.css?raw";
  * text and `<br>` line breaks. This module post-processes that HTML: every
  * `<pre>` is re-emitted as `<pre><code class="language-… hljs">…</code></pre>`
  * with Highlight.js token spans, so the EPUB contains only static XHTML and
- * the bundled theme CSS — no runtime JavaScript.
+ * the bundled theme CSS — no runtime JavaScript. PDF export reuses the same
+ * highlighting so the two formats share one code-block lexer.
  */
 
 hljs.registerLanguage("powershell", powershell);
@@ -21,7 +21,7 @@ hljs.registerLanguage("dockerfile", dockerfile);
 hljs.registerLanguage("http", http);
 hljs.registerLanguage("scala", scala);
 
-const PRE_OPEN_RE = /<pre\b[^>]*>/gi;
+const PRE_OPEN_RE = /<pre\b(?=[^>]*(?:spellcheck|data-language))[^>]*>/gi;
 const PRE_CLOSE_RE = /<\/pre>/i;
 const BR_RE = /<br\s*\/?>/gi;
 const ANY_TAG_RE = /<[^>]+>/g;
@@ -115,11 +115,13 @@ export function highlightBodyCode(bodyHtml: string): string {
 }
 
 /**
- * Highlight.js theme CSS for the book (GitHub Dark), plus small EPUB-safe
- * adjustments: wrapping instead of horizontal scroll, and keeping code
- * blocks on one page.
+ * Code-block surface adjustments shared by every code theme in the EPUB.
+ * The selected Highlight.js theme (see `codeThemeCss` in export/exportTheme)
+ * paints the `<code class="hljs">` background and tokens; these rules keep
+ * the blocks wrapping instead of scrolling, stay on one page and neutralise
+ * the generic `pre` styling from the book CSS.
  */
-export const HIGHLIGHT_THEME_CSS = `${githubDarkCss}
+export const EPUB_CODE_BLOCK_CSS = `
 pre {
   padding: 0;
   background: transparent;

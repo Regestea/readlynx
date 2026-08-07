@@ -5,7 +5,12 @@ import type { EpubFile, EpubMetadata, ExportThemeOptions } from "../types";
 import { uniformMargins } from "../constants";
 import { isRtlDominant } from "../utils/direction";
 import { scaleHtmlFontSizes, scaledBaseFontSize } from "../../../../export/fontScale";
-import { highlightBodyCode, HIGHLIGHT_THEME_CSS } from "./epubHighlight";
+import { highlightBodyCode, EPUB_CODE_BLOCK_CSS } from "./epubHighlight";
+import {
+  codeThemeCss,
+  documentPalette,
+  resolveDocumentMode,
+} from "../../../../export/exportTheme";
 import { katexCssForExport } from "../../../../export/katexExportCss";
 
 const XML_DECL = '<?xml version="1.0" encoding="UTF-8"?>';
@@ -19,6 +24,30 @@ function xmlEscape(value: string): string {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+}
+
+/**
+ * XHTML only permits the five predefined XML entities plus numeric character
+ * references. The DOM serializer emits a named `&nbsp;` for non-breaking
+ * spaces, and raw HTML blocks may carry `&copy;`, `&hellip;`, etc., which
+ * strict readers reject with "Entity 'nbsp' not defined". This rewrites every
+ * named entity into its numeric form (`&nbsp;` → `&#160;`).
+ */
+const XML_PREDEFINED_ENTITIES = new Set(["amp", "lt", "gt", "quot", "apos"]);
+const HTML_ENTITY_RE = /&(?:#(\d+)|#x([0-9a-fA-F]+)|([a-zA-Z][a-zA-Z0-9]+));/g;
+
+let entityProbe: HTMLTextAreaElement | null = null;
+
+function normalizeNamedEntities(html: string): string {
+  return html.replace(HTML_ENTITY_RE, (match, dec: string, hex: string, name: string): string => {
+    if (dec !== undefined || hex !== undefined) return match;
+    if (XML_PREDEFINED_ENTITIES.has(name)) return match;
+    entityProbe = entityProbe ?? document.createElement("textarea");
+    entityProbe.innerHTML = `&${name};`;
+    const decoded = entityProbe.value;
+    if (!decoded || decoded === `&${name};`) return `&amp;${name};`;
+    return `&#x${decoded.codePointAt(0)!.toString(16)};`;
+  });
 }
 
 function makeUuid(): string {
@@ -78,37 +107,54 @@ function chapterDirection(html: string): "rtl" | "ltr" {
   return isRtlDominant(doc.body.textContent ?? "") ? "rtl" : "ltr";
 }
 
+/** Book content CSS. Every colour reads a `--rl-*` variable emitted on `body`
+ *  by `bookCss()`, so the same sheet works for the light and dark templates
+ *  (and for custom colours whose luminance flips the mode). */
 const BOOK_CSS_BASE = `
-body { line-height: 1.6; margin: 0; }
 h1, h2, h3, h4, h5, h6 { line-height: 1.3; }
 p { margin: 0 0 0.9em; }
 ul, ol { margin: 0 0 0.9em; }
-blockquote { margin: 0.9em 0; padding: 0.2em 1em; border-inline-start: 3px solid #ccc; color: #555; }
-code { font-family: monospace; font-size: 0.9em; }
-pre { white-space: pre-wrap; background: #f4f2ec; padding: 0.8em; }
+blockquote { margin: 0.9em 0; padding: 0.2em 1em; border-inline-start: 3px solid var(--rl-quote-border); color: var(--rl-muted); }
+code { font-family: var(--rl-code-family, monospace); font-size: 0.9em; }
+pre { font-family: var(--rl-code-family, monospace); white-space: pre-wrap; margin: 0 0 0.9em; }
 table { border-collapse: collapse; margin: 0.9em 0; width: 100%; }
-th, td { border: 1px solid #bbb; padding: 0.3em 0.6em; text-align: start; }
-th { background: #eee; }
+th, td { border: 1px solid var(--rl-rule); padding: 0.3em 0.6em; text-align: start; }
+th { background: var(--rl-table-head); }
 img { max-width: 100%; }
-a { color: #7a4a21; }
-aside[data-callout-tone] { margin: 0.9em 0; padding: 0.5em 1em; background: #f0ede6; border-inline-start: 3px solid #8c6248; }
-section[data-block-kind="insight"] { margin: 0.9em 0; padding: 0.5em 1em; background: #f7f3ea; }
+a { color: var(--rl-accent); }
+aside[data-callout-tone] { margin: 0.9em 0; padding: 0.5em 1em; background: var(--rl-callout-bg); border-inline-start: 3px solid var(--rl-accent); }
+section[data-block-kind="insight"] { margin: 0.9em 0; padding: 0.5em 1em; background: var(--rl-block-bg); }
 `;
 
-/** Body CSS built from the export theme options (serif/white by default). */
+/** Body CSS built from the export theme options (light/white by default). */
 function bookCss(options: ExportThemeOptions = {}): string {
   const m = options.margins ?? uniformMargins(12.7);
   const baseFontSize = scaledBaseFontSize(options.fontSizeScalePct, 16);
+  const mode = resolveDocumentMode(options.template, options.backgroundColor);
+  const palette = documentPalette(mode);
+  const ink = options.textColor || palette["--rl-ink"];
+  const paper = options.backgroundColor || palette["--rl-paper"];
+  const paletteVars = [
+    ...Object.entries(palette)
+      .filter(([name]) => name !== "--rl-ink" && name !== "--rl-paper")
+      .map(([name, value]) => `${name}: ${value};`),
+    `--rl-ink: ${ink};`,
+    `--rl-paper: ${paper};`,
+    options.codeFontFamily ? `--rl-code-family: ${options.codeFontFamily};` : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
   const bodyProps = [
     options.fontFamily ? `font-family: ${options.fontFamily}` : "font-family: serif",
     ...(baseFontSize ? [`font-size: ${baseFontSize}`] : []),
-    ...(options.textColor ? [`color: ${options.textColor}`] : []),
-    ...(options.backgroundColor ? [`background-color: ${options.backgroundColor}`] : []),
+    `color: ${ink}`,
+    `background-color: ${paper}`,
     "line-height: 1.6",
     "margin: 0",
   ].join("; ");
   return `@page { margin: ${m.top}mm ${m.right}mm ${m.bottom}mm ${m.left}mm; }
-body { ${bodyProps}; }
+body { ${bodyProps} }
+body { ${paletteVars} }
 ${BOOK_CSS_BASE}
 ${katexCssForExport()}`;
 }
@@ -128,7 +174,9 @@ export function exportEpub(
     editor.read(() => $generateHtmlFromNodes(editor)),
     options.fontSizeScalePct,
   );
-  const chapters = splitChapters(selfCloseVoidElements(highlightBodyCode(bodyHtml)));
+  const chapters = splitChapters(
+    normalizeNamedEntities(selfCloseVoidElements(highlightBodyCode(bodyHtml))),
+  );
   const bookDir = chapterDirection(bodyHtml);
   const chapterTitles = chapters.map(
     (chapter, i) => extractFirstHeading(chapter) || (chapters.length > 1 ? `Chapter ${i + 1}` : title),
@@ -327,7 +375,8 @@ ${chapter}
   files.push({
     path: "OEBPS/highlight.css",
     mime: "text/css",
-    content: HIGHLIGHT_THEME_CSS,
+    content: `${codeThemeCss(options.codeTheme, resolveDocumentMode(options.template, options.backgroundColor))}
+${EPUB_CODE_BLOCK_CSS}`,
   });
 
   return files;
