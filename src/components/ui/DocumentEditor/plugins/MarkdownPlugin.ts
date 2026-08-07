@@ -486,6 +486,8 @@ const WEB_AUTOLINK: TextMatchTransformer = {
   type: "text-match",
   dependencies: [LinkNode],
   importRegExp: /<(https?:\/\/[^\s<>]+)>/,
+  regExp: /<(https?:\/\/[^\s<>]+)>/,
+  trigger: "<",
   replace(textNode, match) {
     const url = match[1];
     if (!url) return;
@@ -508,6 +510,8 @@ const EMAIL_AUTOLINK: TextMatchTransformer = {
   type: "text-match",
   dependencies: [LinkNode],
   importRegExp: /<([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})>/,
+  regExp: /<([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})>/,
+  trigger: "<",
   replace(textNode, match) {
     const email = match[1];
     if (!email) return;
