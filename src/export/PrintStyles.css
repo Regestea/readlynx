@@ -41,14 +41,23 @@ h1.rl-chapter-start {
 
 .pagedjs_page {
   /* theme defaults (overridable via `themeVariables()`) */
-  --rl-ink: #1f2430;
+  --rl-ink: #20242e;
   --rl-paper: #ffffff;
-  --rl-muted: #6b7280;
-  --rl-accent: #435542;
+  --rl-muted: #5d6673;
+  --rl-accent: #2f6b57;
   --rl-font-family: Georgia, "Times New Roman", serif;
   --rl-font-size: 15px;
   --rl-line-height: 1.65;
   --rl-code-family: Consolas, "Courier New", monospace;
+  --rl-rule: #d9dce1;
+  --rl-table-head: #eef0f3;
+  --rl-callout-bg: rgba(47, 107, 87, 0.08);
+  --rl-block-bg: #f7f8fa;
+  --rl-quote-border: rgba(47, 107, 87, 0.35);
+  --rl-code-bg: #f6f8fa;
+  --rl-code-border: #dde1e6;
+  --rl-code-ink: #24292f;
+  --rl-inline-code-bg: rgba(36, 41, 47, 0.08);
 
   break-inside: avoid;
   page-break-inside: avoid;
@@ -176,7 +185,7 @@ h1.rl-chapter-start {
 .pagedjs_page_content blockquote {
   margin: 0 0 0.9em;
   padding: 0.1em 1.2em;
-  border-left: 3px solid var(--rl-accent);
+  border-left: 3px solid var(--rl-quote-border);
   color: var(--rl-muted);
   font-style: italic;
   break-inside: avoid;
@@ -185,7 +194,7 @@ h1.rl-chapter-start {
 .pagedjs_page_content code {
   font-family: var(--rl-code-family);
   font-size: 0.85em;
-  background-color: rgba(120, 120, 120, 0.12);
+  background-color: var(--rl-inline-code-bg);
   border-radius: 3px;
   padding: 0.12em 0.3em;
 }
@@ -194,11 +203,12 @@ h1.rl-chapter-start {
   font-family: var(--rl-code-family);
   font-size: 0.8em;
   line-height: 1.5;
-  background-color: #f4f4f2;
-  border: 1px solid #e5e5e2;
+  background-color: var(--rl-code-bg);
+  border: 1px solid var(--rl-code-border);
   border-radius: 6px;
   padding: 0.9em 1em;
   margin: 0 0 0.9em;
+  color: var(--rl-code-ink);
   white-space: pre-wrap;
   break-inside: avoid;
   page-break-inside: avoid;
@@ -209,6 +219,17 @@ h1.rl-chapter-start {
   padding: 0;
 }
 
+/* Highlight.js code blocks (syntax-highlighted at export time). The token
+   colours come from the code theme stylesheet; the block surface stays on
+   the `<pre>` so the selected code theme reads as one coherent surface. */
+.pagedjs_page_content pre code.hljs {
+  display: block;
+  background: transparent;
+  padding: 0;
+  overflow-x: visible;
+  white-space: pre-wrap;
+}
+
 /* Callout block produced by CalloutNode's exportDOM */
 .pagedjs_page_content aside[data-callout-tone] {
   break-inside: avoid;
@@ -216,22 +237,19 @@ h1.rl-chapter-start {
   padding: 0.7em 1em;
   border-radius: 6px;
   border-left: 3px solid var(--rl-accent);
-  background-color: rgba(67, 85, 66, 0.08);
+  background-color: var(--rl-callout-bg);
 }
 
 .pagedjs_page_content aside[data-callout-tone="warning"] {
   border-left-color: #b9794c;
-  background-color: rgba(185, 121, 76, 0.1);
 }
 
 .pagedjs_page_content aside[data-callout-tone="error"] {
-  border-left-color: #a63d2f;
-  background-color: rgba(166, 61, 47, 0.08);
+  border-left-color: #cf5b47;
 }
 
 .pagedjs_page_content aside[data-callout-tone="success"] {
   border-left-color: #5b6b50;
-  background-color: rgba(91, 107, 80, 0.1);
 }
 
 /* Custom block produced by CustomBlockNode's exportDOM */
@@ -239,17 +257,12 @@ h1.rl-chapter-start {
   break-inside: avoid;
   margin: 0 0 0.9em;
   padding: 0.7em 1em;
-  border: 1px solid #e0e0dc;
+  border: 1px solid var(--rl-rule);
   border-radius: 6px;
-  background-color: #fafaf8;
-}
-
-.pagedjs_page_content section[data-block-kind="spoiler"] {
-  background-color: #efe9e1;
+  background-color: var(--rl-block-bg);
 }
 
 .pagedjs_page_content section[data-block-kind="insight"] {
-  background-color: #edf2e9;
   border-left: 3px solid var(--rl-accent);
 }
 
@@ -268,14 +281,14 @@ h1.rl-chapter-start {
 
 .pagedjs_page_content th,
 .pagedjs_page_content td {
-  border: 1px solid #d8d8d4;
+  border: 1px solid var(--rl-rule);
   padding: 0.4em 0.6em;
   text-align: left;
   vertical-align: top;
 }
 
 .pagedjs_page_content th {
-  background-color: #f1f1ee;
+  background-color: var(--rl-table-head);
   font-weight: 700;
 }
 
@@ -306,7 +319,7 @@ h1.rl-chapter-start {
 
 .pagedjs_page_content hr {
   border: none;
-  border-top: 1px solid #d8d8d4;
+  border-top: 1px solid var(--rl-rule);
   margin: 1.4em auto;
   width: 40%;
 }
@@ -341,6 +354,6 @@ h1.rl-chapter-start {
 .pagedjs_footnote_area {
   margin-top: 0.6em;
   padding-top: 0.4em;
-  border-top: 1px solid #d8d8d4;
+  border-top: 1px solid var(--rl-rule);
   font-size: 0.85em;
 }

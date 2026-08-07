@@ -1,5 +1,6 @@
 import type { LexicalEditor } from "lexical";
 import type { PageMargins } from "./constants";
+import type { ExportCodeThemeId, ExportTemplateId } from "../../../export/exportTheme";
 
 /** Result of an EPUB export: the container files of an EPUB 3 book (unzipped). */
 export interface EpubFile {
@@ -64,6 +65,12 @@ export interface ExportThemeOptions {
   backgroundColor?: string;
   /** Per-side page margins in millimeters. */
   margins?: PageMargins;
+  /** Document look: none (plain), or a modern light/dark template. */
+  template?: ExportTemplateId;
+  /** Syntax highlight theme for code blocks (auto follows the document mode). */
+  codeTheme?: ExportCodeThemeId;
+  /** Monospace font family for code blocks ("" = default). */
+  codeFontFamily?: string;
 }
 
 export interface ToolbarState {

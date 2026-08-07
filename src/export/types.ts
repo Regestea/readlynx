@@ -1,5 +1,6 @@
 import type { LexicalEditor } from "lexical";
 import type { PageFormat, PageMargins } from "../components/ui/DocumentEditor/constants";
+import type { ExportCodeThemeId, ExportTemplateId } from "./exportTheme";
 
 /** Options that drive the Paged.js layout for preview and PDF export. */
 export interface PdfExportOptions {
@@ -15,6 +16,12 @@ export interface PdfExportOptions {
   textColor?: string;
   /** Page / background colour, hex. */
   backgroundColor?: string;
+  /** Document look: none (plain), or a modern light/dark template. */
+  template?: ExportTemplateId;
+  /** Syntax highlight theme for code blocks (auto follows the document mode). */
+  codeTheme?: ExportCodeThemeId;
+  /** Monospace font family for code blocks ("" = default). */
+  codeFontFamily?: string;
   /** Print a centred page number on every page. */
   showPageNumbers?: boolean;
   /** Start every `h1` on a new page. */

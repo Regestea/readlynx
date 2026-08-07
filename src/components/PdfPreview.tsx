@@ -3,6 +3,8 @@ import type { LexicalEditor } from "lexical";
 import { toHtml } from "../export/LexicalToHtml";
 import { PaginationService, buildPrintCss, themeVariables } from "../export/PaginationService";
 import { scaleHtmlFontSizes } from "../export/fontScale";
+import { codeThemeCss, resolveDocumentMode } from "../export/exportTheme";
+import { highlightBodyCode } from "../components/ui/DocumentEditor/exporters/epubHighlight";
 import type { PdfExportOptions } from "../export/types";
 import printCss from "../export/PrintStyles.css?raw";
 import styles from "./PdfPreview.module.css";
@@ -76,13 +78,20 @@ export function PdfPreview({ editor, options, onPageCountChange, className }: Pd
         setError(null);
 
         try {
-          const bodyHtml = scaleHtmlFontSizes(
-            toHtml(editor, { chapterBreaks: options.chapterBreaks }),
-            options.fontSizeScalePct,
+          const bodyHtml = highlightBodyCode(
+            scaleHtmlFontSizes(toHtml(editor, { chapterBreaks: options.chapterBreaks }), options.fontSizeScalePct),
           );
           const result = await service.paginate(
             bodyHtml,
-            [printCss, themeVariables(options), buildPrintCss(options)],
+            [
+              printCss,
+              themeVariables(options),
+              buildPrintCss(options),
+              codeThemeCss(
+                options.codeTheme,
+                resolveDocumentMode(options.template, options.backgroundColor),
+              ),
+            ],
             container,
           );
           if (cancelled) {

@@ -3,6 +3,11 @@ import { Previewer } from "pagedjs";
 import { PAGE_FORMATS } from "../components/ui/DocumentEditor/constants";
 import { fontScaleFactor } from "./fontScale";
 import type { PdfExportOptions } from "./types";
+import {
+  codeBlockPalette,
+  documentPalette,
+  resolveDocumentMode,
+} from "./exportTheme";
 
 /**
  * Typescript-safe wrapper around the Paged.js `Previewer`.
@@ -224,12 +229,29 @@ export function blobToDataUrl(blob: Blob): Promise<string> {
 
 /** Build the theme override block used by PrintStyles.css (page-scoped). */
 export function themeVariables(options: PdfExportOptions): string {
+  // Effective surface mode drives every derived palette value (muted, accent,
+  // rules, code surface…) so both the ready-made templates and arbitrary
+  // custom colours produce a coherent light or dark page.
+  const mode = resolveDocumentMode(options.template, options.backgroundColor);
+  const palette = documentPalette(mode);
+
   const decls: string[] = [];
+
+  // Emit BOTH the CSS variables (headings etc. read `var(--rl-ink)`) and a
+  // literal declaration on the page itself. The literal value wins over the
+  // defaults in PrintStyles.css even if Paged.js re-inserts the sheets in an
+  // unexpected order; the variable keeps inner rules aligned.
+  decls.push(
+    `--rl-ink: ${palette["--rl-ink"]};`,
+    `color: ${palette["--rl-ink"]};`,
+    `--rl-paper: ${palette["--rl-paper"]};`,
+    `background-color: ${palette["--rl-paper"]};`,
+  );
+  for (const [name, value] of Object.entries(palette)) {
+    if (name === "--rl-ink" || name === "--rl-paper") continue;
+    decls.push(`${name}: ${value};`);
+  }
   if (options.textColor) {
-    // Emit BOTH the CSS variable (headings etc. read `var(--rl-ink)`) and a
-    // literal declaration on the page itself. The literal value wins over the
-    // `#ffffff` default in PrintStyles.css even if Paged.js re-inserts the
-    // sheets in an unexpected order; the variable keeps inner rules aligned.
     decls.push(`--rl-ink: ${options.textColor};`, `color: ${options.textColor};`);
   }
   if (options.backgroundColor) {
@@ -237,6 +259,18 @@ export function themeVariables(options: PdfExportOptions): string {
       `--rl-paper: ${options.backgroundColor};`,
       `background-color: ${options.backgroundColor};`,
     );
+  }
+
+  // Code block surface + font.
+  const code = codeBlockPalette(options.codeTheme, mode);
+  decls.push(
+    `--rl-code-bg: ${code.bg};`,
+    `--rl-code-border: ${code.border};`,
+    `--rl-code-ink: ${code.ink};`,
+    `--rl-inline-code-bg: ${code.inlineBg};`,
+  );
+  if (options.codeFontFamily) {
+    decls.push(`--rl-code-family: ${options.codeFontFamily};`);
   }
   if (options.fontFamily) {
     decls.push(`--rl-font-family: ${options.fontFamily};`, `font-family: ${options.fontFamily};`);

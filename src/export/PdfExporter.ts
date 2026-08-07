@@ -12,6 +12,8 @@ import {
 } from "./PaginationService";
 import { scaleHtmlFontSizes } from "./fontScale";
 import { katexCssForExport } from "./katexExportCss";
+import { codeThemeCss, resolveDocumentMode } from "./exportTheme";
+import { highlightBodyCode } from "../components/ui/DocumentEditor/exporters/epubHighlight";
 import printCss from "./PrintStyles.css?raw";
 import { DEFAULT_PDF_EXPORT_OPTIONS } from "./types";
 import type { PagedDocument, PdfExportOptions } from "./types";
@@ -76,7 +78,9 @@ export async function buildPdfDocument(
 ): Promise<PagedDocument> {
   const opts: PdfExportOptions = { ...DEFAULT_PDF_EXPORT_OPTIONS, ...options };
 
-  const contentHtml = scaleHtmlFontSizes(toHtml(editor, { chapterBreaks: opts.chapterBreaks }), opts.fontSizeScalePct);
+  const contentHtml = highlightBodyCode(
+    scaleHtmlFontSizes(toHtml(editor, { chapterBreaks: opts.chapterBreaks }), opts.fontSizeScalePct),
+  );
   const m = opts.margins;
   const coverImage = opts.coverImage ? await fitCoverForExport(opts.coverImage) : undefined;
   const coverHtml = coverImage
@@ -84,12 +88,14 @@ export async function buildPdfDocument(
     : "";
   const bodyHtml = `${coverHtml}${contentHtml}`;
   const katexCss = katexCssForExport();
+  const codeCss = codeThemeCss(opts.codeTheme, resolveDocumentMode(opts.template, opts.backgroundColor));
   const service = new PaginationService();
   const result = await service.paginate(bodyHtml, [
     printCss,
     katexCss,
     themeVariables(opts),
     buildPrintCss(opts),
+    codeCss,
   ]);
 
   try {
@@ -104,7 +110,7 @@ export async function buildPdfDocument(
       themeCss: themeVariables(opts),
       fontFaces: collectFontFaces(),
       baseCss: printCss,
-      dynamicCss: `${buildPrintCss(opts)}\n${katexCss}`,
+      dynamicCss: `${buildPrintCss(opts)}\n${katexCss}\n${codeCss}`,
       pagedCss: collectPagedStyles(),
       rootVarsCss: collectRootVariables(),
       pageCount: result.pageCount,
