@@ -1,6 +1,11 @@
 import { useEffect } from "react";
 import type { ElementNode } from "lexical";
-import { $createParagraphNode, $createTextNode, $isParagraphNode } from "lexical";
+import {
+  $createLineBreakNode,
+  $createParagraphNode,
+  $createTextNode,
+  $isParagraphNode,
+} from "lexical";
 import {
   $convertFromMarkdownString,
   $convertToMarkdownString,
@@ -9,17 +14,19 @@ import {
   HEADING,
   isTableRowDivider,
   ORDERED_LIST,
-  QUOTE,
   registerMarkdownShortcuts,
   TEXT_FORMAT_TRANSFORMERS,
   TEXT_MATCH_TRANSFORMERS,
   UNORDERED_LIST,
   type ElementTransformer,
   type MultilineElementTransformer,
+  type TextFormatTransformer,
   type TextMatchTransformer,
   type Transformer,
 } from "@lexical/markdown";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
+import { $createQuoteNode, $isQuoteNode, QuoteNode } from "@lexical/rich-text";
+import { $createLinkNode, $isLinkNode, LinkNode } from "@lexical/link";
 import {
   $createTableNodeWithDimensions,
   $isTableCellNode,
@@ -58,11 +65,6 @@ import {
   sanitizeHtmlBlock,
 } from "../nodes/HtmlBlockNode";
 import type { CalloutTone, CustomBlockKind } from "../types";
-
-const TEXT_ONLY_TRANSFORMERS: Transformer[] = [
-  ...TEXT_FORMAT_TRANSFORMERS,
-  ...TEXT_MATCH_TRANSFORMERS,
-];
 
 /* ---------- GFM table ---------- */
 
@@ -144,7 +146,7 @@ const TABLE: MultilineElementTransformer = {
 
 /* ---------- Image ---------- */
 
-const IMAGE_MD_RE = /^!\[([^\]]*)\]\(([^)\s]+)\)/;
+const IMAGE_MD_RE = /^!\[([^\]]*)\]\(([^)\s]+)(?:[ \t]+"([^"]*)")?[ \t]*\)/;
 
 const IMAGE: ElementTransformer = {
   type: "element",
@@ -154,15 +156,17 @@ const IMAGE: ElementTransformer = {
     const textContent = children.map((child) => child.getTextContent()).join("");
     const match = textContent.match(IMAGE_MD_RE);
     if (!match) return false;
-    const [, altText, src] = match;
+    const [, altText, src, title] = match;
     const rest = textContent.slice(match[0].length);
     parentNode.clear();
-    parentNode.append($createImageNode({ src, altText }));
+    parentNode.append($createImageNode({ src, altText, caption: title ?? "" }));
     if (rest) parentNode.append($createTextNode(rest));
   },
-  export(node) {
+export(node) {
     if (!$isImageNode(node)) return null;
-    return `![${node.getAltText()}](${node.getSrc()})`;
+    const caption = node.getCaption()?.trim();
+    const title = caption && caption.length > 0 ? ` "${caption.replace(/"/g, '\\"')}"` : "";
+    return `![${node.getAltText()}](${node.getSrc()}${title})`;
   },
 };
 
@@ -185,7 +189,17 @@ const HR: ElementTransformer = {
 /* ---------- Callout ---------- */
 
 const CALLOUT_RE = /^>\s*\[!([a-z]+)\]/i;
-const CALLOUT_TONES: CalloutTone[] = ["info", "success", "warning", "error"];
+/** GitHub alert names -> the closest built-in callout tone. */
+const ALERT_TONES: Record<string, CalloutTone> = {
+  note: "info",
+  info: "info",
+  tip: "success",
+  success: "success",
+  important: "warning",
+  warning: "warning",
+  caution: "error",
+  error: "error",
+};
 
 const CALLOUT: MultilineElementTransformer = {
   type: "multiline-element",
@@ -193,10 +207,10 @@ const CALLOUT: MultilineElementTransformer = {
   regExpStart: /^>\s*\[!/,
   handleImportAfterStartMatch({ lines, startLineIndex, rootNode }) {
     const toneMatch = lines[startLineIndex].match(CALLOUT_RE);
-    if (!toneMatch || !CALLOUT_TONES.includes(toneMatch[1].toLowerCase() as CalloutTone)) {
-      return null;
-    }
-    const tone = toneMatch[1].toLowerCase() as CalloutTone;
+    if (!toneMatch) return null;
+    const tone = ALERT_TONES[toneMatch[1].toLowerCase()];
+    if (!tone) return null;
+    const label = toneMatch[1].toUpperCase();
     let i = startLineIndex;
     const content: string[] = [];
     const firstLine = lines[startLineIndex].replace(CALLOUT_RE, "").trim();
@@ -206,7 +220,7 @@ const CALLOUT: MultilineElementTransformer = {
       content.push(lines[i].replace(/^>\s?/, ""));
       i += 1;
     }
-    const callout = $createCalloutNode(tone);
+    const callout = $createCalloutNode(tone, label);
     for (const line of content) {
       const paragraph = $createParagraphNode();
       $convertFromMarkdownString(line, TEXT_ONLY_TRANSFORMERS, paragraph);
@@ -223,7 +237,7 @@ const CALLOUT: MultilineElementTransformer = {
     if (!$isCalloutNode(node)) return null;
     const content = traverseChildren(node);
     const lines = content.split("\n");
-    const first = `> [!${node.getTone()}]${lines[0] ? ` ${lines[0]}` : ""}`;
+    const first = `> [!${node.getLabel()}]${lines[0] ? ` ${lines[0]}` : ""}`;
     const rest = lines
       .slice(1)
       .map((line) => (line ? `> ${line}` : ">"))
@@ -338,7 +352,7 @@ const INLINE_EQUATION: TextMatchTransformer = {
 /* ---------- Raw HTML block ---------- */
 
 const HTML_BLOCK_TAG_RE =
-  /^(!--|div|p|section|article|aside|header|footer|main|nav|table|thead|tbody|tfoot|tr|td|th|ul|ol|li|dl|dt|dd|figure|figcaption|blockquote|pre|iframe|video|audio|canvas|details|summary|h[1-6]|hr|form|fieldset)\b/i;
+  /^(!--|div|p|section|article|aside|header|footer|main|nav|table|thead|tbody|tfoot|tr|td|th|ul|ol|li|dl|dt|dd|figure|figcaption|blockquote|pre|iframe|video|audio|canvas|details|summary|h[1-6]|hr|br|form|fieldset)\b/i;
 
 export const HTML_BLOCK_START_RE = /^\s{0,3}<(?:[/!]?)(?:[a-zA-Z][\w-]*|--|!)/;
 
@@ -348,7 +362,24 @@ const HTML_BLOCK: MultilineElementTransformer = {
   regExpStart: HTML_BLOCK_START_RE,
   handleImportAfterStartMatch({ lines, startLineIndex, rootNode }) {
     const first = lines[startLineIndex].trimStart();
-    if (first.startsWith("</") || !HTML_BLOCK_TAG_RE.test(first.slice(1))) {
+    // HTML comment blocks.
+    if (/^<!--/.test(first)) {
+      const htmlLines: string[] = [];
+      let i = startLineIndex;
+      while (i < lines.length) {
+        const l = lines[i];
+        if (l.trim() === "") break;
+        htmlLines.push(l);
+        i += 1;
+      }
+      const html = sanitizeHtmlBlock(htmlLines.join("\n"));
+      if (!html.trim()) return null;
+      rootNode.append($createHtmlBlockNode(html));
+      return [true, i - 1];
+    }
+    const closing = first.startsWith("</");
+    const tagMatch = (closing ? first.slice(2) : first.slice(1)).match(/^([a-zA-Z][\w:-]*)\b/);
+    if (!tagMatch || !HTML_BLOCK_TAG_RE.test(tagMatch[1])) {
       return null;
     }
     const htmlLines: string[] = [];
@@ -372,7 +403,155 @@ const HTML_BLOCK: MultilineElementTransformer = {
   },
 };
 
+/* ---------- Nested blockquote ---------- */
+
+const QUOTE_PREFIX_RE = /^[ \t]{0,3}(?:>[ \t]?)+/;
+
+interface QuoteItem {
+  depth: number;
+  text: string;
+}
+
+/** Builds nested QuoteNodes from prefix-counted lines (outline-style). */
+function $buildQuoteTree(items: QuoteItem[]): QuoteNode | null {
+  const root = $createQuoteNode();
+  const stack: { depth: number; quote: QuoteNode }[] = [{ depth: 0, quote: root }];
+  let paragraph: { quote: QuoteNode; node: ReturnType<typeof $createParagraphNode> } | null =
+    null;
+
+  for (const item of items) {
+    while (stack.length > 1 && stack[stack.length - 1].depth >= item.depth) {
+      stack.pop();
+    }
+    let top = stack[stack.length - 1];
+    if (top.depth < item.depth) {
+      const nested = $createQuoteNode();
+      top.quote.append(nested);
+      stack.push({ depth: item.depth, quote: nested });
+      top = stack[stack.length - 1];
+    }
+    if (item.text.trim() === "") {
+      paragraph = null;
+      continue;
+    }
+    if (paragraph === null || paragraph.quote !== top.quote) {
+      paragraph = { quote: top.quote, node: $createParagraphNode() };
+      top.quote.append(paragraph.node);
+    } else {
+      paragraph.node.append($createLineBreakNode());
+    }
+    $convertFromMarkdownString(item.text, TEXT_ONLY_TRANSFORMERS, paragraph.node);
+  }
+
+  return root.getChildrenSize() === 0 ? null : root;
+}
+
+const QUOTE_NESTED: MultilineElementTransformer = {
+  type: "multiline-element",
+  dependencies: [QuoteNode],
+  regExpStart: /^[ \t]{0,3}>/,
+  handleImportAfterStartMatch({ lines, startLineIndex, rootNode }) {
+    const items: QuoteItem[] = [];
+    let i = startLineIndex;
+    while (i < lines.length) {
+      const match = lines[i].match(QUOTE_PREFIX_RE);
+      if (!match) break;
+      const depth = (match[0].match(/>/g) ?? []).length;
+      items.push({ depth, text: lines[i].slice(match[0].length) });
+      i += 1;
+    }
+    if (items.length === 0) return null;
+    const quote = $buildQuoteTree(items);
+    if (quote === null) return null;
+    rootNode.append(quote);
+    return [true, i - 1];
+  },
+  replace() {
+    return false;
+  },
+  export(node, traverseChildren) {
+    if (!$isQuoteNode(node)) return null;
+    const content = traverseChildren(node);
+    if (content === "") return null;
+    return content
+      .split("\n")
+      .map((line) => (line ? `> ${line}` : ">"))
+      .join("\n");
+  },
+};
+
+/* ---------- Autolinks (<https://…>, <mail@…>) ---------- */
+
+const WEB_AUTOLINK: TextMatchTransformer = {
+  type: "text-match",
+  dependencies: [LinkNode],
+  importRegExp: /<(https?:\/\/[^\s<>]+)>/,
+  replace(textNode, match) {
+    const url = match[1];
+    if (!url) return;
+    const linkNode = $createLinkNode(url);
+    const textNode_ = $createTextNode(url);
+    linkNode.append(textNode_);
+    textNode.replace(linkNode);
+    return textNode_;
+  },
+  export(node) {
+    if (!$isLinkNode(node)) return null;
+    const text = node.getTextContent();
+    const url = node.getURL();
+    if (!text || text !== url) return null;
+    return `<${text}>`;
+  },
+};
+
+const EMAIL_AUTOLINK: TextMatchTransformer = {
+  type: "text-match",
+  dependencies: [LinkNode],
+  importRegExp: /<([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})>/,
+  replace(textNode, match) {
+    const email = match[1];
+    if (!email) return;
+    const linkNode = $createLinkNode(`mailto:${email}`);
+    const textNode_ = $createTextNode(email);
+    linkNode.append(textNode_);
+    textNode.replace(linkNode);
+    return textNode_;
+  },
+  export(node) {
+    if (!$isLinkNode(node)) return null;
+    const text = node.getTextContent();
+    if (!text || node.getURL() !== `mailto:${text}`) return null;
+    return `<${text}>`;
+  },
+};
+
+/* ---------- Subscript / superscript ---------- */
+
+const SUBSCRIPT: TextFormatTransformer = {
+  format: ["subscript"],
+  tag: "~",
+  type: "text-format",
+};
+
+const SUPERSCRIPT: TextFormatTransformer = {
+  format: ["superscript"],
+  tag: "^",
+  type: "text-format",
+};
+
 /* ---------- Public helpers ---------- */
+
+/** Inline-only transformers used for content nested inside callouts, custom
+ *  blocks and blockquotes (block constructs don't apply there). */
+const TEXT_ONLY_TRANSFORMERS: Transformer[] = [
+  ...TEXT_FORMAT_TRANSFORMERS,
+  SUBSCRIPT,
+  SUPERSCRIPT,
+  INLINE_EQUATION,
+  WEB_AUTOLINK,
+  EMAIL_AUTOLINK,
+  ...TEXT_MATCH_TRANSFORMERS,
+];
 
 export const mdTransformers: Transformer[] = [
   BLOCK_EQUATION,
@@ -383,12 +562,16 @@ export const mdTransformers: Transformer[] = [
   CALLOUT,
   CUSTOM_BLOCK,
   HEADING,
-  QUOTE,
+  QUOTE_NESTED,
   CHECK_LIST,
   UNORDERED_LIST,
   ORDERED_LIST,
   CODE,
   ...TEXT_FORMAT_TRANSFORMERS,
+  SUBSCRIPT,
+  SUPERSCRIPT,
+  WEB_AUTOLINK,
+  EMAIL_AUTOLINK,
   ...TEXT_MATCH_TRANSFORMERS,
   INLINE_EQUATION,
 ];

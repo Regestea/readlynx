@@ -16,6 +16,7 @@ import {
 } from "lexical";
 import { $generateNodesFromMarkdownString } from "@lexical/markdown";
 import { $exportMarkdownString, mdTransformers } from "./MarkdownPlugin";
+import { $isImageNode } from "../nodes/ImageNode";
 
 /**
  * Typing the block-level Markdown constructs that `@lexical/markdown` only
@@ -99,6 +100,14 @@ function normalizeForCompare(text: string): string {
  * line typed as `$$…$$` must compare against the multi-line export.
  */
 function exportCompareSource(type: string, source: string): string {
+  if (type === "callout") {
+    const stripQuote = (text: string) =>
+      text
+        .split(/\r?\n/)
+        .map((line) => line.replace(/^\s{0,3}>\s?/, ""))
+        .join(" ");
+    return stripQuote(normalizeForCompare(source));
+  }
   if (type !== "equation") return normalizeForCompare(source);
   const lines = source.split(/\r?\n/).map((line) => line.trim());
   if (lines.length === 1) {
@@ -125,7 +134,15 @@ function $parseSingleBlock(source: string): LexicalNode | null {
   const nodes = $generateNodesFromMarkdownString(source, mdTransformers);
   if (nodes.length !== 1) return null;
   const node = nodes[0];
-  if ($isParagraphNode(node)) return null;
+  if ($isParagraphNode(node)) {
+    // A bare image line parses to a paragraph holding only inline image
+    // decorators. That is still a conversion (the raw `![alt](src)` text
+    // disappears), so keep the paragraph itself.
+    const children = node.getChildren();
+    if (children.length === 0 || children.some((child) => !$isImageNode(child))) {
+      return null;
+    }
+  }
 
   const type = node.getType();
   // Empty-output blocks only count when they are a by-design marker or a bare

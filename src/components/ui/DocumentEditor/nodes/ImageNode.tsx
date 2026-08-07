@@ -196,6 +196,10 @@ export class ImageNode extends DecoratorNode<JSX.Element> {
   getAltText(): string {
     return this.__altText;
   }
+
+  getCaption(): string {
+    return this.__caption;
+  }
 }
 
 export function $isImageNode(node: LexicalNode | null | undefined): node is ImageNode {
