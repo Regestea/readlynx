@@ -11,6 +11,7 @@ import "prismjs/components/prism-toml";
 import "prismjs/components/prism-jsx";
 import "prismjs/components/prism-tsx";
 import "prismjs/components/prism-kotlin";
+import "prismjs/components/prism-csharp";
 import "prismjs/components/prism-docker";
 import "prismjs/components/prism-git";
 import "prismjs/components/prism-graphql";
