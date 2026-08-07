@@ -186,6 +186,19 @@
   margin-top: var(--space-2);
 }
 
+/* ---------- Code block fields ---------- */
+
+.codeField {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.codeFieldLabel {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+}
+
 /* ---------- Swatches ---------- */
 
 .swatchRow {

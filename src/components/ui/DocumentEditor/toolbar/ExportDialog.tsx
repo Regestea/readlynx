@@ -7,6 +7,12 @@ import { PdfPreview } from "../../../PdfPreview";
 import { EpubViewer } from "../../../EpubViewer/EpubViewer";
 import type { PdfExportOptions } from "../../../../export/types";
 import type { ExportThemeOptions } from "../types";
+import {
+  CODE_FONT_OPTIONS,
+  EXPORT_CODE_THEME_OPTIONS,
+  EXPORT_TEMPLATES,
+} from "../../../../export/exportTheme";
+import type { ExportCodeThemeId, ExportTemplateId } from "../../../../export/exportTheme";
 import { exportHtml } from "../exporters/htmlExporter";
 import { exportEpub, zipEpubFiles } from "../exporters/epubExporter";
 import { Button } from "../../Button/Button";
@@ -31,6 +37,12 @@ export interface ExportSettings {
   showPageNumbers: boolean;
   /** PDF-only: start every H1 on a new page. */
   chapterBreaks: boolean;
+  /** PDF/EPUB-only: document look (none / modern light / modern dark). */
+  template: ExportTemplateId;
+  /** PDF/EPUB-only: code block highlight theme. */
+  codeTheme: ExportCodeThemeId;
+  /** PDF/EPUB-only: monospace font for code blocks ("" = default). */
+  codeFontFamily: string;
 }
 
 const DEFAULT_SETTINGS: ExportSettings = {
@@ -45,6 +57,9 @@ const DEFAULT_SETTINGS: ExportSettings = {
   pageFormat: "a4",
   showPageNumbers: true,
   chapterBreaks: true,
+  template: "none",
+  codeTheme: "auto",
+  codeFontFamily: "",
 };
 
 const FORMATS: { value: ExportFormat; label: string; icon: React.ReactNode }[] = [
@@ -54,8 +69,8 @@ const FORMATS: { value: ExportFormat; label: string; icon: React.ReactNode }[] =
   { value: "epub", label: "EPUB", icon: <FileType2 size={14} strokeWidth={1.8} aria-hidden="true" /> },
 ];
 
-interface Template {
-  id: string;
+interface TemplateChip {
+  id: ExportTemplateId;
   name: string;
   desc: string;
   textColor: string;
@@ -64,39 +79,24 @@ interface Template {
   marginMm: number;
 }
 
-const TEMPLATES: Template[] = [
+/** "None" keeps the plain look: no colours forced, default margins. */
+const TEMPLATES: TemplateChip[] = [
   {
-    id: "classic",
-    name: "Classic",
-    desc: "Serif on warm paper",
-    textColor: "#3a2f27",
-    backgroundColor: "#faf6ef",
-    marginMm: 12.7,
+    id: "none",
+    name: "None",
+    desc: "Plain look",
+    textColor: "",
+    backgroundColor: "",
+    marginMm: 0,
   },
-  {
-    id: "modern",
-    name: "Modern",
-    desc: "Sans on clean white",
-    textColor: "#1c2433",
-    backgroundColor: "#ffffff",
-    marginMm: 8,
-  },
-  {
-    id: "editorial",
-    name: "Editorial",
-    desc: "High-contrast serif",
-    textColor: "#111827",
-    backgroundColor: "#f4f4f0",
-    marginMm: 20,
-  },
-  {
-    id: "draft",
-    name: "Draft",
-    desc: "Compact cool blue",
-    textColor: "#2b3448",
-    backgroundColor: "#eef3f9",
-    marginMm: 8,
-  },
+  ...EXPORT_TEMPLATES.map(({ id, name, desc, textColor, backgroundColor, marginMm }) => ({
+    id,
+    name,
+    desc,
+    textColor,
+    backgroundColor,
+    marginMm,
+  })),
 ];
 
 const PAPER_COLORS = [
@@ -195,6 +195,9 @@ export function ExportDialog({
         bottom: settings.marginBottomMm,
         left: settings.marginLeftMm,
       },
+      template: settings.template,
+      codeTheme: settings.codeTheme,
+      codeFontFamily: settings.codeFontFamily,
     }),
     [
       settings.textColor,
@@ -204,6 +207,9 @@ export function ExportDialog({
       settings.marginRightMm,
       settings.marginBottomMm,
       settings.marginLeftMm,
+      settings.template,
+      settings.codeTheme,
+      settings.codeFontFamily,
     ],
   );
 
@@ -263,44 +269,27 @@ export function ExportDialog({
       chapterBreaks: settings.chapterBreaks,
       inlineImages: true,
       coverImage: resolvedCover,
+      template: settings.template,
+      codeTheme: settings.codeTheme,
+      codeFontFamily: settings.codeFontFamily,
     }),
     [settings, resolvedCover],
   );
 
-  const applyTemplate = (template: Template) => {
+  const applyTemplate = (template: TemplateChip) => {
+    const marginMm =
+      template.marginMm || defaultMarginMm || DEFAULT_SETTINGS.marginTopMm;
     setSettings((prev) => ({
       ...prev,
+      template: template.id,
       textColor: template.textColor,
       backgroundColor: template.backgroundColor,
-      marginTopMm: template.marginMm,
-      marginRightMm: template.marginMm,
-      marginBottomMm: template.marginMm,
-      marginLeftMm: template.marginMm,
+      marginTopMm: marginMm,
+      marginRightMm: marginMm,
+      marginBottomMm: marginMm,
+      marginLeftMm: marginMm,
     }));
   };
-
-  const activeTemplate = (() => {
-    const allMarginsEqual =
-      settings.marginTopMm === 12.7 &&
-      settings.marginRightMm === 12.7 &&
-      settings.marginBottomMm === 12.7 &&
-      settings.marginLeftMm === 12.7;
-    if (
-      !settings.textColor &&
-      !settings.backgroundColor &&
-      allMarginsEqual
-    ) {
-      return "custom";
-    }
-    const matches = (template: Template) =>
-      template.textColor === settings.textColor &&
-      template.backgroundColor === settings.backgroundColor &&
-      template.marginMm === settings.marginTopMm &&
-      template.marginMm === settings.marginRightMm &&
-      template.marginMm === settings.marginBottomMm &&
-      template.marginMm === settings.marginLeftMm;
-    return TEMPLATES.find(matches)?.id ?? "custom";
-  })();
 
   const isCustomColor = (value: string, presets: readonly { value: string }[]): boolean =>
     value !== "" && !presets.some((preset) => preset.value.toLowerCase() === value.toLowerCase());
@@ -353,27 +342,73 @@ export function ExportDialog({
             </div>
           </div>
 
-          <div className={styles.section}>
-            <span className={styles.sectionLabel}>Ready-made templates</span>
-            <div className={styles.templates}>
-              {TEMPLATES.map((template) => (
-                <button
-                  key={template.id}
-                  type="button"
-                  className={`${styles.template} ${activeTemplate === template.id ? styles.templateActive : ""}`}
-                  onClick={() => applyTemplate(template)}
-                >
-                  <span className={styles.templateName}>
-                    {activeTemplate === template.id && (
-                      <Check size={13} className={styles.templateCheck} aria-hidden="true" />
-                    )}
-                    {template.name}
-                  </span>
-                  <span className={styles.templateDesc}>{template.desc}</span>
-                </button>
-              ))}
+          {(settings.format === "pdf" || settings.format === "epub") && (
+            <div className={styles.section}>
+              <span className={styles.sectionLabel}>Template</span>
+              <div className={styles.templates}>
+                {TEMPLATES.map((template) => (
+                  <button
+                    key={template.id}
+                    type="button"
+                    className={`${styles.template} ${settings.template === template.id ? styles.templateActive : ""}`}
+                    onClick={() => applyTemplate(template)}
+                  >
+                    <span className={styles.templateName}>
+                      {settings.template === template.id && (
+                        <Check size={13} className={styles.templateCheck} aria-hidden="true" />
+                      )}
+                      {template.name}
+                    </span>
+                    <span className={styles.templateDesc}>{template.desc}</span>
+                  </button>
+                ))}
+              </div>
+              <p className={styles.sectionHint}>
+                Dark and light templates style the whole document — headings, quotes, tables and
+                callouts — with colours tuned for easy reading.
+              </p>
             </div>
-          </div>
+          )}
+
+          {(settings.format === "pdf" || settings.format === "epub") && (
+            <div className={styles.section}>
+              <span className={styles.sectionLabel}>Code blocks</span>
+              <label className={styles.codeField}>
+                <span className={styles.codeFieldLabel}>Highlight theme</span>
+                <select
+                  className={styles.control}
+                  value={settings.codeTheme}
+                  title="Code block highlight theme"
+                  aria-label="Code block highlight theme"
+                  onChange={(event) =>
+                    patch({ codeTheme: event.target.value as ExportCodeThemeId })
+                  }
+                >
+                  {EXPORT_CODE_THEME_OPTIONS.map(({ value, label }) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className={styles.codeField}>
+                <span className={styles.codeFieldLabel}>Font</span>
+                <select
+                  className={styles.control}
+                  value={settings.codeFontFamily}
+                  title="Code block font"
+                  aria-label="Code block font"
+                  onChange={(event) => patch({ codeFontFamily: event.target.value })}
+                >
+                  {CODE_FONT_OPTIONS.map(({ value, label }) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          )}
 
           <div className={styles.section}>
             <span className={styles.sectionLabel}>Font size</span>
@@ -467,31 +502,33 @@ export function ExportDialog({
             </div>
           </div>
 
-          <div className={styles.section}>
-            <span className={styles.sectionLabel}>Margins (in)</span>
-            <div className={styles.marginGrid}>
-              {MARGIN_SIDES.map(({ key, label }) => (
-                <label key={key} className={styles.marginField}>
-                  <span className={styles.marginFieldLabel}>{label}</span>
-                  <input
-                    type="number"
-                    className={styles.control}
-                    min={INCH_MIN}
-                    max={INCH_MAX}
-                    step={0.1}
-                    value={toInches(settings[key])}
-                    title={`${label} margin in inches`}
-                    aria-label={`${label} margin`}
-                    onChange={(event) =>
-                      patch({
-                        [key]: toMm(clampInches(Number(event.target.value))),
-                      } as Partial<ExportSettings>)
-                    }
-                  />
-                </label>
-              ))}
+          {settings.format !== "epub" && (
+            <div className={styles.section}>
+              <span className={styles.sectionLabel}>Margins (in)</span>
+              <div className={styles.marginGrid}>
+                {MARGIN_SIDES.map(({ key, label }) => (
+                  <label key={key} className={styles.marginField}>
+                    <span className={styles.marginFieldLabel}>{label}</span>
+                    <input
+                      type="number"
+                      className={styles.control}
+                      min={INCH_MIN}
+                      max={INCH_MAX}
+                      step={0.1}
+                      value={toInches(settings[key])}
+                      title={`${label} margin in inches`}
+                      aria-label={`${label} margin`}
+                      onChange={(event) =>
+                        patch({
+                          [key]: toMm(clampInches(Number(event.target.value))),
+                        } as Partial<ExportSettings>)
+                      }
+                    />
+                  </label>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
           {settings.format === "pdf" && (
             <>

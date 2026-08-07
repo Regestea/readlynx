@@ -326,6 +326,9 @@ export function Toolbar({
         chapterBreaks: settings.chapterBreaks,
         inlineImages: true,
         coverImage: resolvedCover,
+        template: settings.template,
+        codeTheme: settings.codeTheme,
+        codeFontFamily: settings.codeFontFamily,
       });
       await window.readlynx.exportPdf({
         defaultPath: "document.pdf",
@@ -352,6 +355,9 @@ export function Toolbar({
       bottom: settings.marginBottomMm,
       left: settings.marginLeftMm,
     },
+    template: settings.template,
+    codeTheme: settings.codeTheme,
+    codeFontFamily: settings.codeFontFamily,
   });
 
   const onExportDocx = async (settings: ExportSettings, resolvedCover?: string) => {
