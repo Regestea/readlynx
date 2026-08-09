@@ -7,6 +7,7 @@ import { ShowcasePage } from "../features/showcase/components/ShowcasePage";
 import { SettingsPage } from "../features/settings/components/SettingsPage";
 import { CreateBookPage } from "../features/create/components/CreateBookPage";
 import type { CreateBookDetails } from "../features/create/components/CreateBookDialog";
+import { ReadingPage } from "../features/reading/components/ReadingPage";
 import { Quote } from "../features/home/widgets/Quote/Quote";
 import { ReadingProgress } from "../features/home/widgets/ReadingProgress/ReadingProgress";
 import { WeeklyStats } from "../features/home/widgets/WeeklyStats/WeeklyStats";
@@ -16,6 +17,7 @@ export default function App() {
   const [activeId, setActiveId] = useState("home");
   const [createDetails, setCreateDetails] = useState<CreateBookDetails | null>(null);
   const [openBookId, setOpenBookId] = useState<string | null>(null);
+  const [readingBookId, setReadingBookId] = useState<string | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const isHome = activeId === "home";
   const isFullWidth = !isHome;
@@ -53,12 +55,21 @@ export default function App() {
               onCreateBook={(details) => {
                 setCreateDetails(details);
                 setOpenBookId(null);
+                setReadingBookId(null);
                 setActiveId("create-book");
               }}
               onOpenBook={(bookId) => {
                 setCreateDetails(null);
                 setOpenBookId(bookId);
+                setReadingBookId(null);
                 setActiveId("create-book");
+              }}
+              onOpenReadingBook={(bookId) => {
+                setCreateDetails(null);
+                setOpenBookId(null);
+                setReadingBookId(bookId);
+                setSidebarCollapsed(true);
+                setActiveId("reading");
               }}
             />
           )}
@@ -75,8 +86,18 @@ export default function App() {
               onSplitChange={setSidebarCollapsed}
             />
           )}
+          {activeId === "reading" && readingBookId && (
+            <ReadingPage
+              key={readingBookId}
+              bookId={readingBookId}
+              onBack={() => {
+                setSidebarCollapsed(false);
+                setActiveId("home");
+              }}
+            />
+          )}
           {activeId === "settings" && <SettingsPage />}
-          {!isHome && activeId !== "create-book" && activeId !== "settings" && (
+          {!isHome && activeId !== "create-book" && activeId !== "reading" && activeId !== "settings" && (
             <ShowcasePage />
           )}
         </div>

@@ -5,6 +5,7 @@ import { Shelf } from "../widgets/Shelf/Shelf";
 import { CreateBookDialog } from "../../create/components/CreateBookDialog";
 import type { CreateBookDetails } from "../../create/components/CreateBookDialog";
 import { TranslateBookDialog } from "./TranslateBookDialog";
+import { ReadBookDialog } from "./ReadBookDialog";
 import { Modal } from "../../../components/ui/Modal/Modal";
 import { Button } from "../../../components/ui/Button/Button";
 import { coverUrl } from "../../../shared/coverUrl";
@@ -15,6 +16,8 @@ import styles from "./HomePage.module.css";
 interface HomePageProps {
   onCreateBook?: (details: CreateBookDetails) => void;
   onOpenBook?: (bookId: string) => void;
+  /** Opens a reading-kind book in the read-only reader. */
+  onOpenReadingBook?: (bookId: string) => void;
 }
 
 const COVER_STYLES: CoverStyle[] = ["forest", "moss", "terracotta", "navy", "sand", "moon"];
@@ -34,13 +37,14 @@ function toBook(row: BookListItem): Book {
     author: "",
     cover: coverForId(row.id),
     coverImage: coverUrl(row.coverImage),
-    kind: "created",
+    kind: row.kind,
   };
 }
 
-export function HomePage({ onCreateBook, onOpenBook }: HomePageProps) {
+export function HomePage({ onCreateBook, onOpenBook, onOpenReadingBook }: HomePageProps) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [translateOpen, setTranslateOpen] = useState(false);
+  const [readOpen, setReadOpen] = useState(false);
   const [books, setBooks] = useState<Book[] | null>(null);
   const [bookToDelete, setBookToDelete] = useState<Book | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -101,6 +105,7 @@ export function HomePage({ onCreateBook, onOpenBook }: HomePageProps) {
             icon={<BookOpen size={22} strokeWidth={1.8} />}
             title="Reading Book"
             description="Add a book to your reading shelf"
+            onClick={() => setReadOpen(true)}
           />
         </div>
       </section>
@@ -111,7 +116,14 @@ export function HomePage({ onCreateBook, onOpenBook }: HomePageProps) {
         subtitle="Everything you're writing, translating, and reading"
         books={shelfBooks}
         loading={shelfLoading}
-        onBookClick={onOpenBook}
+        onBookClick={(bookId) => {
+          const book = books?.find((entry) => entry.id === bookId);
+          if (book?.kind === "reading") {
+            onOpenReadingBook?.(bookId);
+          } else {
+            onOpenBook?.(bookId);
+          }
+        }}
         onDeleteBook={setBookToDelete}
       />
 
@@ -130,6 +142,15 @@ export function HomePage({ onCreateBook, onOpenBook }: HomePageProps) {
         onConfirm={(bookId) => {
           setTranslateOpen(false);
           onOpenBook?.(bookId);
+        }}
+      />
+
+      <ReadBookDialog
+        open={readOpen}
+        onClose={() => setReadOpen(false)}
+        onConfirm={(bookId) => {
+          setReadOpen(false);
+          onOpenReadingBook?.(bookId);
         }}
       />
 
