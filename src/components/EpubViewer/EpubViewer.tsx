@@ -104,6 +104,9 @@ interface EpubViewerProps {
   toolbar?: boolean;
   /** When combined with `toolbar={false}`, shows only the page-turn buttons. */
   showNav?: boolean;
+  /** Hide the "Extract" button (used in the read-only reading mode, where
+   *  there is no editor to extract into). */
+  showExtract?: boolean;
   /** Page/background colour override (png. themes), applied unless the user
    *  picked a custom colour inside the reader. */
   backgroundColorOverride?: string;
@@ -126,6 +129,7 @@ export function EpubViewer({
   fill = false,
   toolbar = true,
   showNav = false,
+  showExtract = true,
   backgroundColorOverride,
   textColorOverride,
   onReady,
@@ -453,18 +457,22 @@ export function EpubViewer({
           <Plus size={16} strokeWidth={2} aria-hidden="true" />
         </button>
         <span className={styles.divider} aria-hidden="true" />
-        <button
-          type="button"
-          className={styles.extractButton}
-          onClick={handleExtractPage}
-          disabled={!book}
-          aria-label="Extract the current chapter text to the editor"
-          title="Extract current chapter text to the editor"
-        >
-          <FileDown size={16} strokeWidth={2} aria-hidden="true" />
-          <span>Extract</span>
-        </button>
-        <span className={styles.divider} aria-hidden="true" />
+        {showExtract && (
+          <>
+            <button
+              type="button"
+              className={styles.extractButton}
+              onClick={handleExtractPage}
+              disabled={!book}
+              aria-label="Extract the current chapter text to the editor"
+              title="Extract current chapter text to the editor"
+            >
+              <FileDown size={16} strokeWidth={2} aria-hidden="true" />
+              <span>Extract</span>
+            </button>
+            <span className={styles.divider} aria-hidden="true" />
+          </>
+        )}
         <div className={styles.controlsWrap} ref={controlsWrapRef}>
           <button
             type="button"
