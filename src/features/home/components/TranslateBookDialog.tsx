@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { FileText, FolderOpen, Languages, Loader2, Pencil, RefreshCw } from "lucide-react";
+import { FileText, FolderOpen, ImageIcon, Languages, Loader2, Pencil, RefreshCw, X } from "lucide-react";
 import { Modal } from "../../../components/ui/Modal/Modal";
 import { Button } from "../../../components/ui/Button/Button";
 import { Input } from "../../../components/ui/Input/Input";
@@ -46,6 +46,7 @@ export function TranslateBookDialog({ open, onClose, onConfirm }: TranslateBookD
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [coverImage, setCoverImage] = useState<string | null>(null);
+  const [coverSource, setCoverSource] = useState<"capture" | "custom" | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
   const [editorKey, setEditorKey] = useState(0);
   const [editSrc, setEditSrc] = useState<string | null>(null);
@@ -56,6 +57,7 @@ export function TranslateBookDialog({ open, onClose, onConfirm }: TranslateBookD
   const snapshotRef = useRef<string | null>(null);
   const captureReadyRef = useRef(false);
   const captureViewportRef = useRef<HTMLDivElement>(null);
+  const editorSourceRef = useRef<"capture" | "custom">("capture");
 
   useEffect(() => {
     previewReadyRef.current = previewReady;
@@ -70,6 +72,7 @@ export function TranslateBookDialog({ open, onClose, onConfirm }: TranslateBookD
     previewReadyRef.current = false;
     snapshotRef.current = null;
     setCoverImage(null);
+    setCoverSource(null);
     setEditSrc(null);
     setEditorOpen(false);
     setCaptureOpen(false);
@@ -94,6 +97,7 @@ export function TranslateBookDialog({ open, onClose, onConfirm }: TranslateBookD
     previewReadyRef.current = false;
     snapshotRef.current = null;
     setCoverImage(null);
+    setCoverSource(null);
     setEditSrc(null);
     setPreviewKey((key) => key + 1);
   };
@@ -152,16 +156,24 @@ export function TranslateBookDialog({ open, onClose, onConfirm }: TranslateBookD
     return dataUrl;
   };
 
-  const openCoverEditor = async () => {
+  /** Opens the image editor. With `source: "capture"` it loads the high-res
+   *  first page of the book; with `source: "custom"` it starts in file-pick
+   *  mode so the user can bring their own image instead. */
+  const openCoverEditor = async (source: "capture" | "custom" = "capture") => {
     if (busy || !sourcePath) return;
     setBusy(true);
     try {
-      const hi = await captureHighRes();
-      if (!hi) {
-        setError("Could not capture the first page. Try again.");
-        return;
+      let src: string | null = null;
+      if (source === "capture") {
+        const hi = await captureHighRes();
+        if (!hi) {
+          setError("Could not capture the first page. Try again.");
+          return;
+        }
+        src = hi;
       }
-      setEditSrc(hi);
+      setEditSrc(src);
+      editorSourceRef.current = source;
       setEditorKey((key) => key + 1);
       setEditorOpen(true);
     } finally {
@@ -261,16 +273,45 @@ onReady={() => setPreviewReady(true)}
                 <span>Rendering first page…</span>
               </div>
             )}
-            <button
-              type="button"
-              className={styles.editCover}
-              onClick={() => void openCoverEditor()}
-              disabled={busy}
-            >
-              <Pencil size={13} strokeWidth={2} aria-hidden="true" />
-              {coverImage ? "Retake / edit cover" : "Edit cover"}
-            </button>
-            {coverImage && <span className={styles.coverBadge}>Edited</span>}
+            <div className={styles.coverActions}>
+              <button
+                type="button"
+                className={styles.coverAction}
+                onClick={() => void openCoverEditor("capture")}
+                disabled={busy}
+              >
+                <Pencil size={13} strokeWidth={2} aria-hidden="true" />
+                {coverImage ? "Retake / edit cover" : "Edit cover"}
+              </button>
+              <button
+                type="button"
+                className={styles.coverAction}
+                onClick={() => void openCoverEditor("custom")}
+                disabled={busy}
+              >
+                <ImageIcon size={13} strokeWidth={2} aria-hidden="true" />
+                Choose image
+              </button>
+            </div>
+            {coverImage && (
+              <>
+                <span className={styles.coverBadge}>
+                  {coverSource === "custom" ? "Custom cover" : "Edited"}
+                </span>
+                <button
+                  type="button"
+                  className={styles.removeCover}
+                  onClick={() => {
+                    setCoverImage(null);
+                    setCoverSource(null);
+                  }}
+                  aria-label="Remove custom cover and use the first page"
+                  title="Use the first page as the cover"
+                >
+                  <X size={13} strokeWidth={2} aria-hidden="true" />
+                </button>
+              </>
+            )}
           </div>
         ) : (
               <button type="button" className={styles.previewEmpty} onClick={() => void handlePick()}>
@@ -364,6 +405,7 @@ onReady={() => setPreviewReady(true)}
         onClose={() => setEditorOpen(false)}
         onInsert={(src) => {
           setCoverImage(src);
+          setCoverSource(editorSourceRef.current);
           setEditorOpen(false);
         }}
       />

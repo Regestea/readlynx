@@ -45,11 +45,17 @@
   background: #fff;
 }
 
-.editCover {
+.coverActions {
   position: absolute;
   left: 50%;
   bottom: 10px;
   transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.coverAction {
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
@@ -60,20 +66,44 @@
   color: var(--color-text-secondary);
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-medium);
+  white-space: nowrap;
   box-shadow: var(--shadow-md);
   transition:
     background-color var(--transition-base) ease,
     color var(--transition-base) ease;
 }
 
-.editCover:hover:not(:disabled) {
+.coverAction:hover:not(:disabled) {
   background: var(--color-hover);
   color: var(--color-primary);
 }
 
-.editCover:disabled {
+.coverAction:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.removeCover {
+  position: absolute;
+  top: 40px;
+  right: 10px;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--color-border);
+  border-radius: 50%;
+  background: var(--color-card);
+  color: var(--color-text-secondary);
+  box-shadow: var(--shadow-sm);
+  transition:
+    background-color var(--transition-base) ease,
+    color var(--transition-base) ease;
+}
+
+.removeCover:hover {
+  background: var(--color-hover);
+  color: var(--color-terracotta);
 }
 
 .coverBadge {
