@@ -226,6 +226,17 @@ export function CreateBookPage({
     [saveNow],
   );
 
+  /** Appends the EPUB source's current chapter to the document, keeping its
+   *  structure (headings, lists, quotes, …) via the Markdown conversion. */
+  const handleExtractEpubPage = useCallback(
+    (markdown: string) => {
+      if (!markdown.trim()) return;
+      apiRef.current?.appendMarkdown(markdown);
+      void saveNow();
+    },
+    [saveNow],
+  );
+
   const zoom = ZOOM_OPTIONS[Math.min(ZOOM_OPTIONS.length - 1, Math.max(0, zoomIndex))];
 
   const goToMatch = (delta: number) => {
@@ -449,7 +460,7 @@ export function CreateBookPage({
               {source.sourceType === "pdf" ? (
                 <PdfViewer filePath={source.filePath} fill fitWidth onOcrText={handleOcrText} />
               ) : (
-                <EpubViewer filePath={source.filePath} fill />
+                <EpubViewer filePath={source.filePath} fill onExtractPage={handleExtractEpubPage} />
               )}
             </div>
             {sourceMode === "split" && (

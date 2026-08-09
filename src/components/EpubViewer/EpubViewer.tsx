@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, FileWarning, Loader2, Minus, Plus, Settings2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, FileDown, FileWarning, Loader2, Maximize2, Minus, Minimize2, Plus, Settings2 } from "lucide-react";
 import ePub from "epubjs";
 import type { Book, Contents, Location, Rendition } from "epubjs";
 import { useTheme } from "../../app/providers/theme/ThemeContext";
-import { Select } from "../ui/Select/Select";
-import type { SelectOption } from "../ui/Select/Select";
+import { epubHtmlToMarkdown } from "./epubToMarkdown";
+import { FontFamilySelect } from "../ui/FontFamilySelect/FontFamilySelect";
 import { ColorSelect } from "../ui/ColorSelect/ColorSelect";
 import styles from "./EpubViewer.module.css";
 
@@ -12,36 +12,81 @@ const FONT_STEP = 10;
 const FONT_MIN = 60;
 const FONT_MAX = 200;
 
-interface FontMetadata {
-  family: string;
-  fullName: string;
-  postscriptName: string;
-  style: string;
+/** Every inline/block element that can carry the book's own font-family, so a
+ *  forced rule catches all of them (incl. inline `style=` attributes would not
+ *  be beatable, but those are rare in EPUBs). */
+/** "Times New Roman, serif" -> "\"Times New Roman\", serif" for CSS use. */
+function cssFontFamily(value: string): string {
+  return value
+    .split(",")
+    .map((part) => {
+      const p = part.trim();
+      if (!p) return p;
+      return /\s/.test(p) && !/^["']/.test(p) ? `"${p}"` : p;
+    })
+    .join(", ");
 }
 
-declare global {
-  interface Window {
-    queryLocalFonts?: () => Promise<FontMetadata[]>;
-  }
-}
-
-const FONT_FORCE_SELECTOR =
-  "html, body, p, div, span, li, td, th, blockquote, h1, h2, h3, h4, h5, h6, a, em, strong, cite, i, b";
-
-const FONT_OPTIONS: SelectOption[] = [
-  { value: "", label: "Book font" },
-  { value: "system-ui, sans-serif", label: "System UI" },
-  { value: "Georgia, 'Times New Roman', serif", label: "Georgia" },
-  { value: "Palatino, 'Palatino Linotype', serif", label: "Palatino" },
-  { value: "'Times New Roman', Times, serif", label: "Times New Roman" },
-  { value: "Arial, Helvetica, sans-serif", label: "Arial" },
-  { value: "Helvetica, Arial, sans-serif", label: "Helvetica" },
-  { value: "Verdana, Geneva, sans-serif", label: "Verdana" },
-  { value: "'Trebuchet MS', 'Segoe UI', sans-serif", label: "Trebuchet MS" },
-  { value: "Tahoma, Geneva, sans-serif", label: "Tahoma" },
-  { value: "Segoe UI, system-ui, sans-serif", label: "Segoe UI" },
-  { value: "'Courier New', Courier, monospace", label: "Courier New" },
-];
+const FONT_FORCE_SELECTOR = [
+  "html",
+  "body",
+  "p",
+  "div",
+  "span",
+  "li",
+  "td",
+  "th",
+  "tr",
+  "table",
+  "blockquote",
+  "pre",
+  "code",
+  "dt",
+  "dd",
+  "dl",
+  "caption",
+  "figcaption",
+  "figure",
+  "address",
+  "h1",
+  "h2",
+  "h3",
+  "h4",
+  "h5",
+  "h6",
+  "a",
+  "em",
+  "strong",
+  "cite",
+  "i",
+  "b",
+  "abbr",
+  "q",
+  "dfn",
+  "kbd",
+  "samp",
+  "var",
+  "small",
+  "mark",
+  "sub",
+  "sup",
+  "time",
+  "summary",
+  "details",
+  "label",
+  "legend",
+  "col",
+  "colgroup",
+  "thead",
+  "tbody",
+  "tfoot",
+  "section",
+  "article",
+  "aside",
+  "header",
+  "footer",
+  "nav",
+].join(", ");
 
 const BG_PRESETS = ["#ffffff", "#f7f2ea", "#e6ded0", "#cbb99b", "#1c2945", "#162033", "#2b2b33"];
 const TEXT_PRESETS = ["#322b26", "#111111", "#1c2945", "#5b6b50", "#cbb99b", "#eef2f7", "#ffffff"];
@@ -68,6 +113,9 @@ interface EpubViewerProps {
   onReady?: () => void;
   /** Called with the total page count once the book has been laid out. */
   onPageCountChange?: (numPages: number) => void;
+  /** Called with the currently rendered section converted to Markdown (headings,
+   *  lists, quotes, emphasis, … preserved) when "Extract" is pressed. */
+  onExtractPage?: (markdown: string) => void;
 }
 
 export function EpubViewer({
@@ -82,18 +130,22 @@ export function EpubViewer({
   textColorOverride,
   onReady,
   onPageCountChange,
+  onExtractPage,
 }: EpubViewerProps) {
   const { theme } = useTheme();
   const [book, setBook] = useState<Book | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pageNumber, setPageNumber] = useState(0);
   const [numPages, setNumPages] = useState(0);
-  const [fontPct, setFontPct] = useState(100);
+  const [progressPct, setProgressPct] = useState(0);
+  const [zoomPct, setZoomPct] = useState(100);
   const [fontFamily, setFontFamily] = useState("");
-  const [fontOptions, setFontOptions] = useState<SelectOption[]>(FONT_OPTIONS);
   const [customBg, setCustomBg] = useState<string | null>(null);
   const [customText, setCustomText] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [spacerHeight, setSpacerHeight] = useState(0);
+  const viewerRef = useRef<HTMLDivElement>(null);
   const hostRef = useRef<HTMLDivElement>(null);
   const controlsWrapRef = useRef<HTMLDivElement>(null);
   const bookRef = useRef<Book | null>(null);
@@ -101,6 +153,7 @@ export function EpubViewer({
   const fontCssRef = useRef("");
   const onReadyRef = useRef(onReady);
   const onPageCountChangeRef = useRef(onPageCountChange);
+  const onExtractPageRef = useRef(onExtractPage);
 
   useEffect(() => {
     onReadyRef.current = onReady;
@@ -110,40 +163,19 @@ export function EpubViewer({
     onPageCountChangeRef.current = onPageCountChange;
   }, [onPageCountChange]);
 
-  /** Enumerates the fonts installed on this computer (Local Font Access API).
-   *  Falls back to a static list when unavailable (e.g. permission denied). */
   useEffect(() => {
-    let cancelled = false;
-    const loadSystemFonts = async () => {
-      try {
-        if (typeof window.queryLocalFonts !== "function") return;
-        const fonts = await window.queryLocalFonts();
-        if (cancelled) return;
-        const seen = new Set<string>();
-        const options = fonts
-          .map((font) => font.family.trim())
-          .filter((family) => {
-            if (!family) return false;
-            const key = family.toLowerCase();
-            if (seen.has(key)) return false;
-            seen.add(key);
-            return true;
-          })
-          .sort((a, b) => a.localeCompare(b))
-          .map((family) => ({
-            value: /\s/.test(family) ? `"${family}"` : family,
-            label: family,
-          }));
-        setFontOptions([{ value: "", label: "Book font" }, ...options]);
-      } catch {
-        // Enumeration unavailable — the static FONT_OPTIONS list stays.
-      }
+    onExtractPageRef.current = onExtractPage;
+  }, [onExtractPage]);
+
+  /** Exits the in-page fullscreen overlay with Escape. */
+  useEffect(() => {
+    if (!isFullscreen) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setIsFullscreen(false);
     };
-    void loadSystemFonts();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [isFullscreen]);
 
   /** Injects/replaces a forced font-family stylesheet into an EPUB document. */
   const injectFontStyle = useCallback((content: Contents) => {
@@ -158,6 +190,28 @@ export function EpubViewer({
     style.textContent = fontCssRef.current;
   }, []);
 
+  /** Applies the chosen zoom by injecting a CSS `zoom` rule on the content
+   *  root. Unlike a `body` font-size override, this also enlarges text whose
+   *  size is hard-coded in the book (px headings, etc.) — everything scales
+   *  proportionally and re-flows to the viewport width like browser zoom. */
+  useEffect(() => {
+    const rendition = renditionRef.current;
+    const host = hostRef.current;
+    if (!rendition || !host) return;
+    const scale = zoomPct / 100;
+    const transformRule =
+      zoomPct !== 100
+        ? `html, body { transform-origin: 0 0 !important; transform: scale(${scale}) !important; width: ${100 / scale}% !important; }`
+        : `html, body { transform: none !important; width: auto !important; }`;
+    fontCssRef.current =
+      (fontFamily ? `${FONT_FORCE_SELECTOR} { font-family: ${cssFontFamily(fontFamily)} !important; }` : "") +
+      transformRule;
+    (rendition.getContents() as unknown as Contents[]).forEach((content) => injectFontStyle(content));
+    // Force a resize / reflow after changing the injected styles so the
+    // scrolled-doc layout recalculates to the new scaled width.
+    rendition.resize(host.clientWidth, host.clientHeight);
+  }, [fontFamily, zoomPct, book, injectFontStyle]);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -167,6 +221,7 @@ export function EpubViewer({
         setError(null);
         setPageNumber(0);
         setNumPages(0);
+        setProgressPct(0);
 
         const data = srcData ?? (filePath ? await window.readlynx?.readFileBytes(filePath) : undefined);
         if (!data) {
@@ -197,12 +252,12 @@ export function EpubViewer({
         const rendition = nextBook.renderTo(host, {
           width: "100%",
           height: "100%",
-          flow: "paginated",
+          flow: "scrolled-doc",
           spread: "none",
           manager: "default",
+          allowScriptedContent: true,
         });
         renditionRef.current = rendition;
-        rendition.themes.fontSize("100%");
         rendition.on("relocated", handleRelocated);
         rendition.hooks.content.register(injectFontStyle);
         await rendition.display();
@@ -222,6 +277,9 @@ export function EpubViewer({
       if (!bookRef.current || !location.start?.cfi) return;
       const loc = Number(bookRef.current.locations.locationFromCfi(location.start.cfi));
       setPageNumber(Math.min(loc + 1, bookRef.current.locations.length()));
+      setProgressPct(
+        Math.round(bookRef.current.locations.percentageFromCfi(location.start.cfi) * 100),
+      );
     };
 
     void load();
@@ -240,12 +298,14 @@ export function EpubViewer({
     const host = hostRef.current;
     const rendition = renditionRef.current;
     if (!host || !rendition) return;
-    const observer = new ResizeObserver((entries) => {
-      const entry = entries[0];
-      if (!entry) return;
-      const { width, height } = entry.contentRect;
-      if (width > 0 && height > 0) rendition.resize(width, height);
-    });
+    const applySize = () => {
+      const width = host.clientWidth;
+      const height = host.clientHeight;
+      if (width <= 0 || height <= 0) return;
+      rendition.resize(width, height);
+    };
+    applySize();
+    const observer = new ResizeObserver(applySize);
     observer.observe(host);
     return () => observer.disconnect();
   }, [book]);
@@ -262,19 +322,6 @@ export function EpubViewer({
     rendition.themes.override("background-color", background, true);
     rendition.themes.override("color", text, true);
   }, [theme, book, customBg, customText, backgroundColorOverride, textColorOverride]);
-
-  /** Applies the chosen font family to the whole book by injecting a forced
-   *  `!important` stylesheet into every content document. */
-  useEffect(() => {
-    const rendition = renditionRef.current;
-    if (!rendition) return;
-    fontCssRef.current = fontFamily
-      ? `${FONT_FORCE_SELECTOR} { font-family: ${fontFamily} !important; }`
-      : "";
-    (rendition.getContents() as unknown as Contents[]).forEach((content) =>
-      injectFontStyle(content),
-    );
-  }, [fontFamily, book, injectFontStyle]);
 
   /** Closes the settings dropdown on outside click or Escape. */
   useEffect(() => {
@@ -310,15 +357,37 @@ export function EpubViewer({
     else void rendition.next();
   };
 
-  const changeFont = (delta: number) => {
-    const rendition = renditionRef.current;
-    if (!rendition) return;
-    const next = Math.min(FONT_MAX, Math.max(FONT_MIN, fontPct + delta));
-    setFontPct(next);
-    rendition.themes.fontSize(`${next}%`);
+  const changeZoom = (delta: number) => {
+    setZoomPct((current) => Math.min(FONT_MAX, Math.max(FONT_MIN, current + delta)));
   };
 
-  const classes = [styles.viewer, fill ? styles.fill : "", className].filter(Boolean).join(" ");
+  const toggleFullscreen = () => {
+    if (!isFullscreen && viewerRef.current) {
+      setSpacerHeight(viewerRef.current.offsetHeight);
+    }
+    setIsFullscreen((prev) => !prev);
+  };
+
+  /** Converts the currently rendered section to Markdown and hands it to the
+   *  host (e.g. to append into the editor). Structure — headings, lists,
+   *  quotes, emphasis — is preserved by `epubHtmlToMarkdown`. */
+  const handleExtractPage = () => {
+    const rendition = renditionRef.current;
+    const callback = onExtractPageRef.current;
+    if (!rendition || !callback || !bookRef.current) return;
+    const contents = rendition.getContents() as unknown as Contents[];
+    const doc = contents[0]?.document;
+    if (!doc?.body) return;
+    const markdown = epubHtmlToMarkdown(doc.body);
+    if (markdown) callback(markdown);
+  };
+
+  const classes = [
+    styles.viewer,
+    fill ? styles.fill : "",
+    isFullscreen ? styles.viewerFullscreen : "",
+    className,
+  ].filter(Boolean).join(" ");
 
   const rootStyle = getComputedStyle(document.documentElement);
   const readVar = (name: string) => rootStyle.getPropertyValue(name).trim();
@@ -326,7 +395,8 @@ export function EpubViewer({
   const textColor = customText ?? (readVar("--color-text") || "#322b26");
 
   return (
-    <div className={classes} aria-label={ariaLabel}>
+    <>
+    <div ref={viewerRef} className={classes} aria-label={ariaLabel}>
       {toolbar && (
         <div className={styles.toolbar} role="toolbar" aria-label="EPUB controls">
         <button
@@ -340,8 +410,7 @@ export function EpubViewer({
           <ChevronLeft size={16} strokeWidth={2} aria-hidden="true" />
         </button>
         <span className={styles.pageInfo}>
-          <span className={styles.pageCurrent}>{numPages > 0 ? pageNumber : "—"}</span>
-          <span className={styles.pageOf}>/ {numPages > 0 ? numPages : "—"}</span>
+          <span className={styles.pageCurrent}>{book ? `${progressPct}%` : "—"}</span>
         </span>
         <button
           type="button"
@@ -357,34 +426,43 @@ export function EpubViewer({
         <button
           type="button"
           className={styles.toolButton}
-          onClick={() => changeFont(-FONT_STEP)}
-          disabled={!book || fontPct <= FONT_MIN}
-          aria-label="Decrease font size"
-          title="Decrease font size"
+          onClick={() => changeZoom(-FONT_STEP)}
+          disabled={!book || zoomPct <= FONT_MIN}
+          aria-label="Decrease zoom"
+          title="Decrease zoom"
         >
           <Minus size={16} strokeWidth={2} aria-hidden="true" />
         </button>
         <button
           type="button"
           className={styles.zoomValue}
-          onClick={() => {
-            setFontPct(100);
-            renditionRef.current?.themes.fontSize("100%");
-          }}
-          aria-label={`Font size ${fontPct} percent, click to reset`}
-          title="Reset font size to 100%"
+          onClick={() => setZoomPct(100)}
+          aria-label={`Zoom ${zoomPct} percent, click to reset`}
+          title="Reset zoom to 100%"
         >
-          {fontPct}%
+          {zoomPct}%
         </button>
         <button
           type="button"
           className={styles.toolButton}
-          onClick={() => changeFont(FONT_STEP)}
-          disabled={!book || fontPct >= FONT_MAX}
-          aria-label="Increase font size"
-          title="Increase font size"
+          onClick={() => changeZoom(FONT_STEP)}
+          disabled={!book || zoomPct >= FONT_MAX}
+          aria-label="Increase zoom"
+          title="Increase zoom"
         >
           <Plus size={16} strokeWidth={2} aria-hidden="true" />
+        </button>
+        <span className={styles.divider} aria-hidden="true" />
+        <button
+          type="button"
+          className={styles.extractButton}
+          onClick={handleExtractPage}
+          disabled={!book}
+          aria-label="Extract the current chapter text to the editor"
+          title="Extract current chapter text to the editor"
+        >
+          <FileDown size={16} strokeWidth={2} aria-hidden="true" />
+          <span>Extract</span>
         </button>
         <span className={styles.divider} aria-hidden="true" />
         <div className={styles.controlsWrap} ref={controlsWrapRef}>
@@ -404,12 +482,10 @@ export function EpubViewer({
             <div className={styles.menuPanel} role="menu" aria-label="Reader settings">
               <div className={styles.menuGroup}>
                 <span className={styles.menuLabel}>Font family</span>
-                <Select
-                  compact
+                <FontFamilySelect
                   value={fontFamily}
-                  onChange={(event) => setFontFamily(event.target.value)}
-                  options={fontOptions}
-                  aria-label="Font family"
+                  onSelect={setFontFamily}
+                  defaultLabel="Book font"
                 />
               </div>
               <div className={styles.menuGroup}>
@@ -436,6 +512,21 @@ export function EpubViewer({
             </div>
           )}
         </div>
+        <span className={styles.divider} aria-hidden="true" />
+        <button
+          type="button"
+          className={`${styles.toolButton} ${styles.toolbarEnd} ${isFullscreen ? styles.toolButtonActive : ""}`}
+          onClick={toggleFullscreen}
+          disabled={!book}
+          aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+          title={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+        >
+          {isFullscreen ? (
+            <Minimize2 size={16} strokeWidth={2} aria-hidden="true" />
+          ) : (
+            <Maximize2 size={16} strokeWidth={2} aria-hidden="true" />
+          )}
+        </button>
       </div>
       )}
       {!toolbar && showNav && (
@@ -486,5 +577,9 @@ export function EpubViewer({
         )}
       </div>
     </div>
+    {isFullscreen && (
+      <div className={styles.fullscreenSpacer} style={{ height: spacerHeight }} aria-hidden="true" />
+    )}
+    </>
   );
 }
