@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS Books (
   id         TEXT PRIMARY KEY,
   title      TEXT NOT NULL DEFAULT 'Untitled',
   coverImage TEXT,
+  kind       TEXT NOT NULL DEFAULT 'created',
   createdAt  TEXT NOT NULL DEFAULT (datetime('now')),
   updatedAt  TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -77,6 +78,7 @@ export function applySchema(db: Database.Database): void {
   db.exec(SCHEMA_SQL);
   withoutForeignKeys(db, () => {
     ensureCoverImageTextColumn(db);
+    ensureKindColumn(db);
     ensureCascadeForeignKeys(db);
   });
 }
@@ -94,6 +96,7 @@ function ensureCoverImageTextColumn(db: Database.Database): void {
         id         TEXT PRIMARY KEY,
         title      TEXT NOT NULL DEFAULT 'Untitled',
         coverImage TEXT,
+        kind       TEXT NOT NULL DEFAULT 'created',
         createdAt  TEXT NOT NULL DEFAULT (datetime('now')),
         updatedAt  TEXT NOT NULL DEFAULT (datetime('now'))
       );
@@ -103,6 +106,15 @@ function ensureCoverImageTextColumn(db: Database.Database): void {
       ALTER TABLE Books_new RENAME TO Books;
     `);
   })();
+}
+
+/** Databases created before the `kind` column (`created` / `translated` /
+ *  `reading`) lack it. Adds the column with the default value; existing rows
+ *  are treated as plain created books. */
+function ensureKindColumn(db: Database.Database): void {
+  const columns = db.pragma("table_info(Books)") as Array<{ name: string }>;
+  if (columns.some((entry) => entry.name === "kind")) return;
+  db.exec(`ALTER TABLE Books ADD COLUMN kind TEXT NOT NULL DEFAULT 'created'`);
 }
 
 function hasCascadeForeignKeys(db: Database.Database, table: string): boolean {
