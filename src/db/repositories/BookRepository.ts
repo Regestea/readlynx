@@ -1,5 +1,6 @@
 import type Database from "better-sqlite3";
 import type { BookEntity, BookListItem } from "../entities/index.ts";
+import type { BookKind } from "../../shared/types/index.ts";
 
 export class BookRepository {
   private readonly db: Database.Database;
@@ -9,8 +10,10 @@ export class BookRepository {
   }
 
   /** Creates a new book row with default metadata. */
-  insert(bookId: string, title = "Untitled"): void {
-    this.db.prepare("INSERT INTO Books (id, title) VALUES (?, ?)").run(bookId, title);
+  insert(bookId: string, title = "Untitled", kind: BookKind = "created"): void {
+    this.db
+      .prepare("INSERT INTO Books (id, title, kind) VALUES (?, ?, ?)")
+      .run(bookId, title, kind);
   }
 
   /** Updates book metadata and bumps `updatedAt`. `coverImage` is a relative
@@ -39,7 +42,7 @@ export class BookRepository {
   list(): BookListItem[] {
     return this.db
       .prepare(
-        "SELECT id, title, coverImage, createdAt, updatedAt FROM Books ORDER BY updatedAt DESC, createdAt DESC",
+        "SELECT id, title, kind, coverImage, createdAt, updatedAt FROM Books ORDER BY updatedAt DESC, createdAt DESC",
       )
       .all() as BookListItem[];
   }

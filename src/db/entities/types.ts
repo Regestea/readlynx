@@ -2,6 +2,7 @@ import type { BookEntity } from "./Book.ts";
 import type { BookDocumentEntity } from "./BookDocument.ts";
 import type { BookSourceEntity } from "./BookSource.ts";
 import type { DocumentSettingsEntity } from "./DocumentSettings.ts";
+import type { BookKind } from "../../shared/types/index.ts";
 
 /** Result of `db:create-book`: a new book with its document. */
 export interface CreateBookResult {
@@ -19,6 +20,21 @@ export interface CreateTranslatedBookPayload {
   sourceType: BookSourceType;
   sourcePath: string;
   coverImage: string | null;
+}
+
+/** Payload of `db:create-reading-book`: like `create-translated-book` but the
+ *  book has no document — it opens in the read-only viewer instead of the
+ *  editor. */
+export interface CreateReadingBookPayload {
+  title: string;
+  sourceType: BookSourceType;
+  sourcePath: string;
+  coverImage: string | null;
+}
+
+/** Result of `db:create-reading-book`. There is no document. */
+export interface CreateReadingBookResult {
+  bookId: string;
 }
 
 /** Payload of `db:save-document`. `coverImage` is a data URL, an existing
@@ -45,6 +61,7 @@ export interface GetBookResult {
 export interface BookListItem {
   id: string;
   title: string;
+  kind: BookKind;
   coverImage: string | null;
   createdAt: string;
   updatedAt: string;
