@@ -3,7 +3,7 @@ import { parentPort, workerData } from "node:worker_threads";
 import { createConnection } from "../../src/db/connection.ts";
 import { applySchema } from "../../src/db/schema.ts";
 import { seedDatabase } from "../../src/db/seed/seedDatabase.ts";
-import type { CreateTranslatedBookPayload, SaveDocumentPayload } from "../../src/db/entities/types.ts";
+import type { CreateReadingBookPayload, CreateTranslatedBookPayload, SaveDocumentPayload } from "../../src/db/entities/types.ts";
 import type { AiModel } from "../../src/db/entities/AiModel.ts";
 import {
   AiModelRepository,
@@ -81,6 +81,20 @@ function handleCreateTranslatedBook(payload: CreateTranslatedBookPayload): {
   return { bookId, documentId };
 }
 
+/** Creates a reading book: a regular book (with title + cover, no document)
+ *  plus a `BookSources` row. Reading books open in the read-only viewer. */
+function handleCreateReadingBook(payload: CreateReadingBookPayload): { bookId: string } {
+  const bookId = randomUUID();
+  const sourceId = randomUUID();
+  const storedCover = persistCoverImage(payload.coverImage, dbPath, null);
+  db.transaction(() => {
+    books.insert(bookId, payload.title, "reading");
+    if (storedCover) books.update(bookId, { title: payload.title, coverImage: storedCover });
+    bookSources.insert(sourceId, bookId, payload.sourceType, payload.sourcePath);
+  })();
+  return { bookId };
+}
+
 function handleSaveDocument(payload: SaveDocumentPayload): { documentId: string } | null {
   const { bookId, title, coverImage, contentJson, settings } = payload;
   const book = books.findById(bookId);
@@ -138,6 +152,8 @@ const handlers: Record<string, (payload: unknown) => unknown> = {
   "create-book": handleCreateBook,
   "create-translated-book": (payload) =>
     handleCreateTranslatedBook(payload as CreateTranslatedBookPayload),
+  "create-reading-book": (payload) =>
+    handleCreateReadingBook(payload as CreateReadingBookPayload),
   "save-document": (payload) => handleSaveDocument(payload as SaveDocumentPayload),
   "list-books": () => books.list(),
   "get-book": (payload) => handleGetBook(payload as string),

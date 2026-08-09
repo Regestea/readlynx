@@ -285,6 +285,10 @@ function registerIpc(db: DbWorkerClient) {
     db.createTranslatedBook(payload),
   );
 
+  ipcMain.handle("db:create-reading-book", (_event, payload) =>
+    db.createReadingBook(payload),
+  );
+
   ipcMain.handle("db:save-document", (_event, payload: SaveDocumentPayload) =>
     db.saveDocument(payload),
   );

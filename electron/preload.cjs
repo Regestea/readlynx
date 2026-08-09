@@ -26,6 +26,7 @@ contextBridge.exposeInMainWorld("readlynx", {
   db: {
     createBook: () => ipcRenderer.invoke("db:create-book"),
     createTranslatedBook: (payload) => ipcRenderer.invoke("db:create-translated-book", payload),
+    createReadingBook: (payload) => ipcRenderer.invoke("db:create-reading-book", payload),
     saveDocument: (payload) => ipcRenderer.invoke("db:save-document", payload),
     listBooks: () => ipcRenderer.invoke("db:list-books"),
     getBook: (bookId) => ipcRenderer.invoke("db:get-book", bookId),

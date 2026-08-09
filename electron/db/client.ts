@@ -3,6 +3,8 @@ import type { AiModel } from "../../src/db/entities/AiModel.ts";
 import type {
   BookListItem,
   CreateBookResult,
+  CreateReadingBookPayload,
+  CreateReadingBookResult,
   CreateTranslatedBookPayload,
   GetBookResult,
   SaveDocumentPayload,
@@ -62,6 +64,10 @@ export class DbWorkerClient {
 
   createTranslatedBook(payload: CreateTranslatedBookPayload): Promise<CreateBookResult> {
     return this.exec("create-translated-book", payload);
+  }
+
+  createReadingBook(payload: CreateReadingBookPayload): Promise<CreateReadingBookResult> {
+    return this.exec("create-reading-book", payload);
   }
 
   saveDocument(payload: SaveDocumentPayload): Promise<{ documentId: string } | null> {

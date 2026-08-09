@@ -1,6 +1,8 @@
 import type {
   BookListItem,
   CreateBookResult,
+  CreateReadingBookPayload,
+  CreateReadingBookResult,
   CreateTranslatedBookPayload,
   GetBookResult,
   SaveDocumentPayload,
@@ -52,6 +54,7 @@ declare global {
       db: {
         createBook(): Promise<CreateBookResult>;
         createTranslatedBook(payload: CreateTranslatedBookPayload): Promise<CreateBookResult>;
+        createReadingBook(payload: CreateReadingBookPayload): Promise<CreateReadingBookResult>;
         saveDocument(payload: SaveDocumentPayload): Promise<{ documentId: string } | null>;
         listBooks(): Promise<BookListItem[]>;
         getBook(bookId: string): Promise<GetBookResult | null>;
