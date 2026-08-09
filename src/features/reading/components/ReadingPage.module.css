@@ -1,0 +1,101 @@
+.page {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  overflow: hidden;
+}
+
+.topBar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-medium);
+  background: var(--color-glass);
+  box-shadow: var(--shadow-sm);
+  flex-shrink: 0;
+}
+
+.backButton {
+  flex-shrink: 0;
+}
+
+.titleGroup {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex: 1;
+  min-width: 0;
+}
+
+.kindBadge {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: 10px;
+  background: var(--color-active);
+  color: var(--color-icon);
+}
+
+.title {
+  margin: 0;
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fileBadge {
+  flex-shrink: 0;
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
+  background: var(--color-active);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+}
+
+.viewerArea {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-medium);
+  background: var(--color-glass);
+  box-shadow: var(--shadow-sm);
+}
+
+.viewer {
+  flex: 1;
+  min-height: 0;
+}
+
+.state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  flex: 1;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-md);
+}
+
+.spinner {
+  animation: reading-page-spin 0.9s linear infinite;
+}
+
+@keyframes reading-page-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
