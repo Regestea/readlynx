@@ -108,7 +108,9 @@ const TABLE: MultilineElementTransformer = {
         const existing = cellNode.getFirstChild();
         const paragraph = $isParagraphNode(existing) ? existing : $createParagraphNode();
         paragraph.clear();
-        paragraph.append($createTextNode(value));
+        // Cells may contain inline markdown (bold, italic, links, …); parse
+        // it so the formatting renders instead of showing literal `**…**`.
+        if (value !== "") $convertFromMarkdownString(value, TEXT_ONLY_TRANSFORMERS, paragraph);
         if (paragraph !== existing) cellNode.append(paragraph);
       });
     });
