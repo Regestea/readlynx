@@ -62,6 +62,19 @@
   font-weight: var(--font-weight-medium);
 }
 
+.translationBadge {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+}
+
 .viewerArea {
   flex: 1;
   min-height: 0;
@@ -72,11 +85,44 @@
   border-radius: var(--radius-medium);
   background: var(--color-glass);
   box-shadow: var(--shadow-sm);
+  position: relative;
 }
 
 .viewer {
   flex: 1;
   min-height: 0;
+}
+
+.viewerStage {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+/* The viewer stays mounted while hidden so its canvas/iframe keeps the
+ * rendered page available for OCR and AI vision capture. */
+.viewerHidden {
+  display: none;
+}
+
+.translationStage {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+}
+
+.translationBody {
+  flex: 1;
+  padding: var(--space-5) var(--space-6);
+}
+
+.stateHint {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  max-width: 420px;
+  text-align: center;
+  line-height: 1.5;
 }
 
 .state {

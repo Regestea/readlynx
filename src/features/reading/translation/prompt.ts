@@ -1,0 +1,62 @@
+import type { TranslationDocType } from "./types.ts";
+import { AUTO_LANGUAGE, languageLabel, ocrLanguagesLabel } from "./languages.ts";
+
+export interface TranslationPromptContext {
+  docType: TranslationDocType;
+  /** Source language code ("auto" = detect). */
+  sourceLang: string;
+  /** Tesseract codes of the OCR page, when `docType` is "PDF OCR text". */
+  ocrLangs?: string[];
+  /** Target language code. */
+  targetLang: string;
+  /** Optional user instruction layered on top of translation. */
+  customPrompt?: string;
+}
+
+function sourceDescription(context: TranslationPromptContext): string {
+  if (context.docType === "PDF OCR text" && context.ocrLangs?.length) {
+    const langs = ocrLanguagesLabel(context.ocrLangs);
+    return `the text extracted from the page (recognized as ${langs})`;
+  }
+  if (context.sourceLang === AUTO_LANGUAGE) {
+    return "the source language (detected automatically from the content)";
+  }
+  return languageLabel(context.sourceLang);
+}
+
+/** The behaviour contract sent to the model on every translation request. */
+export function buildTranslationSystemPrompt(context: TranslationPromptContext): string {
+  const source = sourceDescription(context);
+  const target = languageLabel(context.targetLang);
+  const lines = [
+    "You are the translation engine of a reading app. You translate pages and chapters that the user is reading.",
+    `Translate the content from ${source} to ${target}.`,
+    "Output rules:",
+    "- Return Markdown only. Do not wrap the whole response in code fences and do not add any explanation outside the Markdown.",
+    "- Preserve useful structure whenever the source has it: headings, paragraphs, lists, tables, code blocks and block quotes.",
+    "- Do not summarize, shorten or omit content unless the user's instruction asks you to.",
+    "- The user instruction below is an extra layer that overrides the default \"translate normally\" behaviour when it conflicts.",
+  ];
+  if (context.docType === "PDF image") {
+    lines.splice(
+      1,
+      0,
+      "The input is an image of a page. Read all the text on the image first, then translate it into Markdown, preserving headings, paragraphs, lists, tables and code blocks as best as the image allows.",
+    );
+  }
+  if (context.customPrompt?.trim()) {
+    lines.push(`User instruction: ${context.customPrompt.trim()}`);
+  }
+  return lines.join("\n");
+}
+
+/** The text (or, for images, the instruction) sent as the user message. */
+export function buildTranslationUserPrompt(
+  context: TranslationPromptContext,
+  content: string,
+): string {
+  if (context.docType === "PDF image") {
+    return "Translate the text visible in the image according to your instructions.";
+  }
+  return content;
+}

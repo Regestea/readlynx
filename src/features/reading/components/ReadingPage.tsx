@@ -1,9 +1,15 @@
-import { useEffect, useState } from "react";
-import { ArrowLeft, BookOpen, FileWarning, Loader2 } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ArrowLeft, BookOpen, FileWarning, Languages, Loader2 } from "lucide-react";
 import { Button } from "../../../components/ui/Button/Button";
 import { PdfViewer } from "../../../components/PdfViewer/PdfViewer";
+import type { PdfViewerHandle } from "../../../components/PdfViewer/PdfViewer";
 import { EpubViewer } from "../../../components/EpubViewer/EpubViewer";
+import type { EpubViewerHandle } from "../../../components/EpubViewer/EpubViewer";
+import { Markdown } from "../../../components/ui/Markdown/Markdown";
 import type { BookSourceType } from "../../../db/entities/types";
+import { TranslationSettingsPanel, TranslationToggle } from "../translation/TranslationPanel";
+import { useTranslation } from "../translation/useTranslation";
+import { epubUnitKey, pdfUnitKey } from "../translation/types";
 import styles from "./ReadingPage.module.css";
 
 interface ReadingPageProps {
@@ -24,6 +30,17 @@ type PageState =
 
 export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
   const [state, setState] = useState<PageState>({ status: "loading" });
+  const pdfRef = useRef<PdfViewerHandle | null>(null);
+  const epubRef = useRef<EpubViewerHandle | null>(null);
+
+  const readyBook = state.status === "ready" ? state.book : null;
+  const translation = useTranslation({
+    bookId,
+    sourceType: readyBook?.sourceType ?? "pdf",
+    pdfRef,
+    epubRef,
+  });
+  const { setUnit: setTranslationUnit } = translation;
 
   useEffect(() => {
     let cancelled = false;
@@ -49,7 +66,22 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
     };
   }, [bookId]);
 
+  const handlePageChange = useCallback(
+    (page: number) => {
+      setTranslationUnit(pdfUnitKey(page));
+    },
+    [setTranslationUnit],
+  );
+
+  const handleChapterChange = useCallback(
+    (chapterKey: string) => {
+      setTranslationUnit(epubUnitKey(chapterKey));
+    },
+    [setTranslationUnit],
+  );
+
   const book = state.status === "ready" ? state.book : null;
+  const showTranslation = translation.viewMode === "translation";
 
   return (
     <main className={styles.page} aria-label="Reading book">
@@ -68,11 +100,41 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
               <span className={styles.fileBadge}>
                 {book.sourceType === "pdf" ? "PDF document" : "EPUB book"}
               </span>
+              {showTranslation && (
+                <span className={styles.translationBadge}>
+                  <Languages size={12} strokeWidth={2} aria-hidden="true" />
+                  Translation
+                </span>
+              )}
             </>
           ) : (
             <h1 className={styles.title}>Reading book</h1>
           )}
         </div>
+
+        {book && (
+          <TranslationSettingsPanel
+            sourceType={book.sourceType}
+            pdfMethod={translation.pdfMethod}
+            onPdfMethodChange={translation.setPdfMethod}
+            settings={translation.settings}
+            onSettingsChange={translation.updateSettings}
+            busy={translation.busy}
+            status={translation.status}
+            error={translation.error}
+            hasTranslation={translation.hasTranslation}
+            model={translation.model}
+            modelsError={translation.modelsError}
+            installed={translation.installed}
+            downloading={translation.downloading}
+            downloadProgress={translation.downloadProgress}
+            onDownload={translation.downloadModel}
+            onDelete={translation.deleteModel}
+            onRefreshModels={translation.refreshModels}
+            onTranslate={() => void translation.translate(false)}
+            onRegenerate={translation.regenerate}
+          />
+        )}
       </header>
 
       <div className={styles.viewerArea}>
@@ -87,11 +149,65 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
             <span>{state.message}</span>
           </div>
         ) : state.status === "ready" ? (
-          state.book.sourceType === "pdf" ? (
-            <PdfViewer filePath={state.book.filePath} fill toolbar fitWidth className={styles.viewer} />
-          ) : (
-            <EpubViewer filePath={state.book.filePath} fill toolbar showExtract={false} className={styles.viewer} />
-          )
+          <>
+            <div className={showTranslation ? styles.viewerHidden : styles.viewerStage}>
+              {state.book.sourceType === "pdf" ? (
+                <PdfViewer
+                  ref={pdfRef}
+                  filePath={state.book.filePath}
+                  fill
+                  toolbar
+                  fitWidth
+                  className={styles.viewer}
+                  onPageChange={handlePageChange}
+                />
+              ) : (
+                <EpubViewer
+                  ref={epubRef}
+                  filePath={state.book.filePath}
+                  fill
+                  toolbar
+                  showExtract={false}
+                  className={styles.viewer}
+                  onChapterChange={handleChapterChange}
+                />
+              )}
+            </div>
+
+            {showTranslation && (
+              <div className={styles.translationStage}>
+                {translation.markdown ? (
+                  <Markdown content={translation.markdown} toolbar className={styles.translationBody} />
+                ) : translation.busy ? (
+                  <div className={styles.state} aria-label="Translating">
+                    <Loader2 size={24} strokeWidth={2} className={styles.spinner} />
+                    <span>{translation.status ?? "Translating…"}</span>
+                  </div>
+                ) : translation.error ? (
+                  <div className={styles.state} role="alert">
+                    <FileWarning size={28} strokeWidth={1.8} aria-hidden="true" />
+                    <span>{translation.error}</span>
+                    <span className={styles.stateHint}>
+                      Open the Translate panel to retry, or switch back to the original.
+                    </span>
+                  </div>
+                ) : (
+                  <div className={styles.state}>
+                    <Languages size={28} strokeWidth={1.6} aria-hidden="true" />
+                    <span>No translation yet for this {state.book.sourceType === "pdf" ? "page" : "chapter"}.</span>
+                    <span className={styles.stateHint}>
+                      Open the Translate panel and press Translate.
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <TranslationToggle
+              active={showTranslation}
+              onClick={() => translation.setViewMode(showTranslation ? "original" : "translation")}
+            />
+          </>
         ) : null}
       </div>
     </main>

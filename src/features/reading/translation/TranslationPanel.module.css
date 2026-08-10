@@ -1,0 +1,220 @@
+.anchor {
+  position: relative;
+  z-index: 40;
+}
+
+.trigger {
+  color: var(--color-text-muted);
+}
+
+.trigger:hover {
+  color: var(--color-primary);
+}
+
+.triggerActive,
+.triggerActive:hover {
+  background: var(--color-active);
+  color: var(--color-primary);
+}
+
+.fab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: absolute;
+  right: var(--space-4);
+  bottom: var(--space-4);
+  z-index: 40;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid var(--color-primary);
+  border-radius: 50%;
+  background: var(--color-primary);
+  color: var(--color-on-primary, #ffffff);
+  cursor: pointer;
+  box-shadow: var(--shadow-lg);
+  opacity: 0.3;
+  transition:
+    opacity var(--transition-fast),
+    background var(--transition-fast),
+    transform var(--transition-fast);
+}
+
+.fab:hover {
+  background: color-mix(in srgb, var(--color-primary) 88%, #000);
+  opacity: 1;
+  transform: translateY(-1px);
+}
+
+.fabActive,
+.fabActive:hover {
+  background: color-mix(in srgb, var(--color-primary) 88%, #000);
+  opacity: 1;
+  transform: none;
+}
+
+.popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 320px;
+  max-height: min(600px, calc(100vh - 120px));
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-medium);
+  background: var(--color-bg);
+  box-shadow: var(--shadow-lg);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-bg-secondary);
+  flex-shrink: 0;
+}
+
+.headerTitle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+}
+
+.modelChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  background: var(--color-active);
+  border-radius: var(--radius-full);
+  padding: 2px 8px;
+}
+
+.modelWarning {
+  font-size: var(--font-size-xs);
+  color: var(--color-terracotta);
+}
+
+.segmented {
+  display: flex;
+  gap: 4px;
+  margin: var(--space-2) var(--space-3) 0;
+  padding: 3px;
+  border-radius: var(--radius-small);
+  background: var(--color-active);
+  flex-shrink: 0;
+}
+
+.segment {
+  flex: 1;
+  height: 26px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  transition:
+    background var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.segment:hover {
+  color: var(--color-text);
+}
+
+.segmentActive {
+  background: var(--color-bg);
+  color: var(--color-text);
+  box-shadow: var(--shadow-sm);
+}
+
+.fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  overflow-y: auto;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.label {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+}
+
+.prompt {
+  min-height: 60px;
+  resize: vertical;
+}
+
+.actions {
+  padding-top: 2px;
+}
+
+.translateButton {
+  width: 100%;
+  justify-content: center;
+}
+
+.statusLine {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  line-height: 1.4;
+}
+
+.errorLine {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  color: var(--color-danger);
+  line-height: 1.4;
+}
+
+.spinner {
+  animation: translation-panel-spin 0.9s linear infinite;
+}
+
+@keyframes translation-panel-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Embed the OCR language panel so it flows inside this popover instead of
+ * floating below its toolbar anchor. */
+.ocrEmbed {
+  position: relative;
+  top: auto;
+  right: auto;
+  width: auto;
+  box-shadow: none;
+  border: none;
+  border-radius: 0;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
