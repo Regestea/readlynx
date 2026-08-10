@@ -44,6 +44,13 @@ export function buildTranslationSystemPrompt(context: TranslationPromptContext):
       "The input is an image of a page. Read all the text on the image first, then translate it into Markdown, preserving headings, paragraphs, lists, tables and code blocks as best as the image allows.",
     );
   }
+  if (context.docType === "EPUB chapter") {
+    lines.splice(
+      1,
+      0,
+      "The input is the plain text of a chapter with only minimal structural markers (# for headings, - for lists, > for quotes). Rebuild the chapter as clean Markdown: translate all text and use headings, paragraphs, lists, tables and block quotes where the source implies them. Do not copy or invent any formatting symbols.",
+    );
+  }
   if (context.customPrompt?.trim()) {
     lines.push(`User instruction: ${context.customPrompt.trim()}`);
   }

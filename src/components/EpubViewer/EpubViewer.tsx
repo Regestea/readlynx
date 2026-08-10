@@ -130,6 +130,9 @@ interface EpubViewerProps {
 export interface EpubViewerHandle {
   /** Markdown of the currently rendered section, or null when unavailable. */
   getCurrentChapterMarkdown(): string | null;
+  /** Plain text of the currently rendered section (structural markers only,
+   *  no inline formatting), used as AI translation input. */
+  getCurrentChapterText(): string | null;
 }
 
 export function EpubViewer({
@@ -202,8 +205,22 @@ export function EpubViewer({
     return markdown || null;
   }, []);
 
+  /** Plain text of the currently rendered section (structural markers only),
+   *  used as translation input so the AI rebuilds clean Markdown instead of
+   *  echoing inline formatting artifacts. */
+  const currentChapterText = useCallback((): string | null => {
+    const rendition = renditionRef.current;
+    if (!rendition || !bookRef.current) return null;
+    const contents = rendition.getContents() as unknown as Contents[];
+    const doc = contents[0]?.document;
+    if (!doc?.body) return null;
+    const text = epubHtmlToMarkdown(doc.body, { plain: true });
+    return text || null;
+  }, []);
+
   useImperativeHandle(ref, () => ({
     getCurrentChapterMarkdown: currentChapterMarkdown,
+    getCurrentChapterText: currentChapterText,
   }));
 
   /** Exits the in-page fullscreen overlay with Escape. */

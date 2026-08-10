@@ -333,11 +333,11 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef }: UseTrans
     try {
       let result: string;
       if (method === "chapter") {
-        const chapterMarkdown = epubRef.current?.getCurrentChapterMarkdown();
-        if (!chapterMarkdown) {
+        const chapterText = epubRef.current?.getCurrentChapterText();
+        if (!chapterText) {
           throw new Error("The chapter text is not available yet.");
         }
-        const chunks = chunkChapter(chapterMarkdown);
+        const chunks = chunkChapter(chapterText);
         if (chunks.length === 0) {
           throw new Error("The chapter has no text to translate.");
         }

@@ -2,6 +2,11 @@
  * Converts the rendered HTML of an EPUB section into Markdown so the Lexical
  * editor can re-import it with its structure preserved: headings stay
  * headings, lists stay lists, quotes/emphasis/code/tables survive, etc.
+ *
+ * With `{ plain: true }` it produces translation input instead: inline
+ * formatting markers (`**`, `*`, `~~`, `~`, `^`, backticks) and link syntax
+ * are dropped so the AI rebuilds clean Markdown from plain text — only the
+ * structural markers (`#`, `-`, `>`, tables, code fences) are kept.
  */
 
 const SKIPPED_TAGS = new Set([
@@ -93,60 +98,63 @@ function textOf(node: Node): string {
   return (node.textContent ?? "").replace(/\s+/g, " ");
 }
 
-/** Markdown for the inline content of a node (no block structure). */
-function inline(node: Node): string {
+/** Text for the inline content of a node (no block structure, no markers
+ *  when `plain` is set). */
+function inline(node: Node, plain: boolean): string {
   if (node.nodeType === Node.TEXT_NODE) return textOf(node);
   if (node.nodeType !== Node.ELEMENT_NODE) return "";
   const el = node as Element;
   const tag = el.tagName.toLowerCase();
   if (SKIPPED_TAGS.has(tag) || isHidden(el)) return "";
 
+  const text = (): string => inlineChildren(el, plain).replace(/\s+/g, " ").trim();
   const wrap = (marker: string): string => {
-    const inner = inlineChildren(el).replace(/\s+/g, " ").trim();
+    const inner = text();
     return inner ? `${marker}${inner}${marker}` : "";
   };
 
   switch (tag) {
     case "br":
-      return "\n";
+      return plain ? " " : "\n";
     case "img":
       return el.getAttribute("alt") ?? "";
     case "strong":
     case "b":
-      return wrap("**");
+      return plain ? text() : wrap("**");
     case "em":
     case "i":
-      return wrap("*");
+      return plain ? text() : wrap("*");
     case "code":
-      return codeSpan(el);
+      return plain ? text() : codeSpan(el);
     case "del":
     case "s":
     case "strike":
-      return wrap("~~");
+      return plain ? text() : wrap("~~");
     case "sub":
-      return wrap("~");
+      return plain ? text() : wrap("~");
     case "sup":
-      return wrap("^");
+      return plain ? text() : wrap("^");
     case "u":
     case "ins":
-      return inlineChildren(el);
+      return text();
     case "a": {
-      const inner = inlineChildren(el).trim();
+      const inner = inlineChildren(el, plain).trim();
       if (!inner) return "";
+      if (plain) return inner;
       const href = el.getAttribute("href");
       return href ? `[${inner}](${href})` : inner;
     }
     default:
-      return inlineChildren(el);
+      return inlineChildren(el, plain);
   }
 }
 
-/** Concatenates the inline markdown of a node's children. The original text
+/** Concatenates the inline text of a node's children. The original text
  *  nodes carry the author's spacing, so parts join verbatim. */
-function inlineChildren(el: Element): string {
+function inlineChildren(el: Element, plain: boolean): string {
   let out = "";
   for (const child of Array.from(el.childNodes)) {
-    const part = inline(child);
+    const part = inline(child, plain);
     if (part) out += part;
   }
   return out;
@@ -159,7 +167,7 @@ function codeSpan(el: Element): string {
 }
 
 /** Collects the top-level Markdown blocks found inside `container`. */
-function collectBlocks(container: Node, blocks: string[]): void {
+function collectBlocks(container: Node, blocks: string[], plain: boolean): void {
   for (const node of Array.from(container.childNodes)) {
     if (node.nodeType === Node.TEXT_NODE) {
       const text = textOf(node).trim();
@@ -173,47 +181,47 @@ function collectBlocks(container: Node, blocks: string[]): void {
     if (SKIPPED_TAGS.has(tag) || isHidden(el)) continue;
 
     if (CONTAINER_TAGS.has(tag)) {
-      collectBlocks(el, blocks);
+      collectBlocks(el, blocks, plain);
       continue;
     }
 
     const heading = tag.match(HEADING_TAG_RE);
     if (tag === "p") {
-      const text = inline(el).trim();
+      const text = inline(el, plain).trim();
       if (text) blocks.push(text);
     } else if (heading) {
-      const text = inline(el).trim();
+      const text = inline(el, plain).trim();
       if (text) blocks.push(`${"#".repeat(Number(heading[1]))} ${text}`);
     } else if (tag === "hr") {
       blocks.push("---");
     } else if (tag === "ul" || tag === "ol") {
-      blocks.push(...renderList(el, 0));
+      blocks.push(...renderList(el, 0, plain));
     } else if (tag === "blockquote") {
-      blocks.push(...renderQuote(el));
+      blocks.push(...renderQuote(el, plain));
     } else if (tag === "pre") {
       blocks.push(renderCodeBlock(el));
     } else if (tag === "table") {
-      const table = renderTable(el);
+      const table = renderTable(el, plain);
       if (table) blocks.push(table);
     } else if (INLINE_CONTEXT_TAGS.has(tag)) {
-      const text = inline(el).trim();
+      const text = inline(el, plain).trim();
       if (text) blocks.push(text);
     } else {
       // Unknown wrapper — its children determine the structure (a bare text
       // container simply yields a paragraph via the TEXT_NODE branch).
-      collectBlocks(el, blocks);
+      collectBlocks(el, blocks, plain);
     }
   }
 }
 
 /** Renders a `<ul>`/`<ol>` (with nesting) as flat markdown list lines. */
-function renderList(listEl: Element, depth: number): string[] {
+function renderList(listEl: Element, depth: number, plain: boolean): string[] {
   const ordered = listEl.tagName.toLowerCase() === "ol";
   const lines: string[] = [];
   let index = 1;
   for (const child of Array.from(listEl.children)) {
     if (child.tagName.toLowerCase() !== "li") {
-      collectBlocks(child, lines);
+      collectBlocks(child, lines, plain);
       continue;
     }
     const marker = ordered ? `${index}. ` : "- ";
@@ -228,9 +236,9 @@ function renderList(listEl: Element, depth: number): string[] {
       if (liChild.nodeType !== Node.ELEMENT_NODE) continue;
       const innerTag = (liChild as Element).tagName.toLowerCase();
       if (innerTag === "ul" || innerTag === "ol") {
-        nested.push(...renderList(liChild as Element, depth + 1));
+        nested.push(...renderList(liChild as Element, depth + 1, plain));
       } else {
-        const part = inline(liChild).trim();
+        const part = inline(liChild, plain).trim();
         if (part) runs.push(part);
       }
     }
@@ -244,9 +252,9 @@ function renderList(listEl: Element, depth: number): string[] {
 }
 
 /** Renders a `<blockquote>`; every output line is prefixed with `>`. */
-function renderQuote(blockquote: Element): string[] {
+function renderQuote(blockquote: Element, plain: boolean): string[] {
   const inner: string[] = [];
-  collectBlocks(blockquote, inner);
+  collectBlocks(blockquote, inner, plain);
   if (inner.length === 0) return [];
   return inner.map((block) =>
     block
@@ -273,11 +281,11 @@ function renderCodeBlock(pre: Element): string {
 }
 
 /** Renders a `<table>` as a GFM markdown table (first row = header). */
-function renderTable(table: Element): string | null {
+function renderTable(table: Element, plain: boolean): string | null {
   const rows = Array.from(table.querySelectorAll("tr")).map((tr) =>
     Array.from(tr.children)
       .filter((cell) => /^t[dh]$/i.test(cell.tagName))
-      .map((cell) => inline(cell).replace(/\n/g, " ").trim().replace(/\|/g, "-")),
+      .map((cell) => inline(cell, plain).replace(/\n/g, " ").trim().replace(/\|/g, "-")),
   );
   const colCount = Math.max(1, ...rows.map((row) => row.length));
   if (rows.length < 2) return null;
@@ -286,10 +294,21 @@ function renderTable(table: Element): string | null {
   return [pad(rows[0]), `| ${Array.from({ length: colCount }, () => "---").join(" | ")} |`, ...rows.slice(1).map(pad)].join("\n");
 }
 
+export interface EpubMarkdownOptions {
+  /** Plain-text mode for AI translation input: inline formatting markers
+   *  (`**`, `*`, `~~`, `~`, `^`, backticks) and link syntax are dropped;
+   *  only structural markers (`#`, `-`, `>`, tables, code fences) remain. */
+  plain?: boolean;
+}
+
 /** Main entry: `container` is the rendered body of the current EPUB section. */
-export function epubHtmlToMarkdown(container: HTMLElement): string {
+export function epubHtmlToMarkdown(
+  container: HTMLElement,
+  options: EpubMarkdownOptions = {},
+): string {
+  const { plain = false } = options;
   const blocks: string[] = [];
-  collectBlocks(container, blocks);
+  collectBlocks(container, blocks, plain);
   return blocks
     .join("\n\n")
     .replace(/[ \t]+$/gm, "")
