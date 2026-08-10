@@ -1,8 +1,8 @@
-import { isValidElement } from "react";
+import { isValidElement, useCallback, useEffect, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import type { Components } from "react-markdown";
-import { Check } from "lucide-react";
+import { Check, Maximize2, Minus, Minimize2, Plus, Settings2 } from "lucide-react";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
@@ -14,11 +14,23 @@ import { List } from "../List/List";
 import type { ListItemData } from "../List/List";
 import { Table } from "../Table/Table";
 import type { TableColumn } from "../Table/Table";
+import { FontFamilySelect } from "../FontFamilySelect/FontFamilySelect";
+import { ColorSelect } from "../ColorSelect/ColorSelect";
 import styles from "./Markdown.module.css";
+
+const ZOOM_STEP = 10;
+const ZOOM_MIN = 60;
+const ZOOM_MAX = 200;
+
+const BG_PRESETS = ["#ffffff", "#f7f2ea", "#e6ded0", "#cbb99b", "#1c2945", "#162033", "#2b2b33"];
+const TEXT_PRESETS = ["#322b26", "#111111", "#1c2945", "#5b6b50", "#cbb99b", "#eef2f7", "#ffffff"];
 
 interface MarkdownProps {
   content: string;
   className?: string;
+  /** Shows the reader toolbar: zoom in/out, background/text colors, font
+   *  family and fullscreen (mirrors the EPUB viewer's settings). */
+  toolbar?: boolean;
 }
 
 /* ---------- RTL helpers ---------- */
@@ -264,17 +276,193 @@ const components: Components = {
   },
 };
 
-export function Markdown({ content, className = "" }: MarkdownProps) {
-  const classes = [styles.host, className].filter(Boolean).join(" ");
+export function Markdown({ content, className = "", toolbar = false }: MarkdownProps) {
+  const [zoomPct, setZoomPct] = useState(100);
+  const [fontFamily, setFontFamily] = useState("");
+  const [customBg, setCustomBg] = useState<string | null>(null);
+  const [customText, setCustomText] = useState<string | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [spacerHeight, setSpacerHeight] = useState(0);
+  const hostRef = useRef<HTMLDivElement>(null);
+  const controlsRef = useRef<HTMLDivElement>(null);
+
+  /** Exits the in-page fullscreen overlay with Escape. */
+  useEffect(() => {
+    if (!isFullscreen) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setIsFullscreen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [isFullscreen]);
+
+  /** Closes the settings dropdown on outside click or Escape. */
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onDown = (event: MouseEvent) => {
+      const wrap = controlsRef.current;
+      if (wrap && !wrap.contains(event.target as Node)) {
+        setMenuOpen(false);
+      }
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMenuOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [menuOpen]);
+
+  const handleResetSettings = () => {
+    setFontFamily("");
+    setCustomBg(null);
+    setCustomText(null);
+    setMenuOpen(false);
+  };
+
+  const changeZoom = useCallback((delta: number) => {
+    setZoomPct((current) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, current + delta)));
+  }, []);
+
+  const toggleFullscreen = () => {
+    if (!isFullscreen && hostRef.current) {
+      setSpacerHeight(hostRef.current.offsetHeight);
+    }
+    setIsFullscreen((prev) => !prev);
+  };
+
+  const rootStyle = getComputedStyle(document.documentElement);
+  const readVar = (name: string) => rootStyle.getPropertyValue(name).trim();
+  const backgroundColor = customBg ?? (readVar("--color-page") || "#ffffff");
+  const textColor = customText ?? (readVar("--color-text") || "#322b26");
+
+  const hostStyle: CSSProperties = {
+    ...(customBg ? { backgroundColor: customBg } : {}),
+    ...(customText ? ({ "--color-text": customText, color: customText } as CSSProperties) : {}),
+    ...(fontFamily ? { fontFamily } : {}),
+  };
+
+  const classes = [
+    styles.host,
+    toolbar ? styles.toolbarHost : "",
+    isFullscreen ? styles.fullscreen : "",
+    className,
+  ].filter(Boolean).join(" ");
+
   return (
-    <div className={classes}>
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm, remarkMath]}
-        rehypePlugins={[rehypeRaw, rehypeKatex]}
-        components={components}
-      >
-        {content}
-      </ReactMarkdown>
-    </div>
+    <>
+      <div ref={hostRef} className={classes} style={hostStyle} aria-label="Markdown document">
+        {toolbar && (
+          <div className={styles.toolbar} role="toolbar" aria-label="Markdown reader controls">
+            <button
+              type="button"
+              className={styles.toolButton}
+              onClick={() => changeZoom(-ZOOM_STEP)}
+              disabled={zoomPct <= ZOOM_MIN}
+              aria-label="Decrease zoom"
+              title="Decrease zoom"
+            >
+              <Minus size={16} strokeWidth={2} aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              className={styles.zoomValue}
+              onClick={() => setZoomPct(100)}
+              aria-label={`Zoom ${zoomPct} percent, click to reset`}
+              title="Reset zoom to 100%"
+            >
+              {zoomPct}%
+            </button>
+            <button
+              type="button"
+              className={styles.toolButton}
+              onClick={() => changeZoom(ZOOM_STEP)}
+              disabled={zoomPct >= ZOOM_MAX}
+              aria-label="Increase zoom"
+              title="Increase zoom"
+            >
+              <Plus size={16} strokeWidth={2} aria-hidden="true" />
+            </button>
+            <span className={styles.divider} aria-hidden="true" />
+            <div className={styles.controlsWrap} ref={controlsRef}>
+              <button
+                type="button"
+                className={`${styles.toolButton} ${menuOpen ? styles.toolButtonActive : ""}`}
+                onClick={() => setMenuOpen((open) => !open)}
+                aria-label="Reader settings"
+                title="Reader settings"
+                aria-haspopup="true"
+                aria-expanded={menuOpen}
+              >
+                <Settings2 size={16} strokeWidth={2} aria-hidden="true" />
+              </button>
+              {menuOpen && (
+                <div className={styles.menuPanel} role="menu" aria-label="Reader settings">
+                  <div className={styles.menuGroup}>
+                    <span className={styles.menuLabel}>Font family</span>
+                    <FontFamilySelect
+                      value={fontFamily}
+                      onSelect={setFontFamily}
+                      defaultLabel="Reader font"
+                    />
+                  </div>
+                  <div className={styles.menuGroup}>
+                    <span className={styles.menuLabel}>Background color</span>
+                    <ColorSelect
+                      value={backgroundColor}
+                      onChange={setCustomBg}
+                      presets={BG_PRESETS}
+                      label="Background color"
+                    />
+                  </div>
+                  <div className={styles.menuGroup}>
+                    <span className={styles.menuLabel}>Text color</span>
+                    <ColorSelect
+                      value={textColor}
+                      onChange={setCustomText}
+                      presets={TEXT_PRESETS}
+                      label="Text color"
+                    />
+                  </div>
+                  <button type="button" className={styles.menuReset} onClick={handleResetSettings}>
+                    Reset to theme
+                  </button>
+                </div>
+              )}
+            </div>
+            <span className={styles.divider} aria-hidden="true" />
+            <button
+              type="button"
+              className={`${styles.toolButton} ${styles.toolbarEnd} ${isFullscreen ? styles.toolButtonActive : ""}`}
+              onClick={toggleFullscreen}
+              aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+              title={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+            >
+              {isFullscreen ? (
+                <Minimize2 size={16} strokeWidth={2} aria-hidden="true" />
+              ) : (
+                <Maximize2 size={16} strokeWidth={2} aria-hidden="true" />
+              )}
+            </button>
+          </div>
+        )}
+        <div className={styles.body} style={{ zoom: zoomPct / 100 }}>
+          <ReactMarkdown
+            remarkPlugins={[remarkGfm, remarkMath]}
+            rehypePlugins={[rehypeRaw, rehypeKatex]}
+            components={components}
+          >
+            {content}
+          </ReactMarkdown>
+        </div>
+      </div>
+      {isFullscreen && (
+        <div className={styles.fullscreenSpacer} style={{ height: spacerHeight }} aria-hidden="true" />
+      )}
+    </>
   );
 }
