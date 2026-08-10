@@ -1,8 +1,8 @@
-import { isValidElement, useCallback, useEffect, useRef, useState } from "react";
+import { isValidElement, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import type { Components } from "react-markdown";
-import { Check, Maximize2, Minus, Minimize2, Plus, Settings2 } from "lucide-react";
+import { Maximize2, Minus, Minimize2, Plus, Settings2 } from "lucide-react";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
@@ -10,8 +10,6 @@ import rehypeRaw from "rehype-raw";
 import "katex/dist/katex.min.css";
 import { Code } from "../Code/Code";
 import { Image } from "../Image/Image";
-import { List } from "../List/List";
-import type { ListItemData } from "../List/List";
 import { Table } from "../Table/Table";
 import type { TableColumn } from "../Table/Table";
 import { FontFamilySelect } from "../FontFamilySelect/FontFamilySelect";
@@ -25,12 +23,96 @@ const ZOOM_MAX = 200;
 const BG_PRESETS = ["#ffffff", "#f7f2ea", "#e6ded0", "#cbb99b", "#1c2945", "#162033", "#2b2b33"];
 const TEXT_PRESETS = ["#322b26", "#111111", "#1c2945", "#5b6b50", "#cbb99b", "#eef2f7", "#ffffff"];
 
+/** Attribute names allowed on raw-HTML elements. Anything else — e.g. names
+ *  mangled by markdown emphasis inside a tag (`**classname`, `border-**`) —
+ *  is dropped so React never sees an invalid attribute. */
+const RAW_HTML_ATTRIBUTES = new Set([
+  "href",
+  "src",
+  "alt",
+  "title",
+  "dir",
+  "colspan",
+  "rowspan",
+  "start",
+]);
+
+/** Tags whose raw-HTML subtrees are discarded entirely (script, media,
+ *  interactive controls, …). */
+const DROP_RAW_HTML_TAGS = new Set([
+  "base",
+  "button",
+  "canvas",
+  "embed",
+  "form",
+  "iframe",
+  "input",
+  "label",
+  "link",
+  "meta",
+  "noscript",
+  "object",
+  "option",
+  "picture",
+  "script",
+  "select",
+  "source",
+  "style",
+  "svg",
+  "template",
+  "textarea",
+  "title",
+  "track",
+  "video",
+]);
+
+interface HastNode {
+  type?: string;
+  tagName?: unknown;
+  properties?: Record<string, unknown>;
+  children?: HastNode[];
+}
+
+/** Sanitizes the raw-HTML tree produced by `rehypeRaw`. Translation output
+ *  often carries JSX/Tailwind fragments (e.g. `<div className=…>` or
+ *  `<div inline-flex flex-col…>`); tags survive but every attribute that is
+ *  not in the whitelist is dropped, so no garbage classes/attributes reach
+ *  React and no invalid-attribute warnings are raised. */
+function sanitizeRawHtml(): (tree: HastNode) => void {
+  const walk = (node: HastNode | undefined): void => {
+    if (!node || typeof node !== "object") return;
+    if (node.type === "element") {
+      const tag = String(node.tagName ?? "").toLowerCase();
+      if (DROP_RAW_HTML_TAGS.has(tag)) {
+        node.tagName = "span";
+        node.properties = {};
+        node.children = [];
+        return;
+      }
+      if (node.properties) {
+        for (const name of Object.keys(node.properties)) {
+          if (!RAW_HTML_ATTRIBUTES.has(name)) {
+            delete node.properties[name];
+          }
+        }
+      }
+    }
+    if (Array.isArray(node.children)) {
+      for (const child of node.children) walk(child);
+    }
+  };
+  return walk;
+}
+
 interface MarkdownProps {
   content: string;
   className?: string;
   /** Shows the reader toolbar: zoom in/out, background/text colors, font
    *  family and fullscreen (mirrors the EPUB viewer's settings). */
   toolbar?: boolean;
+  /** Parses raw HTML embedded in the markdown. Defaults to true; disable for
+   *  AI-produced content so HTML/JSX snippets render as literal text. */
+  rawHtml?: boolean;
 }
 
 /* ---------- RTL helpers ---------- */
@@ -131,43 +213,52 @@ function textContent(children: ReactNode): string {
   return Array.isArray(children) ? children.join("") : String(children ?? "");
 }
 
-function listItems(node: unknown): ListItemData[] {
-  return (toMdNode(node)?.children ?? [])
-    .filter((child) => child.type === "element")
-    .map((item, index) => {
-      const label = mdText(item);
-      return { id: `md-li-${index}`, label, dir: getDir(label) };
-    });
+/** Escapes `<` characters outside fenced code blocks and inline code spans,
+ *  so raw HTML / JSX snippets in AI-written markdown stay visible as plain
+ *  text instead of being parsed as elements (which mangles JSX attribute
+ *  syntax and can swallow whole paragraphs). */
+function escapeHtmlInMarkdown(markdown: string): string {
+  const lines = markdown.split("\n");
+  const out: string[] = [];
+  let fence: string | null = null;
+  for (const line of lines) {
+    const match = /^\s*(`{3,}|~{3,})/.exec(line);
+    if (match) {
+      const marker = match[1][0];
+      if (fence === null) {
+        fence = marker;
+      } else if (fence === marker) {
+        fence = null;
+      }
+      out.push(line);
+      continue;
+    }
+    out.push(fence ? line : escapeHtmlInLine(line));
+  }
+  return out.join("\n");
 }
 
-function isTaskList(node: unknown): boolean {
-  return (toMdNode(node)?.children ?? []).some((item) =>
-    (item.children ?? []).some((child) => toMdNode(child)?.tagName === "input"),
-  );
-}
-
-function taskList(node: unknown) {
-  const items = (toMdNode(node)?.children ?? []).filter(
-    (child) => child.type === "element",
-  );
-  return (
-    <ul className={styles.tasks}>
-      {items.map((item, index) => {
-        const checkbox = (item.children ?? []).find(
-          (child) => toMdNode(child)?.tagName === "input",
-        );
-        const checked = toMdNode(checkbox)?.properties?.checked === true;
-        return (
-          <li key={index} className={styles.taskItem}>
-            <span className={styles.taskBox} aria-hidden="true">
-              {checked && <Check size={12} strokeWidth={2.5} />}
-            </span>
-            <span {...dirProps(mdText(item))}>{mdText(item)}</span>
-          </li>
-        );
-      })}
-    </ul>
-  );
+function escapeHtmlInLine(line: string): string {
+  let out = "";
+  let index = 0;
+  while (index < line.length) {
+    const tick = line.indexOf("`", index);
+    if (tick === -1) {
+      out += line.slice(index).replace(/</g, "&lt;");
+      break;
+    }
+    out += line.slice(index, tick).replace(/</g, "&lt;");
+    let run = 0;
+    while (tick + run < line.length && line[tick + run] === "`") run += 1;
+    const closing = line.indexOf("`".repeat(run), tick + run);
+    if (closing === -1) {
+      out += line.slice(tick).replace(/</g, "&lt;");
+      break;
+    }
+    out += line.slice(tick, closing + run);
+    index = closing + run;
+  }
+  return out;
 }
 
 /* eslint-disable @typescript-eslint/no-unused-vars */
@@ -227,8 +318,21 @@ const components: Components = {
       {children}
     </a>
   ),
-  ul: ({ node }) => (isTaskList(node) ? taskList(node) : <List items={listItems(node)} />),
-  ol: ({ node }) => <List items={listItems(node)} />,
+  ul: ({ children, node: _node, ...props }) => (
+    <ul className={styles.list} {...props}>
+      {children}
+    </ul>
+  ),
+  ol: ({ children, node: _node, ...props }) => (
+    <ol className={styles.list} {...props}>
+      {children}
+    </ol>
+  ),
+  li: ({ children, node: _node, ...props }) => (
+    <li className={styles.listItem} {...props} {...dirProps(children)}>
+      {children}
+    </li>
+  ),
   blockquote: ({ children, node: _node, ...props }) => (
     <blockquote className={styles.blockquote} {...props} {...dirProps(children)}>
       {children}
@@ -276,7 +380,12 @@ const components: Components = {
   },
 };
 
-export function Markdown({ content, className = "", toolbar = false }: MarkdownProps) {
+export function Markdown({
+  content,
+  className = "",
+  toolbar = false,
+  rawHtml = true,
+}: MarkdownProps) {
   const [zoomPct, setZoomPct] = useState(100);
   const [fontFamily, setFontFamily] = useState("");
   const [customBg, setCustomBg] = useState<string | null>(null);
@@ -337,6 +446,11 @@ export function Markdown({ content, className = "", toolbar = false }: MarkdownP
 
   const rootStyle = getComputedStyle(document.documentElement);
   const readVar = (name: string) => rootStyle.getPropertyValue(name).trim();
+
+  const body = useMemo(
+    () => (rawHtml ? content : escapeHtmlInMarkdown(content)),
+    [content, rawHtml],
+  );
   const backgroundColor = customBg ?? (readVar("--color-page") || "#ffffff");
   const textColor = customText ?? (readVar("--color-text") || "#322b26");
 
@@ -453,10 +567,10 @@ export function Markdown({ content, className = "", toolbar = false }: MarkdownP
         <div className={styles.body} style={{ zoom: zoomPct / 100 }}>
           <ReactMarkdown
             remarkPlugins={[remarkGfm, remarkMath]}
-            rehypePlugins={[rehypeRaw, rehypeKatex]}
+            rehypePlugins={rawHtml ? [rehypeRaw, rehypeKatex, sanitizeRawHtml] : [rehypeKatex]}
             components={components}
           >
-            {content}
+            {body}
           </ReactMarkdown>
         </div>
       </div>

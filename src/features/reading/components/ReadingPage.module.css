@@ -114,7 +114,7 @@
 
 .translationBody {
   flex: 1;
-  padding: var(--space-5) var(--space-6);
+  padding: var(--space-5) 0;
 }
 
 .stateHint {

@@ -89,6 +89,15 @@
   list-style: none;
 }
 
+.list {
+  margin: 0;
+  padding-left: var(--space-5);
+}
+
+.listItem > p {
+  margin: 0;
+}
+
 .taskItem {
   display: flex;
   align-items: center;
@@ -167,6 +176,7 @@
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
+  padding: 0 0.5rem;
 }
 
 .toolButton {

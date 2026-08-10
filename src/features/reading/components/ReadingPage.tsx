@@ -177,7 +177,7 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
             {showTranslation && (
               <div className={styles.translationStage}>
                 {translation.markdown ? (
-                  <Markdown content={translation.markdown} toolbar className={styles.translationBody} />
+                  <Markdown content={translation.markdown} toolbar rawHtml={false} className={styles.translationBody} />
                 ) : translation.busy ? (
                   <div className={styles.state} aria-label="Translating">
                     <Loader2 size={24} strokeWidth={2} className={styles.spinner} />
