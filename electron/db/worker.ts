@@ -4,7 +4,8 @@ import { createConnection } from "../../src/db/connection.ts";
 import { applySchema } from "../../src/db/schema.ts";
 import { seedDatabase } from "../../src/db/seed/seedDatabase.ts";
 import type { CreateReadingBookPayload, CreateTranslatedBookPayload, SaveDocumentPayload } from "../../src/db/entities/types.ts";
-import type { AiModel } from "../../src/db/entities/AiModel.ts";
+import type { AiModel, TranslationEntity, TranslationMethod } from "../../src/db/entities/index.ts";
+import type { ReadingStateInput } from "../../src/db/repositories/index.ts";
 import {
   AiModelRepository,
   AppSettingsRepository,
@@ -12,6 +13,8 @@ import {
   BookSourceRepository,
   DocumentRepository,
   DocumentSettingsRepository,
+  ReadingStateRepository,
+  TranslationRepository,
 } from "../../src/db/repositories/index.ts";
 import { EMPTY_DOCUMENT_STATE } from "../../src/db/repositories/DocumentRepository.ts";
 import { migrateLegacyCovers, persistCoverImage, removeCoverFile } from "./covers.ts";
@@ -49,6 +52,8 @@ const documentSettings = new DocumentSettingsRepository(db);
 const bookSources = new BookSourceRepository(db);
 const appSettings = new AppSettingsRepository(db);
 const aiModels = new AiModelRepository(db);
+const readingState = new ReadingStateRepository(db);
+const translations = new TranslationRepository(db);
 
 function handleCreateBook(): { bookId: string; documentId: string } {
   const bookId = randomUUID();
@@ -175,6 +180,40 @@ const handlers: Record<string, (payload: unknown) => unknown> = {
   },
   "ai-model-delete": (payload) => {
     aiModels.remove(payload as string);
+    return true;
+  },
+  "ai-model-set-default": (payload) => {
+    aiModels.setDefault(payload as string);
+    return true;
+  },
+  "reading-state-get": (payload) =>
+    readingState.findByBookId(payload as string) ?? null,
+  "reading-state-update": (payload) => {
+    const { bookId, ...state } = payload as { bookId: string } & ReadingStateInput;
+    readingState.upsert(bookId, state);
+    return readingState.findByBookId(bookId) ?? null;
+  },
+  "translation-get": (payload) => {
+    const { bookId, method, pageNumber, chunkKeyPrefix } = payload as {
+      bookId: string;
+      method: TranslationMethod;
+      pageNumber?: number | null;
+      chunkKeyPrefix?: string | null;
+    };
+    return translations.findByKey(bookId, method, pageNumber ?? null, chunkKeyPrefix ?? null);
+  },
+  "translation-put": (payload) => {
+    translations.upsert(payload as TranslationEntity);
+    return true;
+  },
+  "translation-delete": (payload) => {
+    const { bookId, method, pageNumber, chunkKeyPrefix } = payload as {
+      bookId: string;
+      method: TranslationMethod;
+      pageNumber?: number | null;
+      chunkKeyPrefix?: string | null;
+    };
+    translations.deleteWhere(bookId, method, pageNumber ?? null, chunkKeyPrefix ?? null);
     return true;
   },
 };

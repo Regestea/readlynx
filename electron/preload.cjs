@@ -37,6 +37,13 @@ contextBridge.exposeInMainWorld("readlynx", {
     createAiModel: (model) => ipcRenderer.invoke("db:ai-model-create", model),
     updateAiModel: (model) => ipcRenderer.invoke("db:ai-model-update", model),
     deleteAiModel: (id) => ipcRenderer.invoke("db:ai-model-delete", id),
+    setDefaultAiModel: (id) => ipcRenderer.invoke("db:ai-model-set-default", id),
+    getReadingState: (bookId) => ipcRenderer.invoke("db:reading-state-get", bookId),
+    updateReadingState: (bookId, state) =>
+      ipcRenderer.invoke("db:reading-state-update", { bookId, ...state }),
+    getTranslations: (options) => ipcRenderer.invoke("db:translation-get", options),
+    putTranslation: (translation) => ipcRenderer.invoke("db:translation-put", translation),
+    deleteTranslations: (options) => ipcRenderer.invoke("db:translation-delete", options),
   },
   ai: {
     testConnection: (input) => ipcRenderer.invoke("ai:test", input),

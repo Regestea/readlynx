@@ -18,6 +18,7 @@ import type {
 } from "./ai.ts";
 import type { AiModel } from "../src/db/entities/AiModel.ts";
 import type { SaveDocumentPayload } from "../src/db/entities/types.ts";
+import type { ReadingStateInput } from "../src/db/repositories/ReadingStateRepository.ts";
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -327,6 +328,28 @@ function registerIpc(db: DbWorkerClient) {
 
   ipcMain.handle("db:ai-model-delete", (_event, id: string) => db.deleteAiModel(id));
 
+  ipcMain.handle("db:ai-model-set-default", (_event, id: string) => db.setDefaultAiModel(id));
+
+  ipcMain.handle("db:reading-state-get", (_event, bookId: string) =>
+    db.getReadingState(bookId),
+  );
+
+  ipcMain.handle(
+    "db:reading-state-update",
+    (_event, payload: { bookId: string } & ReadingStateInput) => {
+      const { bookId, ...state } = payload;
+      return db.updateReadingState(bookId, state);
+    },
+  );
+
+  ipcMain.handle("db:translation-get", (_event, options) => db.getTranslations(options));
+
+  ipcMain.handle("db:translation-put", (_event, translation) => db.putTranslation(translation));
+
+  ipcMain.handle("db:translation-delete", (_event, options) =>
+    db.deleteTranslations(options),
+  );
+
   /* ---------- AI (native requests, no CORS) ---------- */
 
   ipcMain.handle("ai:test", (_event, input: AiConnectionInput) => testConnection(input));
@@ -337,8 +360,10 @@ function registerIpc(db: DbWorkerClient) {
 
   ipcMain.handle(
     "ai:chat",
-    (_event, payload: { input: AiConnectionInput; messages: AiChatMessage[] }) =>
-      chatCompletion(payload.input, payload.messages),
+    (
+      _event,
+      payload: { input: AiConnectionInput; messages: AiChatMessage[]; images?: string[] },
+    ) => chatCompletion(payload.input, payload.messages, payload.images),
   );
 
   ipcMain.handle(

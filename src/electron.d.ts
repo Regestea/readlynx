@@ -8,6 +8,9 @@ import type {
   SaveDocumentPayload,
 } from "./db/entities/types.ts";
 import type { AiModel } from "./db/entities/AiModel.ts";
+import type { ReadingStateEntity } from "./db/entities/ReadingState.ts";
+import type { ReadingStateInput } from "./db/repositories/ReadingStateRepository.ts";
+import type { TranslationEntity, TranslationMethod } from "./db/entities/Translation.ts";
 
 export {};
 
@@ -65,6 +68,25 @@ declare global {
         createAiModel(model: AiModel): Promise<boolean>;
         updateAiModel(model: AiModel): Promise<boolean>;
         deleteAiModel(id: string): Promise<boolean>;
+        setDefaultAiModel(id: string): Promise<boolean>;
+        getReadingState(bookId: string): Promise<ReadingStateEntity | null>;
+        updateReadingState(
+          bookId: string,
+          state: ReadingStateInput,
+        ): Promise<ReadingStateEntity | null>;
+        getTranslations(options: {
+          bookId: string;
+          method: TranslationMethod;
+          pageNumber?: number | null;
+          chunkKeyPrefix?: string | null;
+        }): Promise<TranslationEntity[]>;
+        putTranslation(translation: TranslationEntity): Promise<boolean>;
+        deleteTranslations(options: {
+          bookId: string;
+          method: TranslationMethod;
+          pageNumber?: number | null;
+          chunkKeyPrefix?: string | null;
+        }): Promise<boolean>;
       };
       ai: {
         testConnection(input: {
@@ -76,6 +98,7 @@ declare global {
         chat(payload: {
           input: { url: string; apiKey: string; modelName: string };
           messages: { role: "system" | "user" | "assistant"; content: string }[];
+          images?: string[];
         }): Promise<string>;
         structured(payload: {
           input: { url: string; apiKey: string; modelName: string };

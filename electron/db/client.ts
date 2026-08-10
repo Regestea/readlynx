@@ -1,6 +1,12 @@
 import { Worker } from "node:worker_threads";
 import type { AiModel } from "../../src/db/entities/AiModel.ts";
 import type {
+  TranslationEntity,
+  TranslationMethod,
+} from "../../src/db/entities/Translation.ts";
+import type { ReadingStateEntity } from "../../src/db/entities/ReadingState.ts";
+import type { ReadingStateInput } from "../../src/db/repositories/ReadingStateRepository.ts";
+import type {
   BookListItem,
   CreateBookResult,
   CreateReadingBookPayload,
@@ -108,6 +114,40 @@ export class DbWorkerClient {
 
   deleteAiModel(id: string): Promise<boolean> {
     return this.exec("ai-model-delete", id);
+  }
+
+  setDefaultAiModel(id: string): Promise<boolean> {
+    return this.exec("ai-model-set-default", id);
+  }
+
+  getReadingState(bookId: string): Promise<ReadingStateEntity | null> {
+    return this.exec("reading-state-get", bookId);
+  }
+
+  updateReadingState(bookId: string, state: ReadingStateInput): Promise<ReadingStateEntity | null> {
+    return this.exec("reading-state-update", { bookId, ...state });
+  }
+
+  getTranslations(options: {
+    bookId: string;
+    method: TranslationMethod;
+    pageNumber?: number | null;
+    chunkKeyPrefix?: string | null;
+  }): Promise<TranslationEntity[]> {
+    return this.exec("translation-get", options);
+  }
+
+  putTranslation(translation: TranslationEntity): Promise<boolean> {
+    return this.exec("translation-put", translation);
+  }
+
+  deleteTranslations(options: {
+    bookId: string;
+    method: TranslationMethod;
+    pageNumber?: number | null;
+    chunkKeyPrefix?: string | null;
+  }): Promise<boolean> {
+    return this.exec("translation-delete", options);
   }
 
   close(): void {
