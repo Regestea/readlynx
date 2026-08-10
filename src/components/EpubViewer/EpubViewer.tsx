@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
+import type { Ref } from "react";
 import { ChevronLeft, ChevronRight, FileDown, FileWarning, Loader2, Maximize2, Minus, Minimize2, Plus, Settings2 } from "lucide-react";
 import ePub from "epubjs";
 import type { Book, Contents, Location, Rendition } from "epubjs";
@@ -116,9 +117,19 @@ interface EpubViewerProps {
   onReady?: () => void;
   /** Called with the total page count once the book has been laid out. */
   onPageCountChange?: (numPages: number) => void;
+  /** Called whenever the current chapter changes. The key is the EPUB spine
+   *  index of the section being read (stable for the lifetime of the book). */
+  onChapterChange?: (chapterKey: string) => void;
   /** Called with the currently rendered section converted to Markdown (headings,
    *  lists, quotes, emphasis, … preserved) when "Extract" is pressed. */
   onExtractPage?: (markdown: string) => void;
+}
+
+/** Imperative handle for hosts that need the current chapter's text (e.g.
+ *  reading-mode translation chunks it before calling the AI). */
+export interface EpubViewerHandle {
+  /** Markdown of the currently rendered section, or null when unavailable. */
+  getCurrentChapterMarkdown(): string | null;
 }
 
 export function EpubViewer({
@@ -134,8 +145,10 @@ export function EpubViewer({
   textColorOverride,
   onReady,
   onPageCountChange,
+  onChapterChange,
   onExtractPage,
-}: EpubViewerProps) {
+  ref,
+}: EpubViewerProps & { ref?: Ref<EpubViewerHandle> }) {
   const { theme } = useTheme();
   const [book, setBook] = useState<Book | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -158,6 +171,8 @@ export function EpubViewer({
   const onReadyRef = useRef(onReady);
   const onPageCountChangeRef = useRef(onPageCountChange);
   const onExtractPageRef = useRef(onExtractPage);
+  const onChapterChangeRef = useRef(onChapterChange);
+  const lastChapterKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     onReadyRef.current = onReady;
@@ -170,6 +185,26 @@ export function EpubViewer({
   useEffect(() => {
     onExtractPageRef.current = onExtractPage;
   }, [onExtractPage]);
+
+  useEffect(() => {
+    onChapterChangeRef.current = onChapterChange;
+  }, [onChapterChange]);
+
+  /** Markdown of the currently rendered section (the chapter being read),
+   *  extracted the same way as the toolbar's "Extract" action. */
+  const currentChapterMarkdown = useCallback((): string | null => {
+    const rendition = renditionRef.current;
+    if (!rendition || !bookRef.current) return null;
+    const contents = rendition.getContents() as unknown as Contents[];
+    const doc = contents[0]?.document;
+    if (!doc?.body) return null;
+    const markdown = epubHtmlToMarkdown(doc.body);
+    return markdown || null;
+  }, []);
+
+  useImperativeHandle(ref, () => ({
+    getCurrentChapterMarkdown: currentChapterMarkdown,
+  }));
 
   /** Exits the in-page fullscreen overlay with Escape. */
   useEffect(() => {
@@ -284,6 +319,11 @@ export function EpubViewer({
       setProgressPct(
         Math.round(bookRef.current.locations.percentageFromCfi(location.start.cfi) * 100),
       );
+      const chapterKey = String(location.start.index);
+      if (chapterKey !== lastChapterKeyRef.current) {
+        lastChapterKeyRef.current = chapterKey;
+        onChapterChangeRef.current?.(chapterKey);
+      }
     };
 
     void load();
@@ -376,13 +416,9 @@ export function EpubViewer({
    *  host (e.g. to append into the editor). Structure — headings, lists,
    *  quotes, emphasis — is preserved by `epubHtmlToMarkdown`. */
   const handleExtractPage = () => {
-    const rendition = renditionRef.current;
     const callback = onExtractPageRef.current;
-    if (!rendition || !callback || !bookRef.current) return;
-    const contents = rendition.getContents() as unknown as Contents[];
-    const doc = contents[0]?.document;
-    if (!doc?.body) return;
-    const markdown = epubHtmlToMarkdown(doc.body);
+    if (!callback) return;
+    const markdown = currentChapterMarkdown();
     if (markdown) callback(markdown);
   };
 

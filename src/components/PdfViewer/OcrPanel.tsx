@@ -23,6 +23,16 @@ interface OcrPanelProps {
   /** Status line shown in the footer (progress / errors / info). */
   status: string | null;
   onClose: () => void;
+  /** Overrides the panel header title (e.g. "OCR source languages"). */
+  title?: string;
+  /** Overrides the helper text under the header (e.g. translation use). */
+  hint?: string;
+  /** Overrides the primary button label (e.g. "Translate page"). */
+  actionLabel?: string;
+  /** Overrides the busy button label. */
+  actionBusyLabel?: string;
+  /** Extra classes on the panel root (used to embed it in other popovers). */
+  className?: string;
 }
 
 export function OcrPanel({
@@ -38,6 +48,11 @@ export function OcrPanel({
   extracting,
   status,
   onClose,
+  title = "Extract text (OCR)",
+  hint,
+  actionLabel = "Extract page text",
+  actionBusyLabel = "Recognizing…",
+  className = "",
 }: OcrPanelProps) {
   const [query, setQuery] = useState("");
   if (!open) return null;
@@ -62,11 +77,11 @@ export function OcrPanel({
     : OCR_LANGUAGES;
 
   return (
-    <div className={styles.panel} role="dialog" aria-label="OCR text extraction">
+    <div className={`${styles.panel} ${className}`} role="dialog" aria-label="OCR text extraction">
       <header className={styles.header}>
         <span className={styles.headerTitle}>
           <ScanText size={15} strokeWidth={1.8} aria-hidden="true" />
-          Extract text (OCR)
+          {title}
         </span>
         <Button
           variant="icon"
@@ -79,8 +94,8 @@ export function OcrPanel({
       </header>
 
       <p className={styles.hint}>
-        Recognize the current page and insert its text into the editor. Pick one or more
-        languages — models are stored locally in the app data <code>tessdata</code> folder.
+        {hint ??
+          `Recognize the current page and insert its text into the editor. Pick one or more languages — models are stored locally in the app data tessdata folder.`}
       </p>
 
       <div className={styles.searchBox}>
@@ -170,7 +185,7 @@ export function OcrPanel({
             <Loader2 size={14} strokeWidth={2} className={styles.spinner} aria-hidden="true" />
           )}
           <ScanText size={14} strokeWidth={1.8} aria-hidden="true" />
-          {extracting ? "Recognizing…" : "Extract page text"}
+          {extracting ? actionBusyLabel : actionLabel}
         </Button>
       </footer>
     </div>

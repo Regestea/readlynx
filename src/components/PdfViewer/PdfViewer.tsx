@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
+import type { Ref } from "react";
 import { ChevronLeft, ChevronRight, FileWarning, Loader2, ScanText, ZoomIn, ZoomOut } from "lucide-react";
 import * as pdfjsLib from "pdfjs-dist";
 import type { PDFDocumentLoadingTask, PDFDocumentProxy, PDFPageProxy, RenderTask } from "pdfjs-dist";
@@ -14,6 +15,13 @@ const ZOOM_STEP = 0.2;
 const ZOOM_MIN = 0.5;
 const ZOOM_MAX = 3;
 
+/** Imperative handle for hosts that need to peek at the rendered page (e.g.
+ *  reading-mode translation captures the canvas for OCR / AI vision). */
+export interface PdfViewerHandle {
+  /** PNG data URL of the currently rendered page, or null while unavailable. */
+  getCurrentPageImage(): string | null;
+}
+
 interface PdfViewerProps {
   filePath: string;
   className?: string;
@@ -28,6 +36,8 @@ interface PdfViewerProps {
   fitWidth?: boolean;
   /** Called once the first page has been painted. */
   onReady?: () => void;
+  /** Called whenever the displayed page changes (after load and on turn). */
+  onPageChange?: (page: number) => void;
   /** When set, renders page 1 offscreen at high resolution and reports the
    *  PNG data URL (used for cover capture — quality independent of the
    *  on-screen size). */
@@ -47,10 +57,12 @@ export function PdfViewer({
   fit = false,
   fitWidth = false,
   onReady,
+  onPageChange,
   onPageSnapshot,
   ocrEnabled = false,
   onOcrText,
-}: PdfViewerProps) {
+  ref,
+}: PdfViewerProps & { ref?: Ref<PdfViewerHandle> }) {
   const [doc, setDoc] = useState<PDFDocumentProxy | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pageNumber, setPageNumber] = useState(1);
@@ -65,6 +77,7 @@ export function PdfViewer({
   const onReadyRef = useRef(onReady);
   const onOcrTextRef = useRef(onOcrText);
   const onPageSnapshotRef = useRef(onPageSnapshot);
+  const onPageChangeRef = useRef(onPageChange);
   const readyRef = useRef(false);
   const snapshottedRef = useRef(false);
 
@@ -80,6 +93,10 @@ export function PdfViewer({
 
   const showOcr = ocrEnabled || Boolean(onOcrText);
 
+  useImperativeHandle(ref, () => ({
+    getCurrentPageImage: () => canvasRef.current?.toDataURL("image/png") ?? null,
+  }));
+
   const refreshModels = useCallback(async () => {
     const info = await window.readlynx?.ocr.getInfo();
     if (info) setInstalled(info.installed);
@@ -88,6 +105,17 @@ export function PdfViewer({
   useEffect(() => {
     onOcrTextRef.current = onOcrText;
   }, [onOcrText]);
+
+  useEffect(() => {
+    onPageChangeRef.current = onPageChange;
+  }, [onPageChange]);
+
+  /** Reports page changes (after load and on turn) so hosts can refresh
+   *  per-page state, e.g. the reading-mode translation cache. */
+  useEffect(() => {
+    if (!doc) return;
+    onPageChangeRef.current?.(pageNumber);
+  }, [doc, pageNumber]);
 
   useEffect(() => {
     if (!showOcr) return;
