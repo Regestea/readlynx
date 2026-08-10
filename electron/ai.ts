@@ -28,6 +28,43 @@ function createClient(input: AiConnectionInput): OpenAI {
   });
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** True when the provider answered 429 (rate limited / quota exhausted). */
+function isRateLimitError(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "status" in error &&
+    (error as { status?: unknown }).status === 429
+  );
+}
+
+/** Runs `request` and retries it after a fixed delay when the provider
+ *  rate-limits us, up to `maxAttempts` tries. Non-429 errors pass through
+ *  immediately. */
+async function withRateLimitRetry<T>(
+  request: () => Promise<T>,
+  maxAttempts = 10,
+  delayMs = 6000,
+): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await request();
+    } catch (error) {
+      lastError = error;
+      if (!isRateLimitError(error) || attempt === maxAttempts) {
+        throw error;
+      }
+      await sleep(delayMs);
+    }
+  }
+  throw lastError;
+}
+
 /** Tiny completion that verifies an API key + model combination actually
  *  works before it is saved. */
 export async function testConnection(
@@ -80,16 +117,38 @@ export async function listGeminiModels(
     }));
 }
 
-/** Plain chat completion over IPC (mirrors `sendChatMessage`). */
+/** Plain chat completion over IPC (mirrors `sendChatMessage`). `images`
+ *  (data URLs) are attached to the final user message, which lets vision
+ *  models read pages directly. */
 export async function chatCompletion(
   input: AiConnectionInput,
   messages: AiChatMessage[],
+  images?: string[],
 ): Promise<string> {
   const client = createClient(input);
-  const completion = await client.chat.completions.create({
-    model: input.modelName,
-    messages: messages.map((m) => ({ role: m.role, content: m.content })),
-  });
+  const mapped: OpenAI.ChatCompletionMessageParam[] = messages.map((m) => ({
+    role: m.role,
+    content: m.content,
+  }));
+  if (images && images.length > 0 && mapped.length > 0) {
+    const lastIndex = mapped.length - 1;
+    const imageParts: OpenAI.ChatCompletionContentPartImage[] = images.map(
+      (img) => ({ type: "image_url", image_url: { url: img } }),
+    );
+    mapped[lastIndex] = {
+      role: "user",
+      content: [
+        { type: "text", text: messages[lastIndex].content },
+        ...imageParts,
+      ],
+    };
+  }
+  const completion = await withRateLimitRetry(() =>
+    client.chat.completions.create({
+      model: input.modelName,
+      messages: mapped,
+    }),
+  );
   const content = completion.choices[0]?.message?.content;
   if (!content) {
     throw new Error("AI returned an empty response.");
@@ -123,18 +182,20 @@ export async function structuredCompletion(
     { role: "user", content: userContent },
   ];
 
-  const completion = await client.chat.completions.create({
-    model: input.modelName,
-    messages,
-    response_format: {
-      type: "json_schema",
-      json_schema: {
-        name: "structured",
-        strict: true,
-        schema: options.jsonSchema,
+  const completion = await withRateLimitRetry(() =>
+    client.chat.completions.create({
+      model: input.modelName,
+      messages,
+      response_format: {
+        type: "json_schema",
+        json_schema: {
+          name: "structured",
+          strict: true,
+          schema: options.jsonSchema,
+        },
       },
-    },
-  });
+    }),
+  );
 
   const content = completion.choices[0]?.message?.content;
   if (!content) {
