@@ -5,4 +5,5 @@ export * from "./BookDocument.ts";
 export * from "./BookSource.ts";
 export * from "./DocumentSettings.ts";
 export * from "./ReadingState.ts";
+export * from "./Translation.ts";
 export * from "./types.ts";

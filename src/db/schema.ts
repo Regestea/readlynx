@@ -42,8 +42,29 @@ CREATE TABLE IF NOT EXISTS ReadingState (
   bookId         TEXT PRIMARY KEY REFERENCES Books(id) ON DELETE CASCADE,
   currentPage    INTEGER NOT NULL DEFAULT 1,
   scrollPosition REAL NOT NULL DEFAULT 0,
+  ocrLangs       TEXT NOT NULL DEFAULT '["eng"]',
+  sourceLang     TEXT NOT NULL DEFAULT '',
+  targetLang     TEXT NOT NULL DEFAULT 'English',
+  customPrompt   TEXT NOT NULL DEFAULT '',
   updatedAt      TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS Translations (
+  id           TEXT PRIMARY KEY,
+  bookId       TEXT NOT NULL REFERENCES Books(id) ON DELETE CASCADE,
+  sourceType   TEXT NOT NULL,
+  method       TEXT NOT NULL,
+  pageNumber   INTEGER,
+  chunkKey     TEXT,
+  sourceLang   TEXT NOT NULL,
+  targetLang   TEXT NOT NULL,
+  customPrompt TEXT NOT NULL DEFAULT '',
+  markdown     TEXT NOT NULL,
+  updatedAt    TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_translations_lookup
+  ON Translations (bookId, method, pageNumber, chunkKey);
 
 CREATE TABLE IF NOT EXISTS AppSettings (
   theme TEXT NOT NULL DEFAULT 'light'
@@ -55,7 +76,8 @@ CREATE TABLE IF NOT EXISTS AiModels (
   URL         TEXT,
   ModelName   TEXT,
   APIKey      TEXT,
-  Provider    TEXT NOT NULL
+  Provider    TEXT NOT NULL,
+  IsDefault   INTEGER NOT NULL DEFAULT 0
 );
 `;
 
@@ -80,6 +102,8 @@ export function applySchema(db: Database.Database): void {
     ensureCoverImageTextColumn(db);
     ensureKindColumn(db);
     ensureCascadeForeignKeys(db);
+    ensureReadingStateSettingsColumns(db);
+    ensureAiModelDefaultColumn(db);
   });
 }
 
@@ -134,10 +158,19 @@ function ensureCascadeForeignKeys(db: Database.Database): void {
         bookId         TEXT PRIMARY KEY REFERENCES Books(id) ON DELETE CASCADE,
         currentPage    INTEGER NOT NULL DEFAULT 1,
         scrollPosition REAL NOT NULL DEFAULT 0,
+        ocrLangs       TEXT NOT NULL DEFAULT '["eng"]',
+        sourceLang     TEXT NOT NULL DEFAULT '',
+        targetLang     TEXT NOT NULL DEFAULT 'English',
+        customPrompt   TEXT NOT NULL DEFAULT '',
         updatedAt      TEXT NOT NULL DEFAULT (datetime('now'))
       );
-      INSERT INTO ReadingState_new (bookId, currentPage, scrollPosition, updatedAt)
-        SELECT bookId, currentPage, scrollPosition, updatedAt FROM ReadingState;
+      INSERT INTO ReadingState_new (
+        bookId, currentPage, scrollPosition, ocrLangs, sourceLang, targetLang,
+        customPrompt, updatedAt
+      )
+        SELECT bookId, currentPage, scrollPosition, ocrLangs, sourceLang, targetLang,
+               customPrompt, updatedAt
+        FROM ReadingState;
       DROP TABLE ReadingState;
       ALTER TABLE ReadingState_new RENAME TO ReadingState;
 
@@ -187,4 +220,30 @@ function ensureCascadeForeignKeys(db: Database.Database): void {
       ALTER TABLE Documents_new RENAME TO Documents;
     `);
   })();
+}
+
+/** Databases created before reading settings existed lack the translation
+ *  columns on `ReadingState`. Adds them with defaults; existing rows keep
+ *  their saved page/scroll state. */
+function ensureReadingStateSettingsColumns(db: Database.Database): void {
+  const columns = db.pragma("table_info(ReadingState)") as Array<{ name: string }>;
+  const has = (name: string) => columns.some((entry) => entry.name === name);
+  const addColumn = (name: string, definition: string) => {
+    if (!has(name)) {
+      db.exec(`ALTER TABLE ReadingState ADD COLUMN ${name} ${definition}`);
+    }
+  };
+  addColumn("ocrLangs", "TEXT NOT NULL DEFAULT '[\"eng\"]'");
+  addColumn("sourceLang", "TEXT NOT NULL DEFAULT ''");
+  addColumn("targetLang", "TEXT NOT NULL DEFAULT 'English'");
+  addColumn("customPrompt", "TEXT NOT NULL DEFAULT ''");
+}
+
+/** Databases created before the default-model concept lack `IsDefault` on
+ *  `AiModels`. Adds the column; existing models keep their order. */
+function ensureAiModelDefaultColumn(db: Database.Database): void {
+  const columns = db.pragma("table_info(AiModels)") as Array<{ name: string }>;
+  if (!columns.some((entry) => entry.name === "IsDefault")) {
+    db.exec("ALTER TABLE AiModels ADD COLUMN IsDefault INTEGER NOT NULL DEFAULT 0");
+  }
 }
