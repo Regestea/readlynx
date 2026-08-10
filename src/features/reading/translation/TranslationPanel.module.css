@@ -43,14 +43,13 @@
 
 .fab:hover {
   background: color-mix(in srgb, var(--color-primary) 88%, #000);
-  opacity: 1;
   transform: translateY(-1px);
+  opacity: 1;
 }
 
 .fabActive,
 .fabActive:hover {
   background: color-mix(in srgb, var(--color-primary) 88%, #000);
-  opacity: 1;
   transform: none;
 }
 
