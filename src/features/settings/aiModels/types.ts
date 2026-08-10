@@ -8,6 +8,7 @@ export const EMPTY_MODEL: AiModel = {
   ModelName: null,
   APIKey: null,
   Provider: "GoogleGemini",
+  IsDefault: false,
 };
 
 export const PROVIDER_OPTIONS: { label: string; value: AiModel["Provider"] }[] = [

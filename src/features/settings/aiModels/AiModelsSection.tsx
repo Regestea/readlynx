@@ -11,7 +11,7 @@ import styles from "./aiModels.module.css";
 
 /** AI Models management, shown inside the Settings page. */
 export function AiModelsSection() {
-  const { models, addModel, updateModel, deleteModel } = useAiModels();
+  const { models, addModel, updateModel, deleteModel, setDefaultModel } = useAiModels();
   const form = useAiModelForm();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
@@ -56,7 +56,8 @@ export function AiModelsSection() {
         </div>
         <p className={styles.sectionDesc}>
           Connect the language models ReadLynx uses for AI features. Keys are stored locally in
-          your library database.
+          your library database. The model marked as “Default” is used automatically by the
+          reading-mode translator.
         </p>
       </div>
 
@@ -67,6 +68,7 @@ export function AiModelsSection() {
           setIsModalOpen(true);
         }}
         onDelete={(id) => setDeleteTargetId(id)}
+        onSetDefault={(id) => void setDefaultModel(id)}
       />
 
       <div className={styles.addRow}>

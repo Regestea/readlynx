@@ -47,5 +47,13 @@ export function useAiModels() {
     setModels((prev) => prev.filter((m) => m.Id !== id));
   };
 
-  return { models, loading, refresh, addModel, updateModel, deleteModel };
+  /** Marks a model as the default (clearing the flag on the others). */
+  const setDefaultModel = async (id: string) => {
+    const ok = await getDb()?.setDefaultAiModel(id);
+    if (ok) {
+      setModels((prev) => prev.map((m) => ({ ...m, IsDefault: m.Id === id })));
+    }
+  };
+
+  return { models, loading, refresh, addModel, updateModel, deleteModel, setDefaultModel };
 }
