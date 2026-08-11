@@ -14,6 +14,7 @@ import { Table } from "../Table/Table";
 import type { TableColumn } from "../Table/Table";
 import { FontFamilySelect } from "../FontFamilySelect/FontFamilySelect";
 import { ColorSelect } from "../ColorSelect/ColorSelect";
+import { AiSelectionBubble } from "../AiSelectionBubble/AiSelectionBubble";
 import { useReaderSettings } from "../../../hooks/useReaderSettings.ts";
 import styles from "./Markdown.module.css";
 
@@ -117,6 +118,9 @@ interface MarkdownProps {
   /** Per-book key for persisting reader settings (zoom, font, colors) in
    *  localStorage; the EPUB viewer uses the same key per book. */
   settingsKey?: string;
+  /** When provided, a floating "Ask AI" bubble appears next to text
+   *  selections and hands the selected text to the host. */
+  onAskAi?: (text: string) => void;
 }
 
 /* ---------- RTL helpers ---------- */
@@ -390,6 +394,7 @@ export function Markdown({
   toolbar = false,
   rawHtml = true,
   settingsKey,
+  onAskAi,
 }: MarkdownProps) {
   const {
     zoomPct,
@@ -404,8 +409,87 @@ export function Markdown({
   const [menuOpen, setMenuOpen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [spacerHeight, setSpacerHeight] = useState(0);
+  const [aiSelection, setAiSelection] = useState<{ x: number; y: number; text: string } | null>(null);
   const hostRef = useRef<HTMLDivElement>(null);
   const controlsRef = useRef<HTMLDivElement>(null);
+
+  /** Shows the floating "Ask AI" bubble next to the end of a text selection
+   *  inside this document — only after the mouse button is released, never
+   *  while dragging. Hides it when the selection is cleared or moves outside. */
+  useEffect(() => {
+    if (!onAskAi) return;
+    const host = hostRef.current;
+    let selecting = false;
+    let showTimer: number | undefined;
+
+    const compute = () => {
+      const sel = window.getSelection();
+      const text = sel?.toString().trim() ?? "";
+      if (!sel || sel.isCollapsed || !text || text.length < 2) {
+        setAiSelection(null);
+        return;
+      }
+      const anchor = sel.anchorNode;
+      if (!anchor || !host?.contains(anchor)) {
+        setAiSelection(null);
+        return;
+      }
+      // Anchor the bubble to the end of the selection's last line.
+      const range = sel.getRangeAt(0).cloneRange();
+      range.collapse(false);
+      const endRect = range.getBoundingClientRect();
+      if (!endRect.top && !endRect.left && endRect.width === 0 && endRect.height === 0) {
+        setAiSelection(null);
+        return;
+      }
+      const bubbleWidth = 48;
+      const rightOfEnd = endRect.right + 8;
+      const x =
+        rightOfEnd + bubbleWidth <= window.innerWidth - 8
+          ? rightOfEnd
+          : Math.max(8, endRect.left - bubbleWidth - 8);
+      const y = Math.max(8, Math.min(endRect.top - 20, window.innerHeight - bubbleWidth));
+      setAiSelection({ x, y, text });
+    };
+
+    const onDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      selecting = Boolean(host && target && host.contains(target));
+      if (selecting) setAiSelection(null);
+    };
+    const onUp = () => {
+      if (!selecting) return;
+      selecting = false;
+      compute();
+    };
+    const onSelectionChange = () => {
+      if (showTimer) window.clearTimeout(showTimer);
+      if (selecting) return;
+      const sel = window.getSelection();
+      const text = sel?.toString().trim() ?? "";
+      if (!sel || sel.isCollapsed || !text || text.length < 2) {
+        setAiSelection(null);
+        return;
+      }
+      const anchor = sel.anchorNode;
+      if (!anchor || !host?.contains(anchor)) {
+        setAiSelection(null);
+        return;
+      }
+      // Debounce like epubjs: show only once the selection has been stable for
+      // a moment (covers keyboard-driven selections with no mouse events).
+      showTimer = window.setTimeout(compute, 250);
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("mouseup", onUp);
+    document.addEventListener("selectionchange", onSelectionChange);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("mouseup", onUp);
+      document.removeEventListener("selectionchange", onSelectionChange);
+      if (showTimer) window.clearTimeout(showTimer);
+    };
+  }, [onAskAi]);
 
   /** Exits the in-page fullscreen overlay with Escape. */
   useEffect(() => {
@@ -587,6 +671,14 @@ export function Markdown({
       </div>
       {isFullscreen && (
         <div className={styles.fullscreenSpacer} style={{ height: spacerHeight }} aria-hidden="true" />
+      )}
+      {aiSelection && onAskAi && (
+        <AiSelectionBubble
+          x={aiSelection.x}
+          y={aiSelection.y}
+          text={aiSelection.text}
+          onAsk={onAskAi}
+        />
       )}
     </>
   );

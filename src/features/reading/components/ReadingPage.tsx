@@ -6,10 +6,11 @@ import type { PdfViewerHandle } from "../../../components/PdfViewer/PdfViewer";
 import { EpubViewer } from "../../../components/EpubViewer/EpubViewer";
 import type { EpubViewerHandle } from "../../../components/EpubViewer/EpubViewer";
 import { Markdown } from "../../../components/ui/Markdown/Markdown";
+import { AiChatPanel } from "../../../components/ui/AiChatPanel/AiChatPanel";
 import type { BookSourceType } from "../../../db/entities/types";
 import { TranslationSettingsPanel, TranslationToggle } from "../translation/TranslationPanel";
 import { useTranslation } from "../translation/useTranslation";
-import { epubUnitKey, pdfUnitKey } from "../translation/types";
+import { epubUnitKey, methodFor, pdfUnitKey } from "../translation/types";
 import styles from "./ReadingPage.module.css";
 
 interface ReadingPageProps {
@@ -30,6 +31,11 @@ type PageState =
 
 export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
   const [state, setState] = useState<PageState>({ status: "loading" });
+  const [aiContext, setAiContext] = useState<string | null>(null);
+  const [pdfAskImages, setPdfAskImages] = useState<string[] | null>(null);
+  const [chatError, setChatError] = useState<string | null>(null);
+  const [pdfAskBusy, setPdfAskBusy] = useState(false);
+  const askPdfRef = useRef(false);
   const pdfRef = useRef<PdfViewerHandle | null>(null);
   const epubRef = useRef<EpubViewerHandle | null>(null);
 
@@ -78,6 +84,44 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
       setTranslationUnit(epubUnitKey(chapterKey));
     },
     [setTranslationUnit],
+  );
+
+  /** PDF click-to-ask: follows the translate panel's top setting — OCR the
+   *  whole current page locally and seed the chat with the recognized text
+   *  (opening the panel in a busy state meanwhile), or hand the page image
+   *  straight to a vision model. */
+  const handleAskPdfRegion = useCallback(
+    async ({ image }: { image: string }) => {
+      setChatError(null);
+      if (methodFor(readyBook?.sourceType ?? "pdf", translation.pdfMethod) === "ocr") {
+        askPdfRef.current = true;
+        setPdfAskBusy(true);
+        try {
+          const result = await window.readlynx?.ocr.recognize({
+            dataUrl: image,
+            langs: translation.settings.ocrLangs,
+          });
+          if (!askPdfRef.current) return;
+          const text = (result?.text ?? "").trim();
+          if (!text) {
+            setChatError(
+              "No text detected on this page. Try zooming in, or switch the top setting to AI vision.",
+            );
+            return;
+          }
+          setAiContext(text);
+        } catch (err) {
+          if (!askPdfRef.current) return;
+          setChatError(err instanceof Error ? err.message : String(err));
+        } finally {
+          askPdfRef.current = false;
+          setPdfAskBusy(false);
+        }
+      } else {
+        setPdfAskImages([image]);
+      }
+    },
+    [readyBook?.sourceType, translation.pdfMethod, translation.settings],
   );
 
   const book = state.status === "ready" ? state.book : null;
@@ -160,6 +204,7 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
                   fitWidth
                   className={styles.viewer}
                   onPageChange={handlePageChange}
+                  onAskAi={handleAskPdfRegion}
                 />
               ) : (
                 <EpubViewer
@@ -168,8 +213,10 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
                   fill
                   toolbar
                   showExtract={false}
+settingsKey={`${bookId}:epub`}
                   className={styles.viewer}
                   onChapterChange={handleChapterChange}
+                  onAskAi={setAiContext}
                 />
               )}
             </div>
@@ -177,7 +224,7 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
             {showTranslation && (
               <div className={styles.translationStage}>
                 {translation.markdown ? (
-                  <Markdown content={translation.markdown} toolbar rawHtml={false} className={styles.translationBody} />
+                  <Markdown content={translation.markdown} toolbar rawHtml={false} settingsKey={`${bookId}:markdown`} className={styles.translationBody} onAskAi={setAiContext} />
                 ) : translation.busy ? (
                   <div className={styles.state} aria-label="Translating">
                     <Loader2 size={24} strokeWidth={2} className={styles.spinner} />
@@ -210,6 +257,24 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
           </>
         ) : null}
       </div>
+
+      <AiChatPanel
+        open={
+          aiContext !== null || pdfAskImages !== null || chatError !== null || pdfAskBusy
+        }
+        contextText={aiContext}
+        contextImages={pdfAskImages ?? undefined}
+        initialError={chatError}
+        initialBusy={pdfAskBusy}
+        initialBusyLabel="Capturing page data…"
+        onClose={() => {
+          askPdfRef.current = false;
+          setAiContext(null);
+          setPdfAskImages(null);
+          setChatError(null);
+          setPdfAskBusy(false);
+        }}
+      />
     </main>
   );
 }

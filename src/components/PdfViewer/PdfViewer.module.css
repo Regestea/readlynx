@@ -14,6 +14,24 @@
   height: 100%;
 }
 
+.viewerFullscreen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  background: var(--color-page);
+  z-index: var(--z-dialog);
+}
+
+.fullscreenSpacer {
+  width: 100%;
+  pointer-events: none;
+}
+
 .toolbar {
   position: relative;
   display: flex;
@@ -22,6 +40,16 @@
   padding: var(--space-2) var(--space-3);
   border-bottom: 1px solid var(--color-border);
   background: var(--color-glass);
+}
+
+.toolbarEnd {
+  margin-left: auto;
+}
+
+.toolButtonActive,
+.toolButtonActive:hover {
+  background: var(--color-active);
+  color: var(--color-primary);
 }
 
 .toolButton {
@@ -105,7 +133,7 @@
 
 .scroll {
   flex: 1;
-  min-height: 0;
+  min-height: 100dvh !important;
   overflow: auto;
   display: flex;
   align-items: flex-start;

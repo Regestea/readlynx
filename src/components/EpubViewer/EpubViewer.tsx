@@ -9,6 +9,7 @@ import { epubHtmlToMarkdown, epubHtmlToPlainTextWithImages } from "./epubToMarkd
 import type { EpubImageRef } from "./epubToMarkdown";
 import { FontFamilySelect } from "../ui/FontFamilySelect/FontFamilySelect";
 import { ColorSelect } from "../ui/ColorSelect/ColorSelect";
+import { AiSelectionBubble } from "../ui/AiSelectionBubble/AiSelectionBubble";
 import hljs from "highlight.js/lib/common";
 import powershell from "highlight.js/lib/languages/powershell";
 import dockerfile from "highlight.js/lib/languages/dockerfile";
@@ -245,6 +246,9 @@ interface EpubViewerProps {
   /** Called with the currently rendered section converted to Markdown (headings,
    *  lists, quotes, emphasis, … preserved) when "Extract" is pressed. */
   onExtractPage?: (markdown: string) => void;
+  /** When provided, a floating "Ask AI" bubble appears next to text
+   *  selections inside the book and hands the selected text to the host. */
+  onAskAi?: (text: string) => void;
 }
 
 /** Imperative handle for hosts that need the current chapter's text (e.g.
@@ -284,6 +288,7 @@ export function EpubViewer({
   onPageCountChange,
   onChapterChange,
   onExtractPage,
+  onAskAi,
   ref,
 }: EpubViewerProps & { ref?: Ref<EpubViewerHandle> }) {
   const { theme } = useTheme();
@@ -305,6 +310,7 @@ export function EpubViewer({
   const [menuOpen, setMenuOpen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [spacerHeight, setSpacerHeight] = useState(0);
+  const [aiSelection, setAiSelection] = useState<{ x: number; y: number; text: string } | null>(null);
   const viewerRef = useRef<HTMLDivElement>(null);
   const hostRef = useRef<HTMLDivElement>(null);
   const controlsWrapRef = useRef<HTMLDivElement>(null);
@@ -317,6 +323,7 @@ export function EpubViewer({
   const onExtractPageRef = useRef(onExtractPage);
   const onChapterChangeRef = useRef(onChapterChange);
   const lastChapterKeyRef = useRef<string | null>(null);
+  const selectionGuardRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     onReadyRef.current = onReady;
@@ -500,6 +507,7 @@ export function EpubViewer({
         });
         renditionRef.current = rendition;
         rendition.on("relocated", handleRelocated);
+        rendition.on("selected", handleSelected);
         rendition.hooks.content.register(injectFontStyle);
         rendition.hooks.content.register(highlightCodeBlocks);
         await rendition.display();
@@ -527,19 +535,79 @@ export function EpubViewer({
         lastChapterKeyRef.current = chapterKey;
         onChapterChangeRef.current?.(chapterKey);
       }
+      setAiSelection(null);
+    };
+
+    /** Hides the bubble the moment the selection in this contents document is
+     *  cleared or collapsed (epubjs 0.3.93 has no `deselected` event, so we
+     *  watch `selectionchange` ourselves). */
+    const watchDeselect = (contents: Contents) => {
+      selectionGuardRef.current?.();
+      const onSelectionChange = () => {
+        const sel = contents.window.getSelection();
+        if (!sel || sel.isCollapsed || sel.toString().trim().length < 2) {
+          setAiSelection(null);
+        }
+      };
+      contents.document.addEventListener("selectionchange", onSelectionChange);
+      selectionGuardRef.current = () =>
+        contents.document.removeEventListener("selectionchange", onSelectionChange);
+    };
+
+    /** Floating "Ask AI" bubble next to the end of the reader's text
+     *  selection. epubjs fires `selected` ~250ms after the selection stops
+     *  changing (never during a drag). The range rect is in the iframe's
+     *  internal viewport — offset it by the *iframe element's* position so
+     *  the fixed-position bubble lands at the right spot on the app viewport,
+     *  no matter how far the scrolled container has scrolled. */
+    const handleSelected = (_cfiRange: string, contents: Contents) => {
+      watchDeselect(contents);
+      const sel = contents.window.getSelection();
+      const text = sel?.toString().trim() ?? "";
+      if (!sel || sel.isCollapsed || !text || text.length < 2) {
+        setAiSelection(null);
+        return;
+      }
+      const iframe = hostRef.current?.querySelector("iframe");
+      const iframeRect = iframe?.getBoundingClientRect();
+      if (!iframeRect) {
+        setAiSelection(null);
+        return;
+      }
+      const range = sel.getRangeAt(0).cloneRange();
+      range.collapse(false);
+      const endRect = range.getBoundingClientRect();
+      if (!endRect.top && !endRect.left && endRect.width === 0 && endRect.height === 0) {
+        setAiSelection(null);
+        return;
+      }
+      const bubbleWidth = 48;
+      const rightOfEnd = endRect.right + iframeRect.left + 8;
+      const x =
+        rightOfEnd + bubbleWidth <= window.innerWidth - 8
+          ? rightOfEnd
+          : Math.max(8, endRect.left + iframeRect.left - bubbleWidth - 8);
+      const y = Math.max(
+        8,
+        Math.min(endRect.top + iframeRect.top - 20, window.innerHeight - bubbleWidth),
+      );
+      setAiSelection({ x, y, text });
     };
 
     void load();
 
     return () => {
       cancelled = true;
+      selectionGuardRef.current?.();
+      selectionGuardRef.current = null;
       renditionRef.current?.off("relocated", handleRelocated);
+      renditionRef.current?.off("selected", handleSelected);
       renditionRef.current?.destroy();
       renditionRef.current = null;
       bookRef.current?.destroy();
       bookRef.current = null;
     };
-  }, [filePath, srcData, injectFontStyle]);
+  }, [filePath, srcData, injectFontStyle, highlightCodeBlocks]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -840,6 +908,14 @@ export function EpubViewer({
     </div>
     {isFullscreen && (
       <div className={styles.fullscreenSpacer} style={{ height: spacerHeight }} aria-hidden="true" />
+    )}
+    {aiSelection && onAskAi && (
+      <AiSelectionBubble
+        x={aiSelection.x}
+        y={aiSelection.y}
+        text={aiSelection.text}
+        onAsk={onAskAi}
+      />
     )}
     </>
   );

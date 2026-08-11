@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
-import type { Ref } from "react";
-import { ChevronLeft, ChevronRight, FileWarning, Loader2, ScanText, ZoomIn, ZoomOut } from "lucide-react";
+import type { MouseEvent as ReactMouseEvent, Ref } from "react";
+import { ChevronLeft, ChevronRight, FileWarning, Loader2, Maximize2, Minimize2, ScanText, ZoomIn, ZoomOut } from "lucide-react";
 import * as pdfjsLib from "pdfjs-dist";
 import type { PDFDocumentLoadingTask, PDFDocumentProxy, PDFPageProxy, RenderTask } from "pdfjs-dist";
 import { OcrPanel } from "./OcrPanel";
+import { AiSelectionBubble } from "../ui/AiSelectionBubble/AiSelectionBubble";
 import styles from "./PdfViewer.module.css";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
@@ -46,6 +47,10 @@ interface PdfViewerProps {
   ocrEnabled?: boolean;
   /** Called with the text recognized from the current page. */
   onOcrText?: (text: string) => void;
+  /** When provided, clicking the page shows an "Ask AI" bubble at the cursor;
+   *  clicking the bubble hands a PNG of the current page to the host, which
+   *  decides between OCR and AI vision. */
+  onAskAi?: (payload: { image: string }) => void;
 }
 
 export function PdfViewer({
@@ -61,6 +66,7 @@ export function PdfViewer({
   onPageSnapshot,
   ocrEnabled = false,
   onOcrText,
+  onAskAi,
   ref,
 }: PdfViewerProps & { ref?: Ref<PdfViewerHandle> }) {
   const [doc, setDoc] = useState<PDFDocumentProxy | null>(null);
@@ -88,6 +94,10 @@ export function PdfViewer({
   const [downloadProgress, setDownloadProgress] = useState<number | null>(null);
   const [extracting, setExtracting] = useState(false);
   const [ocrStatus, setOcrStatus] = useState<string | null>(null);
+  const [aiSelection, setAiSelection] = useState<{ x: number; y: number } | null>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [spacerHeight, setSpacerHeight] = useState(0);
+  const viewerRef = useRef<HTMLDivElement>(null);
   const downloadingRef = useRef<string | null>(null);
   const extractingRef = useRef(false);
 
@@ -213,6 +223,44 @@ export function PdfViewer({
     setOcrOpen((open) => !open);
     void refreshModels();
   }, [refreshModels]);
+
+  /** Exits the in-page fullscreen overlay with Escape. */
+  useEffect(() => {
+    if (!isFullscreen) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setIsFullscreen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [isFullscreen]);
+
+  const toggleFullscreen = () => {
+    if (!isFullscreen && viewerRef.current) {
+      setSpacerHeight(viewerRef.current.offsetHeight);
+    }
+    setIsFullscreen((prev) => !prev);
+  };
+
+  /** Click-to-ask: floats the "Ask AI" bubble at the cursor. The bubble's
+   *  click hands a PNG of the whole current page to the host, which picks
+   *  OCR or AI vision from its top setting. */
+  const handlePageClick = useCallback(
+    (event: ReactMouseEvent<HTMLCanvasElement>) => {
+      const canvas = canvasRef.current;
+      if (!canvas || !onAskAi) return;
+      const rect = canvas.getBoundingClientRect();
+      const relX = event.clientX - rect.left;
+      const relY = event.clientY - rect.top;
+      const bubbleWidth = 40;
+      const x =
+        relX + rect.left + bubbleWidth + 12 <= window.innerWidth - 8
+          ? relX + rect.left + 12
+          : Math.max(8, relX + rect.left - bubbleWidth - 12);
+      const y = Math.max(8, Math.min(relY + rect.top - 52, window.innerHeight - bubbleWidth));
+      setAiSelection({ x, y });
+    },
+    [onAskAi],
+  );
 
   useEffect(() => {
     onReadyRef.current = onReady;
@@ -344,6 +392,7 @@ const task = pageProxy.render({ canvas, viewport, transform });
     const run = async () => {
       await Promise.resolve();
       if (cancelled) return;
+      setAiSelection(null);
       await renderPage(doc, pageNumber, scale);
     };
     void run();
@@ -357,11 +406,16 @@ const task = pageProxy.render({ canvas, viewport, transform });
     setPageNumber(Math.min(Math.max(1, page), numPages));
   };
 
-  const classes = [styles.viewer, fill ? styles.fill : "", className].filter(Boolean).join(" ");
+  const classes = [
+    styles.viewer,
+    fill ? styles.fill : "",
+    isFullscreen ? styles.viewerFullscreen : "",
+    className,
+  ].filter(Boolean).join(" ");
   const showCanvas = doc && !error;
 
   return (
-    <div className={classes} aria-label={ariaLabel}>
+    <div ref={viewerRef} className={classes} aria-label={ariaLabel}>
       {toolbar && (
         <div className={styles.toolbar} role="toolbar" aria-label="PDF controls">
         <button
@@ -427,6 +481,21 @@ const task = pageProxy.render({ canvas, viewport, transform });
         >
           <ZoomIn size={16} strokeWidth={2} aria-hidden="true" />
         </button>
+        <span className={styles.divider} aria-hidden="true" />
+        <button
+          type="button"
+          className={`${styles.toolButton} ${styles.toolbarEnd} ${isFullscreen ? styles.toolButtonActive : ""}`}
+          onClick={toggleFullscreen}
+          disabled={!doc}
+          aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+          title={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+        >
+          {isFullscreen ? (
+            <Minimize2 size={16} strokeWidth={2} aria-hidden="true" />
+          ) : (
+            <Maximize2 size={16} strokeWidth={2} aria-hidden="true" />
+          )}
+        </button>
         {showOcr && (
           <>
             <span className={styles.divider} aria-hidden="true" />
@@ -461,7 +530,13 @@ const task = pageProxy.render({ canvas, viewport, transform });
       </div>
       )}
 
-      <div className={styles.scroll} ref={scrollRef}>
+      <div
+        className={styles.scroll}
+        ref={scrollRef}
+        onClick={(event) => {
+          if (event.target !== canvasRef.current) setAiSelection(null);
+        }}
+      >
         {error ? (
           <div className={styles.error} role="alert">
             <FileWarning size={28} strokeWidth={1.8} aria-hidden="true" />
@@ -469,7 +544,7 @@ const task = pageProxy.render({ canvas, viewport, transform });
           </div>
         ) : showCanvas ? (
           <div className={styles.page}>
-            <canvas ref={canvasRef} className={styles.canvas} />
+            <canvas ref={canvasRef} className={styles.canvas} onClick={handlePageClick} />
             {rendering && (
               <div className={styles.renderingOverlay} aria-hidden="true">
                 <Loader2 className={styles.spinner} size={20} strokeWidth={2} />
@@ -483,6 +558,21 @@ const task = pageProxy.render({ canvas, viewport, transform });
           </div>
         )}
       </div>
+      {isFullscreen && (
+        <div className={styles.fullscreenSpacer} style={{ height: spacerHeight }} aria-hidden="true" />
+      )}
+      {aiSelection && onAskAi && (
+        <AiSelectionBubble
+          x={aiSelection.x}
+          y={aiSelection.y}
+          text=""
+          onAsk={() => {
+            const image = canvasRef.current?.toDataURL("image/png") ?? null;
+            setAiSelection(null);
+            if (image) onAskAi({ image });
+          }}
+        />
+      )}
     </div>
   );
 }
