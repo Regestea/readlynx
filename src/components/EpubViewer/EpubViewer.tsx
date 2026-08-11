@@ -8,11 +8,128 @@ import { useReaderSettings } from "../../hooks/useReaderSettings.ts";
 import { epubHtmlToMarkdown } from "./epubToMarkdown";
 import { FontFamilySelect } from "../ui/FontFamilySelect/FontFamilySelect";
 import { ColorSelect } from "../ui/ColorSelect/ColorSelect";
+import hljs from "highlight.js/lib/common";
+import powershell from "highlight.js/lib/languages/powershell";
+import dockerfile from "highlight.js/lib/languages/dockerfile";
+import http from "highlight.js/lib/languages/http";
+import scala from "highlight.js/lib/languages/scala";
 import styles from "./EpubViewer.module.css";
 
 const FONT_STEP = 10;
 const FONT_MIN = 60;
 const FONT_MAX = 200;
+
+hljs.registerLanguage("powershell", powershell);
+hljs.registerLanguage("dockerfile", dockerfile);
+hljs.registerLanguage("http", http);
+hljs.registerLanguage("scala", scala);
+
+/** Language subset for auto-detection: the common programming languages found
+ *  in technical books, so Kotlin/Swift/etc. are not misdetected as Java. */
+const AUTO_LANGS = [
+  "csharp",
+  "java",
+  "javascript",
+  "typescript",
+  "python",
+  "cpp",
+  "c",
+  "go",
+  "rust",
+  "kotlin",
+  "swift",
+  "sql",
+  "bash",
+  "json",
+  "xml",
+  "css",
+  "php",
+  "ruby",
+  "dart",
+  "scala",
+] as const;
+
+/** Reads a hint from `data-language`, `language-…`/`lang-…` classes, or a
+ *  bare language class token (e.g. `csharp`) on the `<pre>`. */
+function detectCodeLanguage(pre: HTMLPreElement): string {
+  const attr = pre.getAttribute("data-language");
+  if (attr && hljs.getLanguage(attr.toLowerCase())) return attr.toLowerCase();
+  for (const cls of pre.classList) {
+    const match = /^lang(?:uage)?[-_]?([a-z0-9+#-]+)$/i.exec(cls);
+    if (!match) continue;
+    const lang = match[1].toLowerCase();
+    if (hljs.getLanguage(lang)) return lang;
+  }
+  for (const cls of pre.classList) {
+    const lang = cls.toLowerCase();
+    if (lang !== "source-code" && hljs.getLanguage(lang)) return lang;
+  }
+  return "";
+}
+
+/** Determines whether a hex background is light (readable with a dark-code
+ *  palette) or dark (readable with a light-code palette). */
+function backgroundIsLight(background: string): boolean {
+  const match = /^#?([0-9a-f]{6})$/i.exec(background.trim());
+  if (!match) return true;
+  const n = parseInt(match[1], 16);
+  const r = (n >> 16) & 255;
+  const g = (n >> 8) & 255;
+  const b = n & 255;
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b > 140;
+}
+
+const HLJS_TOKENS: Record<string, [string, string]> = {
+  "hljs-comment": ["#6a737d", "#5c6370"],
+  "hljs-quote": ["#6a737d", "#5c6370"],
+  "hljs-keyword": ["#d73a49", "#c678dd"],
+  "hljs-selector-tag": ["#d73a49", "#c678dd"],
+  "hljs-subst": ["#d73a49", "#e5c07b"],
+  "hljs-string": ["#032f62", "#98c379"],
+  "hljs-doctag": ["#032f62", "#98c379"],
+  "hljs-regexp": ["#032f62", "#98c379"],
+  "hljs-title": ["#6f42c1", "#61aeee"],
+  "hljs-section": ["#6f42c1", "#61aeee"],
+  "hljs-selector-id": ["#6f42c1", "#61aeee"],
+  "hljs-selector-attr": ["#6f42c1", "#c678dd"],
+  "hljs-selector-pseudo": ["#6f42c1", "#c678dd"],
+  "hljs-number": ["#005cc5", "#d19a66"],
+  "hljs-literal": ["#005cc5", "#d19a66"],
+  "hljs-attr": ["#005cc5", "#d19a66"],
+  "hljs-attribute": ["#005cc5", "#d19a66"],
+  "hljs-template-variable": ["#005cc5", "#d19a66"],
+  "hljs-variable": ["#005cc5", "#e06c75"],
+  "hljs-built_in": ["#e36209", "#d19a66"],
+  "hljs-type": ["#24292e", "#e5c07b"],
+  "hljs-title.class_": ["#24292e", "#e5c07b"],
+  "hljs-meta": ["#586069", "#61aeee"],
+  "hljs-tag": ["#22863a", "#e06c75"],
+  "hljs-name": ["#22863a", "#e06c75"],
+  "hljs-symbol": ["#e36209", "#56b6c2"],
+  "hljs-bullet": ["#e36209", "#56b6c2"],
+  "hljs-link": ["#005cc5", "#e06c75"],
+  "hljs-emphasis": ["#005cc5", "#e06c75"],
+  "hljs-addition": ["#22863a", "#98c379"],
+  "hljs-deletion": ["#b31d28", "#e06c75"],
+};
+
+/** Highlight.js token colours for `pre.source-code`, chosen to fit the
+ *  reader's page background (light or dark palette). */
+function highlightCssFor(background: string): string {
+  const dark = !backgroundIsLight(background);
+  const rows = Object.entries(HLJS_TOKENS)
+    .map(([token, [light, darkColor]]) => {
+      const color = dark ? darkColor : light;
+      const extra = token === "hljs-comment" || token === "hljs-quote" ? "font-style: italic;" : "";
+      return `pre.source-code .${token} { color: ${color} !important; ${extra} }`;
+    })
+    .join("\n");
+  return [
+    `pre.source-code, pre.source-code code { font-family: Consolas, Menlo, Monaco, "Cascadia Mono", "Courier New", monospace !important; }`,
+    `pre.source-code code.hljs { display: block; white-space: pre-wrap; }`,
+    rows,
+  ].join("\n");
+}
 
 /** Every inline/block element that can carry the book's own font-family, so a
  *  forced rule catches all of them (incl. inline `style=` attributes would not
@@ -182,6 +299,7 @@ export function EpubViewer({
   const bookRef = useRef<Book | null>(null);
   const renditionRef = useRef<Rendition | null>(null);
   const fontCssRef = useRef("");
+  const skinCssRef = useRef("");
   const onReadyRef = useRef(onReady);
   const onPageCountChangeRef = useRef(onPageCountChange);
   const onExtractPageRef = useRef(onExtractPage);
@@ -254,7 +372,39 @@ export function EpubViewer({
       const head = doc.head;
       if (head) head.appendChild(style);
     }
-    style.textContent = fontCssRef.current;
+    style.textContent = fontCssRef.current + "\n" + skinCssRef.current;
+  }, []);
+
+  /** Replaces every `<pre class="source-code">` in a section with a
+   *  Highlight.js-highlighted `<code class="hljs">`, unwrapping the book's
+   *  `koboSpan`/`strong` wrappers (their text content is the real code). */
+  const highlightCodeBlocks = useCallback((content: Contents) => {
+    const doc = content.document;
+    doc.querySelectorAll("pre.source-code").forEach((element) => {
+      const pre = element as HTMLPreElement;
+      if (pre.dataset.readlynxHl === "1") return;
+      const text = (pre.textContent ?? "").replace(/^\r?\n/, "").replace(/\s+$/, "");
+      if (!text.trim()) return;
+      let value: string | null = null;
+      let detected = "";
+      try {
+        const language = detectCodeLanguage(pre);
+        const result =
+          language && hljs.getLanguage(language)
+            ? hljs.highlight(text, { language, ignoreIllegals: true })
+            : hljs.highlightAuto(text, [...AUTO_LANGS]);
+        value = result.value;
+        detected = result.language ?? language ?? "";
+      } catch {
+        // leave `value` as null → block stays untouched
+      }
+      if (!value) return;
+      const code = doc.createElement("code");
+      code.className = detected ? `language-${detected} hljs` : "hljs";
+      code.innerHTML = value;
+      pre.replaceChildren(code);
+      pre.dataset.readlynxHl = "1";
+    });
   }, []);
 
   /** Applies the chosen zoom by injecting a CSS `zoom` rule on the content
@@ -327,6 +477,7 @@ export function EpubViewer({
         renditionRef.current = rendition;
         rendition.on("relocated", handleRelocated);
         rendition.hooks.content.register(injectFontStyle);
+        rendition.hooks.content.register(highlightCodeBlocks);
         await rendition.display();
         onReadyRef.current?.();
 
@@ -391,9 +542,23 @@ export function EpubViewer({
     const readVar = (name: string) => rootStyle.getPropertyValue(name).trim();
     const background = customBg ?? backgroundColorOverride ?? (readVar("--color-page") || "#ffffff");
     const text = customText ?? textColorOverride ?? (readVar("--color-text") || "#322b26");
-    rendition.themes.override("background-color", background, true);
-    rendition.themes.override("color", text, true);
-  }, [theme, book, customBg, customText, backgroundColorOverride, textColorOverride]);
+    // epubjs `themes.override(name, value)` sets an *inline style* on the body
+    // element using `name` as a CSS property, so selector-based rules are
+    // silently dropped. Inject a real stylesheet instead so links and the
+    // book's decorative boxes follow the reader's palette.
+    skinCssRef.current = [
+      `html, body { background-color: ${background} !important; color: ${text} !important; }`,
+      `a { color: ${text} !important; }`,
+      `.box1, .box2, .box3, .box4 { background-color: ${background} !important; }`,
+      `.box1 *, .box2 *, .box3 *, .box4 * { color: ${text} !important; }`,
+      // The zoom effect scales the whole document (`transform: scale`); capping
+      // images at 100% of their (scaled) container keeps them exactly in
+      // range at any zoom level while the surrounding text still zooms.
+      `img { max-width: 100% !important; height: auto !important; }`,
+      highlightCssFor(background),
+    ].join("\n");
+    (rendition.getContents() as unknown as Contents[]).forEach((content) => injectFontStyle(content));
+  }, [theme, book, customBg, customText, backgroundColorOverride, textColorOverride, injectFontStyle]);
 
   /** Closes the settings dropdown on outside click or Escape. */
   useEffect(() => {
