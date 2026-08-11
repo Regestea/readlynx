@@ -370,7 +370,7 @@ const components: Components = {
   ),
   hr: () => <hr className={styles.hr} />,
   img: ({ src, alt }) => (
-    <Image src={src} alt={alt ?? "Image"} aspectRatio="16 / 9" />
+    <Image src={src} alt={alt ?? "Image"} aspectRatio="16 / 9" className={styles.mdImage} />
   ),
   code: ({ className, children }) => {
     const match = /language-(\w+)/.exec(className ?? "");

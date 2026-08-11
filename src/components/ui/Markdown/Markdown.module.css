@@ -132,6 +132,12 @@
   font-style: italic;
 }
 
+/* Markdown images: never taller than the cap, so large book illustrations
+ * don't dominate the reader; the frame keeps the image's natural ratio. */
+.mdImage {
+  max-height: 420px;
+}
+
 /* ---------- Reader toolbar (zoom / colors / font / fullscreen) ---------- */
 
 .toolbarHost {

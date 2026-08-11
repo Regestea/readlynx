@@ -14,20 +14,28 @@ type ImageStatus = "loading" | "loaded" | "error";
 export function Image({ src, alt, aspectRatio = "4 / 3", className = "" }: ImageProps) {
   const [renderedSrc, setRenderedSrc] = useState(src);
   const [status, setStatus] = useState<ImageStatus>(() => (src ? "loading" : "error"));
+  const [ratio, setRatio] = useState(aspectRatio);
 
   if (src !== renderedSrc) {
     setRenderedSrc(src);
     setStatus(src ? "loading" : "error");
+    setRatio(aspectRatio);
   }
 
   return (
-    <span className={`${styles.frame} ${className}`} style={{ aspectRatio }}>
+    <span className={`${styles.frame} ${className}`} style={{ aspectRatio: ratio }}>
       {src && (
         <img
           src={src}
           alt={alt}
           className={status === "loaded" ? styles.img : styles.imgHidden}
-          onLoad={() => setStatus("loaded")}
+          onLoad={(event) => {
+            const img = event.currentTarget;
+            if (img.naturalWidth > 0 && img.naturalHeight > 0) {
+              setRatio(`${img.naturalWidth} / ${img.naturalHeight}`);
+            }
+            setStatus("loaded");
+          }}
           onError={() => setStatus("error")}
         />
       )}
