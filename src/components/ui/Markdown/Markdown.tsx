@@ -14,6 +14,7 @@ import { Table } from "../Table/Table";
 import type { TableColumn } from "../Table/Table";
 import { FontFamilySelect } from "../FontFamilySelect/FontFamilySelect";
 import { ColorSelect } from "../ColorSelect/ColorSelect";
+import { useReaderSettings } from "../../../hooks/useReaderSettings.ts";
 import styles from "./Markdown.module.css";
 
 const ZOOM_STEP = 10;
@@ -113,6 +114,9 @@ interface MarkdownProps {
   /** Parses raw HTML embedded in the markdown. Defaults to true; disable for
    *  AI-produced content so HTML/JSX snippets render as literal text. */
   rawHtml?: boolean;
+  /** Per-book key for persisting reader settings (zoom, font, colors) in
+   *  localStorage; the EPUB viewer uses the same key per book. */
+  settingsKey?: string;
 }
 
 /* ---------- RTL helpers ---------- */
@@ -385,11 +389,18 @@ export function Markdown({
   className = "",
   toolbar = false,
   rawHtml = true,
+  settingsKey,
 }: MarkdownProps) {
-  const [zoomPct, setZoomPct] = useState(100);
-  const [fontFamily, setFontFamily] = useState("");
-  const [customBg, setCustomBg] = useState<string | null>(null);
-  const [customText, setCustomText] = useState<string | null>(null);
+  const {
+    zoomPct,
+    setZoomPct,
+    fontFamily,
+    setFontFamily,
+    customBg,
+    setCustomBg,
+    customText,
+    setCustomText,
+  } = useReaderSettings(settingsKey);
   const [menuOpen, setMenuOpen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [spacerHeight, setSpacerHeight] = useState(0);
@@ -435,7 +446,7 @@ export function Markdown({
 
   const changeZoom = useCallback((delta: number) => {
     setZoomPct((current) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, current + delta)));
-  }, []);
+  }, [setZoomPct]);
 
   const toggleFullscreen = () => {
     if (!isFullscreen && hostRef.current) {

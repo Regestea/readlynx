@@ -4,6 +4,7 @@ import { ChevronLeft, ChevronRight, FileDown, FileWarning, Loader2, Maximize2, M
 import ePub from "epubjs";
 import type { Book, Contents, Location, Rendition } from "epubjs";
 import { useTheme } from "../../app/providers/theme/ThemeContext";
+import { useReaderSettings } from "../../hooks/useReaderSettings.ts";
 import { epubHtmlToMarkdown } from "./epubToMarkdown";
 import { FontFamilySelect } from "../ui/FontFamilySelect/FontFamilySelect";
 import { ColorSelect } from "../ui/ColorSelect/ColorSelect";
@@ -108,6 +109,9 @@ interface EpubViewerProps {
   /** Hide the "Extract" button (used in the read-only reading mode, where
    *  there is no editor to extract into). */
   showExtract?: boolean;
+  /** Per-book key for persisting reader settings (zoom, font, colors) in
+   *  localStorage; the Markdown viewer uses the same key per book. */
+  settingsKey?: string;
   /** Page/background colour override (png. themes), applied unless the user
    *  picked a custom colour inside the reader. */
   backgroundColorOverride?: string;
@@ -144,6 +148,7 @@ export function EpubViewer({
   toolbar = true,
   showNav = false,
   showExtract = true,
+  settingsKey,
   backgroundColorOverride,
   textColorOverride,
   onReady,
@@ -153,15 +158,21 @@ export function EpubViewer({
   ref,
 }: EpubViewerProps & { ref?: Ref<EpubViewerHandle> }) {
   const { theme } = useTheme();
+  const {
+    zoomPct,
+    setZoomPct,
+    fontFamily,
+    setFontFamily,
+    customBg,
+    setCustomBg,
+    customText,
+    setCustomText,
+  } = useReaderSettings(settingsKey);
   const [book, setBook] = useState<Book | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pageNumber, setPageNumber] = useState(0);
   const [numPages, setNumPages] = useState(0);
   const [progressPct, setProgressPct] = useState(0);
-  const [zoomPct, setZoomPct] = useState(100);
-  const [fontFamily, setFontFamily] = useState("");
-  const [customBg, setCustomBg] = useState<string | null>(null);
-  const [customText, setCustomText] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [spacerHeight, setSpacerHeight] = useState(0);
