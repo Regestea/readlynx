@@ -5,7 +5,8 @@ import ePub from "epubjs";
 import type { Book, Contents, Location, Rendition } from "epubjs";
 import { useTheme } from "../../app/providers/theme/ThemeContext";
 import { useReaderSettings } from "../../hooks/useReaderSettings.ts";
-import { epubHtmlToMarkdown } from "./epubToMarkdown";
+import { epubHtmlToMarkdown, epubHtmlToPlainTextWithImages } from "./epubToMarkdown";
+import type { EpubImageRef } from "./epubToMarkdown";
 import { FontFamilySelect } from "../ui/FontFamilySelect/FontFamilySelect";
 import { ColorSelect } from "../ui/ColorSelect/ColorSelect";
 import hljs from "highlight.js/lib/common";
@@ -248,12 +249,23 @@ interface EpubViewerProps {
 
 /** Imperative handle for hosts that need the current chapter's text (e.g.
  *  reading-mode translation chunks it before calling the AI). */
+export interface EpubExtraction {
+  /** Chapter text with `[IMG-n]` placeholders in place of images. */
+  text: string;
+  /** Images found in the chapter, keyed by their placeholder token. */
+  images: EpubImageRef[];
+}
+
 export interface EpubViewerHandle {
   /** Markdown of the currently rendered section, or null when unavailable. */
   getCurrentChapterMarkdown(): string | null;
   /** Plain text of the currently rendered section (structural markers only,
    *  no inline formatting), used as AI translation input. */
   getCurrentChapterText(): string | null;
+  /** Plain text + image references for translation: images are replaced by
+   *  `[IMG-n]` tokens so the AI never receives them, and are re-inserted into
+   *  the translated Markdown afterwards. */
+  getCurrentChapterExtraction(): EpubExtraction | null;
 }
 
 export function EpubViewer({
@@ -347,9 +359,21 @@ export function EpubViewer({
     return text || null;
   }, []);
 
+  /** Chapter text + image references for translation (see handle doc). */
+  const currentChapterExtraction = useCallback((): EpubExtraction | null => {
+    const rendition = renditionRef.current;
+    if (!rendition || !bookRef.current) return null;
+    const contents = rendition.getContents() as unknown as Contents[];
+    const doc = contents[0]?.document;
+    if (!doc?.body) return null;
+    const { text, images } = epubHtmlToPlainTextWithImages(doc.body);
+    return { text, images };
+  }, []);
+
   useImperativeHandle(ref, () => ({
     getCurrentChapterMarkdown: currentChapterMarkdown,
     getCurrentChapterText: currentChapterText,
+    getCurrentChapterExtraction: currentChapterExtraction,
   }));
 
   /** Exits the in-page fullscreen overlay with Escape. */

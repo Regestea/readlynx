@@ -34,6 +34,7 @@ export function buildTranslationSystemPrompt(context: TranslationPromptContext):
     "Output rules:",
     "- Return Markdown only. Do not wrap the whole response in code fences and do not add any explanation outside the Markdown.",
     "- Preserve useful structure whenever the source has it: headings, paragraphs, lists, tables, code blocks and block quotes.",
+    "- Translate code as code: put any code in a fenced code block annotated with its language (```language ... ```). Never write code as plain text, and use inline backticks (`code`) only for short identifiers inside a sentence.",
     "- Do not summarize, shorten or omit content unless the user's instruction asks you to.",
     "- The user instruction below is an extra layer that overrides the default \"translate normally\" behaviour when it conflicts.",
   ];
@@ -49,6 +50,11 @@ export function buildTranslationSystemPrompt(context: TranslationPromptContext):
       1,
       0,
       "The input is the plain text of a chapter with only minimal structural markers (# for headings, - for lists, > for quotes). Rebuild the chapter as clean Markdown: translate all text and use headings, paragraphs, lists, tables and block quotes where the source implies them. Do not copy or invent any formatting symbols.",
+    );
+    lines.splice(
+      2,
+      0,
+      "The input may contain image placeholders like [IMG-0] between paragraphs. Keep every placeholder exactly as it is: do not translate, describe, explain, wrap or remove it — the image itself is rendered separately.",
     );
   }
   if (context.customPrompt?.trim()) {

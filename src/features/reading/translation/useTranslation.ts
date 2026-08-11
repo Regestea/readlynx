@@ -4,6 +4,7 @@ import type { AiModel } from "../../../db/entities/AiModel.ts";
 import type { BookSourceType } from "../../../db/entities/types.ts";
 import type { PdfViewerHandle } from "../../../components/PdfViewer/PdfViewer.tsx";
 import type { EpubViewerHandle } from "../../../components/EpubViewer/EpubViewer.tsx";
+import { replaceImageTokens } from "../../../components/EpubViewer/epubToMarkdown.ts";
 import { resolveProviderBaseUrl } from "../../../services/aiProviderConfig.ts";
 import { chunkChapter } from "./epubChunker.ts";
 import { buildTranslationSystemPrompt, buildTranslationUserPrompt } from "./prompt.ts";
@@ -172,10 +173,17 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef }: UseTrans
           setMarkdown(null);
           setHasTranslation(false);
         } else {
-          const text =
+          const raw =
             sourceType === "epub"
               ? rows.map((row) => row.markdown).join("\n\n")
               : rows[0].markdown;
+          const text =
+            sourceType === "epub"
+              ? replaceImageTokens(
+                  raw,
+                  epubRef.current?.getCurrentChapterExtraction()?.images ?? [],
+                )
+              : raw;
           setMarkdown(text);
           setHasTranslation(true);
         }
@@ -191,7 +199,7 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef }: UseTrans
     return () => {
       cancelled = true;
     };
-  }, [unitKey, bookId, sourceType, pdfMethod]);
+  }, [unitKey, bookId, sourceType, pdfMethod, epubRef]);
 
   const setViewMode = useCallback((mode: TranslationViewMode) => {
     setViewModeState(mode);
@@ -333,11 +341,11 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef }: UseTrans
     try {
       let result: string;
       if (method === "chapter") {
-        const chapterText = epubRef.current?.getCurrentChapterText();
-        if (!chapterText) {
+        const extraction = epubRef.current?.getCurrentChapterExtraction();
+        if (!extraction || !extraction.text) {
           throw new Error("The chapter text is not available yet.");
         }
-        const chunks = chunkChapter(chapterText);
+        const chunks = chunkChapter(extraction.text);
         if (chunks.length === 0) {
           throw new Error("The chapter has no text to translate.");
         }
@@ -361,7 +369,7 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef }: UseTrans
           await saveRow({ method, pageNumber: null, chunkKey: chunkKeyFor(chapterKey, index), markdown: chunk });
           results.push(chunk);
         }
-        result = results.join("\n\n");
+        result = replaceImageTokens(results.join("\n\n"), extraction.images);
       } else {
         const image = pdfRef.current?.getCurrentPageImage();
         if (!image) {
