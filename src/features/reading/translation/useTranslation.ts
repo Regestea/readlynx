@@ -350,6 +350,12 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef }: UseTrans
           throw new Error("The chapter has no text to translate.");
         }
         const chapterKey = unitToChapter(key) ?? "chapter";
+        // Regenerate replaces the whole chapter: drop every cached chunk of
+        // this chapter (incl. stale chunks from earlier, differently-chunked
+        // generations) before the fresh chunks are written.
+        if (force) {
+          await db.deleteTranslations({ bookId, method: "chapter", chunkKeyPrefix: chapterKey });
+        }
         const results: string[] = [];
         for (let index = 0; index < chunks.length; index += 1) {
           setStatus(
@@ -374,6 +380,13 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef }: UseTrans
         const image = pdfRef.current?.getCurrentPageImage();
         if (!image) {
           throw new Error("The page image is not ready yet.");
+        }
+        const page = unitToPage(key) ?? 1;
+        // Regenerate replaces the whole page translation: remove the previous
+        // row (page rows share `chunkKey IS NULL`, so upserts could otherwise
+        // leave duplicates) before the fresh result is saved.
+        if (force) {
+          await db.deleteTranslations({ bookId, method, pageNumber: page });
         }
         if (method === "ocr") {
           setStatus("Recognizing page…");
@@ -407,12 +420,14 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef }: UseTrans
           result = response.trim();
         }
         if (!result) throw new Error("The AI returned an empty translation.");
-        const page = unitToPage(key) ?? 1;
         await saveRow({ method, pageNumber: page, chunkKey: null, markdown: result });
       }
       setMarkdown(result);
       setHasTranslation(true);
       setStatus(null);
+      // The user asked for the translation — take them to it once it's done
+      // (no-op when the translation view is already showing).
+      setViewModeState("translation");
     } catch (err) {
       // Previous translations are kept untouched — rows are only written
       // after a successful generation.
@@ -422,7 +437,7 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef }: UseTrans
       busyRef.current = false;
       setBusy(false);
     }
-  }, [epubRef, pdfRef, saveRow, sourceType]);
+  }, [epubRef, pdfRef, saveRow, sourceType, bookId]);
 
   const regenerate = useCallback(() => {
     void translate(true);
