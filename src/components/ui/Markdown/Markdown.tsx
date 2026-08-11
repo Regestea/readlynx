@@ -22,6 +22,27 @@ const ZOOM_STEP = 10;
 const ZOOM_MIN = 60;
 const ZOOM_MAX = 200;
 
+/** Stable plugin lists: react-markdown re-parses the whole document whenever
+ *  the plugin-array identity changes, so these must never be recreated on
+ *  every render. */
+const REMARK_PLUGINS = [remarkGfm, remarkMath];
+const REHYPE_PLUGINS = [rehypeRaw, rehypeKatex, sanitizeRawHtml];
+const REHYPE_PLUGINS_NO_RAW = [rehypeKatex];
+
+/** Default react-markdown behaviour (http/https/irc/mailto only) stripped the
+ *  translator's data: image URLs — keep them for image sources, everything
+ *  else stays restricted. */
+function safeUrlTransform(url: string, key: string): string {
+  try {
+    const parsed = new URL(url, "https://example.com");
+    const allowed =
+      /^(https|irc|ircs|mailto|xmpp)$/i.test(parsed.protocol) || (key === "src" && parsed.protocol === "data:");
+    return allowed ? url : "";
+  } catch {
+    return "";
+  }
+}
+
 const BG_PRESETS = ["#ffffff", "#f7f2ea", "#e6ded0", "#cbb99b", "#1c2945", "#162033", "#2b2b33"];
 const TEXT_PRESETS = ["#322b26", "#111111", "#1c2945", "#5b6b50", "#cbb99b", "#eef2f7", "#ffffff"];
 
@@ -226,6 +247,7 @@ function textContent(children: ReactNode): string {
  *  text instead of being parsed as elements (which mangles JSX attribute
  *  syntax and can swallow whole paragraphs). */
 function escapeHtmlInMarkdown(markdown: string): string {
+  if (!markdown.includes("<")) return markdown;
   const lines = markdown.split("\n");
   const out: string[] = [];
   let fence: string | null = null;
@@ -539,15 +561,45 @@ export function Markdown({
     setIsFullscreen((prev) => !prev);
   };
 
-  const rootStyle = getComputedStyle(document.documentElement);
-  const readVar = (name: string) => rootStyle.getPropertyValue(name).trim();
-
   const body = useMemo(
     () => (rawHtml ? content : escapeHtmlInMarkdown(content)),
     [content, rawHtml],
   );
-  const backgroundColor = customBg ?? (readVar("--color-page") || "#ffffff");
-  const textColor = customText ?? (readVar("--color-text") || "#322b26");
+
+  /** The rendered document is expensive to build (markdown parse + per-node
+   *  RTL analysis + syntax highlighting), so it only ever rebuilds when the
+   *  source content or the raw-HTML mode changes. Zoom, colors, fonts,
+   *  fullscreen and menu state change just CSS/classes around it — React
+   *  bails out of the subtree because the element reference stays the same. */
+  const documentElement = useMemo(
+    () => (
+      <ReactMarkdown
+        remarkPlugins={REMARK_PLUGINS}
+        rehypePlugins={rawHtml ? REHYPE_PLUGINS : REHYPE_PLUGINS_NO_RAW}
+        components={components}
+        urlTransform={safeUrlTransform}
+      >
+        {body}
+      </ReactMarkdown>
+    ),
+    [body, rawHtml],
+  );
+
+  /** Theme CSS variables are only needed for the color pickers' current
+   *  values, which are only visible while the settings menu is open — reading
+   *  them here (instead of on every render) avoids a `getComputedStyle` per
+   *  frame of any state change. */
+  const themeVars = useMemo(() => {
+    if (!menuOpen) return { page: "", text: "" };
+    const sheet = getComputedStyle(document.documentElement);
+    return {
+      page: sheet.getPropertyValue("--color-page").trim(),
+      text: sheet.getPropertyValue("--color-text").trim(),
+    };
+  }, [menuOpen]);
+
+  const backgroundColor = customBg ?? (themeVars.page || "#ffffff");
+  const textColor = customText ?? (themeVars.text || "#322b26");
 
   const hostStyle: CSSProperties = {
     ...(customBg ? { backgroundColor: customBg } : {}),
@@ -660,13 +712,7 @@ export function Markdown({
           </div>
         )}
         <div className={styles.body} style={{ zoom: zoomPct / 100 }}>
-          <ReactMarkdown
-            remarkPlugins={[remarkGfm, remarkMath]}
-            rehypePlugins={rawHtml ? [rehypeRaw, rehypeKatex, sanitizeRawHtml] : [rehypeKatex]}
-            components={components}
-          >
-            {body}
-          </ReactMarkdown>
+          {documentElement}
         </div>
       </div>
       {isFullscreen && (
