@@ -6,6 +6,7 @@ import { CreateBookDialog } from "./components/CreateBookDialog";
 import type { CreateBookDetails } from "./components/CreateBookDialog";
 import { TranslateBookDialog } from "./components/TranslateBookDialog";
 import { ReadBookDialog } from "./components/ReadBookDialog";
+import { EditBookDialog } from "./components/EditBookDialog";
 import { Modal } from "../../components/ui/Modal/Modal";
 import { Button } from "../../components/ui/Button/Button";
 import { coverUrl } from "../../shared/coverUrl";
@@ -37,6 +38,7 @@ function toBook(row: BookListItem): Book {
     author: "",
     cover: coverForId(row.id),
     coverImage: coverUrl(row.coverImage),
+    coverPath: row.coverImage,
     kind: row.kind,
   };
 }
@@ -47,6 +49,7 @@ export function HomePage({ onCreateBook, onOpenBook, onOpenReadingBook }: HomePa
   const [readOpen, setReadOpen] = useState(false);
   const [books, setBooks] = useState<Book[] | null>(null);
   const [bookToDelete, setBookToDelete] = useState<Book | null>(null);
+  const [bookToEdit, setBookToEdit] = useState<Book | null>(null);
   const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
@@ -74,6 +77,12 @@ export function HomePage({ onCreateBook, onOpenBook, onOpenReadingBook }: HomePa
       setDeleting(false);
       setBookToDelete(null);
     }
+  };
+
+  const handleBookSaved = (updated: BookListItem) => {
+    const next = toBook(updated);
+    setBooks((prev) => (prev ? prev.map((book) => (book.id === next.id ? next : book)) : prev));
+    setBookToEdit(null);
   };
 
   const shelfBooks = books ?? [];
@@ -125,6 +134,7 @@ export function HomePage({ onCreateBook, onOpenBook, onOpenReadingBook }: HomePa
           }
         }}
         onDeleteBook={setBookToDelete}
+        onEditBook={setBookToEdit}
       />
 
       <CreateBookDialog
@@ -152,6 +162,14 @@ export function HomePage({ onCreateBook, onOpenBook, onOpenReadingBook }: HomePa
           setReadOpen(false);
           onOpenReadingBook?.(bookId);
         }}
+      />
+
+      <EditBookDialog
+        key={bookToEdit?.id ?? "closed"}
+        open={bookToEdit !== null}
+        book={bookToEdit}
+        onClose={() => setBookToEdit(null)}
+        onSaved={handleBookSaved}
       />
 
       <Modal

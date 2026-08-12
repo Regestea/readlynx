@@ -11,6 +11,8 @@ export interface Book {
   cover: CoverStyle;
   /** Rendered instead of the palette gradient when present (data URL). */
   coverImage?: string | null;
+  /** Relative path (`covers/<file>`) backing `coverImage`, e.g. for editing. */
+  coverPath?: string | null;
   kind?: BookKind;
   progress?: number;
   totalPages?: number;

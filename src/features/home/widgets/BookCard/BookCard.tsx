@@ -1,5 +1,5 @@
 import type { CSSProperties, KeyboardEvent } from "react";
-import { Trash2 } from "lucide-react";
+import { Pencil, Trash2 } from "lucide-react";
 import type { Book, BookKind } from "../../../../shared/types";
 import { Progress } from "../../../../components/ui/Progress/Progress";
 import styles from "./BookCard.module.css";
@@ -11,6 +11,7 @@ interface BookCardProps {
   style?: CSSProperties;
   onClick?: () => void;
   onDelete?: () => void;
+  onEdit?: () => void;
 }
 
 const COVER_STYLES: Record<Book["cover"], string> = {
@@ -36,11 +37,11 @@ function handleCardKeyDown(event: KeyboardEvent, onClick?: () => void) {
   }
 }
 
-function handleDeleteKeyDown(event: KeyboardEvent, onDelete: () => void) {
+function handleActionKeyDown(event: KeyboardEvent, onAction: () => void) {
   if (event.key === "Enter" || event.key === " ") {
     event.preventDefault();
     event.stopPropagation();
-    onDelete();
+    onAction();
   }
 }
 
@@ -51,6 +52,7 @@ export function BookCard({
   style,
   onClick,
   onDelete,
+  onEdit,
 }: BookCardProps) {
   const interactiveProps = onClick
     ? {
@@ -70,11 +72,27 @@ export function BookCard({
         event.stopPropagation();
         onDelete();
       }}
-      onKeyDown={(event) => handleDeleteKeyDown(event, onDelete)}
+      onKeyDown={(event) => handleActionKeyDown(event, onDelete)}
       aria-label={`Delete ${book.title}`}
       title="Delete book"
     >
       <Trash2 size={14} strokeWidth={1.8} aria-hidden="true" />
+    </button>
+  ) : null;
+
+  const editButton = onEdit ? (
+    <button
+      type="button"
+      className={styles.editButton}
+      onClick={(event) => {
+        event.stopPropagation();
+        onEdit();
+      }}
+      onKeyDown={(event) => handleActionKeyDown(event, onEdit)}
+      aria-label={`Edit ${book.title}`}
+      title="Edit book"
+    >
+      <Pencil size={14} strokeWidth={1.8} aria-hidden="true" />
     </button>
   ) : null;
 
@@ -121,6 +139,7 @@ export function BookCard({
         <span className={styles.coverTitle}>{book.title}</span>
         <span className={styles.coverAuthor}>{book.author}</span>
       </div>
+      {editButton}
       {deleteButton}
       <div className={styles.meta}>
         <h3 className={styles.metaTitle}>{book.title}</h3>

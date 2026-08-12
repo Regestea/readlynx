@@ -6,6 +6,7 @@ import type {
   CreateTranslatedBookPayload,
   GetBookResult,
   SaveDocumentPayload,
+  UpdateBookPayload,
 } from "./infrastructure/db/entities/types.ts";
 import type { AiModel } from "./infrastructure/db/entities/AiModel.ts";
 import type { CustomInstructionEntity } from "./infrastructure/db/entities/CustomInstruction.ts";
@@ -63,6 +64,7 @@ declare global {
         listBooks(): Promise<BookListItem[]>;
         getBook(bookId: string): Promise<GetBookResult | null>;
         deleteBook(bookId: string): Promise<boolean>;
+        updateBook(payload: UpdateBookPayload): Promise<BookListItem | null>;
         getAppSettings(): Promise<{ theme: string } | null>;
         updateAppSettings(theme: string): Promise<{ theme: string }>;
         listAiModels(): Promise<AiModel[]>;

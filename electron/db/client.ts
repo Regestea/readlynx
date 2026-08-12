@@ -15,6 +15,7 @@ import type {
   CreateTranslatedBookPayload,
   GetBookResult,
   SaveDocumentPayload,
+  UpdateBookPayload,
 } from "../../src/infrastructure/db/entities/types.ts";
 
 interface DbResponse {
@@ -83,6 +84,10 @@ export class DbWorkerClient {
 
   listBooks(): Promise<BookListItem[]> {
     return this.exec("list-books");
+  }
+
+  updateBook(payload: UpdateBookPayload): Promise<BookListItem | null> {
+    return this.exec("update-book", payload);
   }
 
   getBook(bookId: string): Promise<GetBookResult | null> {

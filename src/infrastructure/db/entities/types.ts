@@ -47,6 +47,15 @@ export interface SaveDocumentPayload {
   settings: Omit<DocumentSettingsEntity, "documentId" | "updatedAt">;
 }
 
+/** Payload of `db:update-book`: renames a book and/or replaces its cover.
+ *  `coverImage` is a data URL, an existing relative path, or null — the main
+ *  process normalizes it to a stored file (deleting the previous one). */
+export interface UpdateBookPayload {
+  bookId: string;
+  title: string;
+  coverImage: string | null;
+}
+
 /** Result of `db:get-book`. `book.coverImage` is a relative path. */
 export interface GetBookResult {
   book: BookEntity;

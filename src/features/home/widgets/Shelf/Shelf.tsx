@@ -12,6 +12,7 @@ interface ShelfProps {
   loading?: boolean;
   onBookClick?: (bookId: string) => void;
   onDeleteBook?: (book: Book) => void;
+  onEditBook?: (book: Book) => void;
 }
 
 const SKELETON_COUNT = 4;
@@ -24,6 +25,7 @@ export function Shelf({
   loading = false,
   onBookClick,
   onDeleteBook,
+  onEditBook,
 }: ShelfProps) {
   return (
     <Card className={`animate-fade-up ${styles.shelf}`}>
@@ -63,6 +65,7 @@ export function Shelf({
               book={book}
               onClick={onBookClick ? () => onBookClick(book.id) : undefined}
               onDelete={onDeleteBook ? () => onDeleteBook(book) : undefined}
+              onEdit={onEditBook ? () => onEditBook(book) : undefined}
             />
           ))}
         </div>

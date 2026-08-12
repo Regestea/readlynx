@@ -3,9 +3,10 @@ import { parentPort, workerData } from "node:worker_threads";
 import { createConnection } from "../../src/infrastructure/db/connection.ts";
 import { applySchema } from "../../src/infrastructure/db/schema.ts";
 import { seedDatabase } from "../../src/infrastructure/db/seed/seedDatabase.ts";
-import type { CreateReadingBookPayload, CreateTranslatedBookPayload, SaveDocumentPayload } from "../../src/infrastructure/db/entities/types.ts";
+import type { CreateReadingBookPayload, CreateTranslatedBookPayload, SaveDocumentPayload, UpdateBookPayload } from "../../src/infrastructure/db/entities/types.ts";
 import type { AiModel, CustomInstructionEntity, TranslationEntity, TranslationMethod } from "../../src/infrastructure/db/entities/index.ts";
 import type { ReadingStateInput } from "../../src/infrastructure/db/repositories/index.ts";
+import type { BookListItem } from "../../src/infrastructure/db/entities/types.ts";
 import {
   AiModelRepository,
   AppSettingsRepository,
@@ -155,6 +156,19 @@ function handleDeleteBook(bookId: string): boolean {
   return true;
 }
 
+/** Renames a book and/or replaces its cover. Persists a data-URL cover to
+ *  disk (deleting the previous file) and bumps `updatedAt`, which moves the
+ *  book to the top of the shelf. Returns the updated row or null. */
+function handleUpdateBook(payload: UpdateBookPayload): BookListItem | null {
+  const book = books.findById(payload.bookId);
+  if (!book) return null;
+  const storedCover = persistCoverImage(payload.coverImage, dbPath, book.coverImage);
+  db.transaction(() => {
+    books.update(book.id, { title: payload.title, coverImage: storedCover });
+  })();
+  return books.list().find((entry) => entry.id === book.id) ?? null;
+}
+
 const handlers: Record<string, (payload: unknown) => unknown> = {
   "create-book": handleCreateBook,
   "create-translated-book": (payload) =>
@@ -165,6 +179,7 @@ const handlers: Record<string, (payload: unknown) => unknown> = {
   "list-books": () => books.list(),
   "get-book": (payload) => handleGetBook(payload as string),
   "delete-book": (payload) => handleDeleteBook(payload as string),
+  "update-book": (payload) => handleUpdateBook(payload as UpdateBookPayload),
   "get-app-settings": () => appSettings.get() ?? null,
   "update-app-settings": (payload) => {
     const { theme } = payload as { theme: string };

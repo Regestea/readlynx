@@ -31,6 +31,7 @@ contextBridge.exposeInMainWorld("readlynx", {
     listBooks: () => ipcRenderer.invoke("db:list-books"),
     getBook: (bookId) => ipcRenderer.invoke("db:get-book", bookId),
     deleteBook: (bookId) => ipcRenderer.invoke("db:delete-book", bookId),
+    updateBook: (payload) => ipcRenderer.invoke("db:update-book", payload),
     getAppSettings: () => ipcRenderer.invoke("db:get-app-settings"),
     updateAppSettings: (theme) => ipcRenderer.invoke("db:update-app-settings", theme),
     listAiModels: () => ipcRenderer.invoke("db:ai-models-list"),

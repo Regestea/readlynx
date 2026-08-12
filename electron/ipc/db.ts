@@ -1,7 +1,7 @@
 import { ipcMain } from "electron";
 import type { DbWorkerClient } from "../db/client.ts";
 import type { AiModel } from "../../src/infrastructure/db/entities/AiModel.ts";
-import type { SaveDocumentPayload } from "../../src/infrastructure/db/entities/types.ts";
+import type { SaveDocumentPayload, UpdateBookPayload } from "../../src/infrastructure/db/entities/types.ts";
 import type { ReadingStateInput } from "../../src/infrastructure/db/repositories/ReadingStateRepository.ts";
 
 export function registerDbIpc(db: DbWorkerClient) {
@@ -24,6 +24,10 @@ export function registerDbIpc(db: DbWorkerClient) {
   ipcMain.handle("db:get-book", (_event, bookId: string) => db.getBook(bookId));
 
   ipcMain.handle("db:delete-book", (_event, bookId: string) => db.deleteBook(bookId));
+
+  ipcMain.handle("db:update-book", (_event, payload: UpdateBookPayload) =>
+    db.updateBook(payload),
+  );
 
   ipcMain.handle("db:get-app-settings", () => db.getAppSettings());
 
