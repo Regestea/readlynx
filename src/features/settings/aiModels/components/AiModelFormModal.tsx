@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { CheckCircle2, Eye, EyeOff, Loader2, RefreshCw, XCircle } from "lucide-react";
-import type { AiModel } from "../../../../db/entities/AiModel.ts";
+import type { AiModel } from "../../../../infrastructure/db/entities/AiModel.ts";
 import { Button } from "../../../../components/ui/Button/Button";
 import { Input } from "../../../../components/ui/Input/Input";
 import { Modal } from "../../../../components/ui/Modal/Modal";

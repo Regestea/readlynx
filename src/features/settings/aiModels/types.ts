@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { AiModel } from "../../../db/entities/AiModel.ts";
+import type { AiModel } from "../../../infrastructure/db/entities/AiModel.ts";
 
 export const EMPTY_MODEL: AiModel = {
   Id: "",

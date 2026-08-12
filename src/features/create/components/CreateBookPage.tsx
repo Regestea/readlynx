@@ -1,15 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AlignJustify, ArrowLeft, BookOpen, ChevronDown, ChevronUp, Columns2, FileText, GripVertical, PanelLeft, PanelRight, Search, X, ZoomIn, ZoomOut } from "lucide-react";
-import { DocumentEditor } from "../../../components/ui/DocumentEditor";
-import { PdfViewer } from "../../../components/PdfViewer/PdfViewer";
-import { EpubViewer } from "../../../components/EpubViewer/EpubViewer";
-import { ocrTextToMarkdown } from "../../../components/PdfViewer/ocr";
+import { DocumentEditor } from "../../../features/create/documentEditor";
+import { PdfViewer } from "../../../components/pdfViewer/PdfViewer";
+import { EpubViewer } from "../../../components/epubViewer/EpubViewer";
+import { ocrTextToMarkdown } from "../../../infrastructure/ocr/ocrToMarkdown";
 import { Button } from "../../../components/ui/Button/Button";
 import { Select } from "../../../components/ui/Select/Select";
-import type { EditorAPI } from "../../../components/ui/DocumentEditor/types";
-import { DEFAULT_FONT_SIZE_VALUE, PAGE_MARGIN_MM, PAGE_FORMATS, uniformMargins, ZOOM_OPTIONS } from "../../../components/ui/DocumentEditor/constants";
-import type { PageFormat, PageMargins } from "../../../components/ui/DocumentEditor/constants";
-import type { BookSourceType, SaveDocumentPayload } from "../../../db/entities/types";
+import type { EditorAPI } from "../../../features/create/documentEditor/types";
+import { DEFAULT_FONT_SIZE_VALUE, ZOOM_OPTIONS } from "../../../features/create/documentEditor/constants";
+import { PAGE_MARGIN_MM, PAGE_FORMATS, uniformMargins } from "../../../shared/document/pageGeometry";
+import type { PageFormat, PageMargins } from "../../../shared/document/pageGeometry";
+import type { BookSourceType, SaveDocumentPayload } from "../../../infrastructure/db/entities/types";
 import styles from "./CreateBookPage.module.css";
 
 interface CreateBookPageProps {

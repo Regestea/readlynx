@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Check, ChevronDown } from "lucide-react";
-import { CURATED_FONT_OPTIONS, getInstalledFonts } from "../DocumentEditor/utils/systemFonts";
+import { CURATED_FONT_OPTIONS, getInstalledFonts } from "../../../shared/fonts/systemFonts";
 import styles from "./FontFamilySelect.module.css";
 
 /** Shared font picker: a compact dropdown listing the curated options plus

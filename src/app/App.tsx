@@ -1,12 +1,12 @@
 import { useState } from "react";
 import { ThemeProvider } from "./providers/theme/ThemeProvider";
-import { Header } from "../components/Header/Header";
-import { Sidebar } from "../components/Sidebar/Sidebar";
+import { Header } from "./layout/Header/Header";
+import { Sidebar } from "./layout/Sidebar/Sidebar";
 import { HomePage } from "../features/home/components/HomePage";
 import { ShowcasePage } from "../features/showcase/components/ShowcasePage";
 import { SettingsPage } from "../features/settings/components/SettingsPage";
 import { CreateBookPage } from "../features/create/components/CreateBookPage";
-import type { CreateBookDetails } from "../features/create/components/CreateBookDialog";
+import type { CreateBookDetails } from "../features/home/components/CreateBookDialog";
 import { ReadingPage } from "../features/reading/components/ReadingPage";
 import { Quote } from "../features/home/widgets/Quote/Quote";
 import { ReadingProgress } from "../features/home/widgets/ReadingProgress/ReadingProgress";

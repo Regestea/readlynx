@@ -1,4 +1,4 @@
-import { OCR_LANGUAGES } from "../../../components/PdfViewer/ocr.ts";
+import { OCR_LANGUAGES } from "../../../infrastructure/ocr/ocrLanguages";
 
 export interface TranslationLanguage {
   /** Stable id (language tag). */

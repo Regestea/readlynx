@@ -1,11 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { parentPort, workerData } from "node:worker_threads";
-import { createConnection } from "../../src/db/connection.ts";
-import { applySchema } from "../../src/db/schema.ts";
-import { seedDatabase } from "../../src/db/seed/seedDatabase.ts";
-import type { CreateReadingBookPayload, CreateTranslatedBookPayload, SaveDocumentPayload } from "../../src/db/entities/types.ts";
-import type { AiModel, TranslationEntity, TranslationMethod } from "../../src/db/entities/index.ts";
-import type { ReadingStateInput } from "../../src/db/repositories/index.ts";
+import { createConnection } from "../../src/infrastructure/db/connection.ts";
+import { applySchema } from "../../src/infrastructure/db/schema.ts";
+import { seedDatabase } from "../../src/infrastructure/db/seed/seedDatabase.ts";
+import type { CreateReadingBookPayload, CreateTranslatedBookPayload, SaveDocumentPayload } from "../../src/infrastructure/db/entities/types.ts";
+import type { AiModel, TranslationEntity, TranslationMethod } from "../../src/infrastructure/db/entities/index.ts";
+import type { ReadingStateInput } from "../../src/infrastructure/db/repositories/index.ts";
 import {
   AiModelRepository,
   AppSettingsRepository,
@@ -15,8 +15,8 @@ import {
   DocumentSettingsRepository,
   ReadingStateRepository,
   TranslationRepository,
-} from "../../src/db/repositories/index.ts";
-import { EMPTY_DOCUMENT_STATE } from "../../src/db/repositories/DocumentRepository.ts";
+} from "../../src/infrastructure/db/repositories/index.ts";
+import { EMPTY_DOCUMENT_STATE } from "../../src/infrastructure/db/repositories/DocumentRepository.ts";
 import { migrateLegacyCovers, persistCoverImage, removeCoverFile } from "./covers.ts";
 import { removeSourceFile } from "./sources.ts";
 

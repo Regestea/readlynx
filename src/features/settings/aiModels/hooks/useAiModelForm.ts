@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { EMPTY_MODEL, validateFormModel } from "../types.ts";
 import type { AiModelFormErrors } from "../types.ts";
-import type { AiModel } from "../../../../db/entities/AiModel.ts";
-import { resolveProviderBaseUrl } from "../../../../services/aiProviderConfig.ts";
-import { testApiConnection } from "../../../../services/aiClient.ts";
+import type { AiModel } from "../../../../infrastructure/db/entities/AiModel.ts";
+import { resolveProviderBaseUrl } from "../../../../infrastructure/ai/modelResolver";
+import { testApiConnection } from "../../../../infrastructure/ai/aiClient";
 
 export interface GeminiModelOption {
   value: string;

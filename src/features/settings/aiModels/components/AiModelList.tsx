@@ -1,5 +1,5 @@
 import { Bot, Pencil, Star, Trash2 } from "lucide-react";
-import type { AiModel } from "../../../../db/entities/AiModel.ts";
+import type { AiModel } from "../../../../infrastructure/db/entities/AiModel.ts";
 import { providerLabel } from "../types.ts";
 import styles from "../aiModels.module.css";
 

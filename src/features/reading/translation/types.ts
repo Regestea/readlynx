@@ -1,7 +1,7 @@
-import type { BookSourceType } from "../../../db/entities/types.ts";
-import type { TranslationMethod } from "../../../db/entities/Translation.ts";
+import type { BookSourceType } from "../../../infrastructure/db/entities/types.ts";
+import type { TranslationMethod } from "../../../infrastructure/db/entities/Translation.ts";
 
-export type { TranslationMethod } from "../../../db/entities/Translation.ts";
+export type { TranslationMethod } from "../../../infrastructure/db/entities/Translation.ts";
 
 export type { BookSourceType };
 

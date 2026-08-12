@@ -1,4 +1,4 @@
-import { StatisticsCard } from "../../../../components/StatisticsCard/StatisticsCard";
+import { StatisticsCard } from "../StatisticsCard/StatisticsCard";
 import { Card } from "../../../../components/ui/Card/Card";
 import { weekStats } from "../../data/mockData";
 import styles from "./WeeklyStats.module.css";

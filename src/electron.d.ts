@@ -6,11 +6,11 @@ import type {
   CreateTranslatedBookPayload,
   GetBookResult,
   SaveDocumentPayload,
-} from "./db/entities/types.ts";
-import type { AiModel } from "./db/entities/AiModel.ts";
-import type { ReadingStateEntity } from "./db/entities/ReadingState.ts";
-import type { ReadingStateInput } from "./db/repositories/ReadingStateRepository.ts";
-import type { TranslationEntity, TranslationMethod } from "./db/entities/Translation.ts";
+} from "./infrastructure/db/entities/types.ts";
+import type { AiModel } from "./infrastructure/db/entities/AiModel.ts";
+import type { ReadingStateEntity } from "./infrastructure/db/entities/ReadingState.ts";
+import type { ReadingStateInput } from "./infrastructure/db/repositories/ReadingStateRepository.ts";
+import type { TranslationEntity, TranslationMethod } from "./infrastructure/db/entities/Translation.ts";
 
 export {};
 

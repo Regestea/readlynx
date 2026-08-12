@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { Bot, Languages, Loader2, RefreshCw, Settings2 } from "lucide-react";
-import type { AiModel } from "../../../db/entities/AiModel.ts";
-import type { BookSourceType } from "../../../db/entities/types.ts";
+import type { AiModel } from "../../../infrastructure/db/entities/AiModel.ts";
+import type { BookSourceType } from "../../../infrastructure/db/entities/types.ts";
 import { Button } from "../../../components/ui/Button/Button";
 import { Select } from "../../../components/ui/Select/Select";
 import { TextArea } from "../../../components/ui/TextArea/TextArea";
-import { OcrPanel } from "../../../components/PdfViewer/OcrPanel";
+import { OcrPanel } from "../../../components/pdfViewer/OcrPanel";
 import { AUTO_LANGUAGE, TRANSLATION_LANGUAGES } from "./languages.ts";
 import type { TranslationMethod, TranslationSettings } from "./types.ts";
 import styles from "./TranslationPanel.module.css";

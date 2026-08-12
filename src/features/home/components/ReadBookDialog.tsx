@@ -4,10 +4,10 @@ import { BookOpen, FileText, FolderOpen, ImageIcon, Loader2, Pencil, RefreshCw, 
 import { Modal } from "../../../components/ui/Modal/Modal";
 import { Button } from "../../../components/ui/Button/Button";
 import { Input } from "../../../components/ui/Input/Input";
-import { PdfViewer } from "../../../components/PdfViewer/PdfViewer";
-import { EpubViewer } from "../../../components/EpubViewer/EpubViewer";
+import { PdfViewer } from "../../../components/pdfViewer/PdfViewer";
+import { EpubViewer } from "../../../components/epubViewer/EpubViewer";
 import { ImageEditorDialog } from "../../../components/ui/ImageEditorDialog/ImageEditorDialog";
-import type { BookSourceType } from "../../../db/entities/types";
+import type { BookSourceType } from "../../../infrastructure/db/entities/types";
 import styles from "./ReadBookDialog.module.css";
 
 interface ReadBookDialogProps {

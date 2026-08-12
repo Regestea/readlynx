@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import type { Book } from "../../../../shared/types";
-import { BookCard } from "../../../../components/BookCard/BookCard";
+import { BookCard } from "../BookCard/BookCard";
 import { Card } from "../../../../components/ui/Card/Card";
 import styles from "./Shelf.module.css";
 

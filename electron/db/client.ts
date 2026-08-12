@@ -1,11 +1,11 @@
 import { Worker } from "node:worker_threads";
-import type { AiModel } from "../../src/db/entities/AiModel.ts";
+import type { AiModel } from "../../src/infrastructure/db/entities/AiModel.ts";
 import type {
   TranslationEntity,
   TranslationMethod,
-} from "../../src/db/entities/Translation.ts";
-import type { ReadingStateEntity } from "../../src/db/entities/ReadingState.ts";
-import type { ReadingStateInput } from "../../src/db/repositories/ReadingStateRepository.ts";
+} from "../../src/infrastructure/db/entities/Translation.ts";
+import type { ReadingStateEntity } from "../../src/infrastructure/db/entities/ReadingState.ts";
+import type { ReadingStateInput } from "../../src/infrastructure/db/repositories/ReadingStateRepository.ts";
 import type {
   BookListItem,
   CreateBookResult,
@@ -14,7 +14,7 @@ import type {
   CreateTranslatedBookPayload,
   GetBookResult,
   SaveDocumentPayload,
-} from "../../src/db/entities/types.ts";
+} from "../../src/infrastructure/db/entities/types.ts";
 
 interface DbResponse {
   id: number;

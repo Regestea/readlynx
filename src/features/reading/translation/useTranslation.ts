@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { RefObject } from "react";
-import type { AiModel } from "../../../db/entities/AiModel.ts";
-import type { BookSourceType } from "../../../db/entities/types.ts";
-import type { PdfViewerHandle } from "../../../components/PdfViewer/PdfViewer.tsx";
-import type { EpubViewerHandle } from "../../../components/EpubViewer/EpubViewer.tsx";
-import { replaceImageTokens } from "../../../components/EpubViewer/epubToMarkdown.ts";
-import { resolveProviderBaseUrl } from "../../../services/aiProviderConfig.ts";
+import type { AiModel } from "../../../infrastructure/db/entities/AiModel.ts";
+import type { BookSourceType } from "../../../infrastructure/db/entities/types.ts";
+import type { PdfViewerHandle } from "../../../components/pdfViewer/PdfViewer.tsx";
+import type { EpubViewerHandle } from "../../../components/epubViewer/EpubViewer.tsx";
+import { replaceImageTokens } from "../../../shared/document/epubToMarkdown.ts";
+import { getDefaultAiModel, resolveProviderBaseUrl } from "../../../infrastructure/ai/modelResolver";
 import { chunkChapter } from "./epubChunker.ts";
 import { buildTranslationSystemPrompt, buildTranslationUserPrompt } from "./prompt.ts";
 import {
@@ -113,7 +113,7 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef }: UseTrans
             customPrompt: state.customPrompt ?? "",
           });
         }
-        const defaultModel = models.find((entry) => entry.IsDefault) ?? models[0] ?? null;
+        const defaultModel = getDefaultAiModel(models);
         setModel(defaultModel);
         if (!defaultModel) {
           setModelsError("No AI model configured. Add one in Settings → AI Models.");

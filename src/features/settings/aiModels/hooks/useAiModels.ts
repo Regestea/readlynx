@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { AiModel } from "../../../../db/entities/AiModel.ts";
+import type { AiModel } from "../../../../infrastructure/db/entities/AiModel.ts";
 
 function getDb() {
   return window.readlynx?.db;

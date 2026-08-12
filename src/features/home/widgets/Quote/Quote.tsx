@@ -1,4 +1,4 @@
-import { QuoteCard } from "../../../../components/QuoteCard/QuoteCard";
+import { QuoteCard } from "../QuoteCard/QuoteCard";
 import { dailyQuote } from "../../data/mockData";
 import styles from "./Quote.module.css";
 
