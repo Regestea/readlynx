@@ -8,9 +8,15 @@ export interface ReadingStateInput {
   currentPage: number;
   scrollPosition: number;
   ocrLangs: string[];
-  sourceLang: string;
+  /** Deprecated — kept for the column's NOT NULL; the app no longer asks
+   *  for a source language (auto-detect is always used). */
+  sourceLang?: string;
   targetLang: string;
   customPrompt: string;
+  /** Chosen AI model id ("" = app default). */
+  modelId: string;
+  /** Chosen saved instruction id ("" = no instruction). */
+  customPromptId: string;
 }
 
 function parseOcrLangs(value: string): string[] {
@@ -49,8 +55,8 @@ export class ReadingStateRepository {
       .prepare(
         `INSERT INTO ReadingState (
            bookId, currentPage, scrollPosition, ocrLangs, sourceLang,
-           targetLang, customPrompt, updatedAt
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
+           targetLang, customPrompt, modelId, customPromptId, updatedAt
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
          ON CONFLICT(bookId) DO UPDATE SET
            currentPage    = excluded.currentPage,
            scrollPosition = excluded.scrollPosition,
@@ -58,6 +64,8 @@ export class ReadingStateRepository {
            sourceLang     = excluded.sourceLang,
            targetLang     = excluded.targetLang,
            customPrompt   = excluded.customPrompt,
+           modelId        = excluded.modelId,
+           customPromptId = excluded.customPromptId,
            updatedAt      = excluded.updatedAt`,
       )
       .run(
@@ -65,9 +73,11 @@ export class ReadingStateRepository {
         state.currentPage,
         state.scrollPosition,
         JSON.stringify(state.ocrLangs),
-        state.sourceLang,
+        state.sourceLang ?? "",
         state.targetLang,
         state.customPrompt,
+        state.modelId,
+        state.customPromptId,
       );
   }
 }

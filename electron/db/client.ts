@@ -1,9 +1,10 @@
 import { Worker } from "node:worker_threads";
 import type { AiModel } from "../../src/infrastructure/db/entities/AiModel.ts";
 import type {
+  CustomInstructionEntity,
   TranslationEntity,
   TranslationMethod,
-} from "../../src/infrastructure/db/entities/Translation.ts";
+} from "../../src/infrastructure/db/entities/index.ts";
 import type { ReadingStateEntity } from "../../src/infrastructure/db/entities/ReadingState.ts";
 import type { ReadingStateInput } from "../../src/infrastructure/db/repositories/ReadingStateRepository.ts";
 import type {
@@ -130,7 +131,7 @@ export class DbWorkerClient {
 
   getTranslations(options: {
     bookId: string;
-    method: TranslationMethod;
+    method?: TranslationMethod | null;
     pageNumber?: number | null;
     chunkKeyPrefix?: string | null;
   }): Promise<TranslationEntity[]> {
@@ -143,11 +144,27 @@ export class DbWorkerClient {
 
   deleteTranslations(options: {
     bookId: string;
-    method: TranslationMethod;
+    method?: TranslationMethod | null;
     pageNumber?: number | null;
     chunkKeyPrefix?: string | null;
   }): Promise<boolean> {
     return this.exec("translation-delete", options);
+  }
+
+  listCustomInstructions(): Promise<CustomInstructionEntity[]> {
+    return this.exec("custom-instructions-list");
+  }
+
+  createCustomInstruction(instruction: CustomInstructionEntity): Promise<boolean> {
+    return this.exec("custom-instruction-create", instruction);
+  }
+
+  updateCustomInstruction(instruction: CustomInstructionEntity): Promise<boolean> {
+    return this.exec("custom-instruction-update", instruction);
+  }
+
+  deleteCustomInstruction(id: string): Promise<boolean> {
+    return this.exec("custom-instruction-delete", id);
   }
 
   close(): void {

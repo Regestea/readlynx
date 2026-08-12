@@ -159,6 +159,10 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
         {book && (
           <TranslationSettingsPanel
             sourceType={book.sourceType}
+            models={translation.models}
+            modelsError={translation.modelsError}
+            modelId={translation.settings.modelId}
+            onModelChange={translation.selectModel}
             pdfMethod={translation.pdfMethod}
             onPdfMethodChange={translation.setPdfMethod}
             settings={translation.settings}
@@ -167,14 +171,11 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
             status={translation.status}
             error={translation.error}
             hasTranslation={translation.hasTranslation}
-            model={translation.model}
-            modelsError={translation.modelsError}
             installed={translation.installed}
             downloading={translation.downloading}
             downloadProgress={translation.downloadProgress}
             onDownload={translation.downloadModel}
             onDelete={translation.deleteModel}
-            onRefreshModels={translation.refreshModels}
             onTranslate={() => void translation.translate(false)}
             onRegenerate={translation.regenerate}
           />

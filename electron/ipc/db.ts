@@ -58,4 +58,18 @@ export function registerDbIpc(db: DbWorkerClient) {
   ipcMain.handle("db:translation-delete", (_event, options) =>
     db.deleteTranslations(options),
   );
+
+  ipcMain.handle("db:custom-instructions-list", () => db.listCustomInstructions());
+
+  ipcMain.handle("db:custom-instruction-create", (_event, instruction) =>
+    db.createCustomInstruction(instruction),
+  );
+
+  ipcMain.handle("db:custom-instruction-update", (_event, instruction) =>
+    db.updateCustomInstruction(instruction),
+  );
+
+  ipcMain.handle("db:custom-instruction-delete", (_event, id: string) =>
+    db.deleteCustomInstruction(id),
+  );
 }

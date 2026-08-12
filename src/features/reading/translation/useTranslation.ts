@@ -55,6 +55,7 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef }: UseTrans
   const [cacheReady, setCacheReady] = useState(false);
 
   const [model, setModel] = useState<AiModel | null>(null);
+  const [models, setModels] = useState<AiModel[]>([]);
   const [modelsError, setModelsError] = useState<string | null>(null);
 
   const [installed, setInstalled] = useState<string[]>([]);
@@ -66,6 +67,7 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef }: UseTrans
   const unitKeyRef = useRef<TranslationUnitKey | null>(null);
   const settingsRef = useRef(settings);
   const modelRef = useRef(model);
+  const modelsRef = useRef(models);
   const pdfMethodRef = useRef(pdfMethod);
   const downloadingRef = useRef<string | null>(null);
   const autoTriedRef = useRef<string | null>(null);
@@ -79,6 +81,10 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef }: UseTrans
   useEffect(() => {
     modelRef.current = model;
   }, [model]);
+
+  useEffect(() => {
+    modelsRef.current = models;
+  }, [models]);
 
   useEffect(() => {
     pdfMethodRef.current = pdfMethod;
@@ -99,25 +105,29 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef }: UseTrans
       const db = window.readlynx?.db;
       if (!db) return;
       try {
-        const [state, models] = await Promise.all([
+        const [state, modelRows] = await Promise.all([
           db.getReadingState(bookId),
           db.listAiModels(),
         ]);
         if (cancelled) return;
+        setModels(modelRows);
         if (state) {
           positionRef.current = { currentPage: state.currentPage, scrollPosition: state.scrollPosition };
           setSettings({
             ocrLangs: state.ocrLangs.length ? state.ocrLangs : DEFAULT_TRANSLATION_SETTINGS.ocrLangs,
-            sourceLang: state.sourceLang || DEFAULT_TRANSLATION_SETTINGS.sourceLang,
             targetLang: state.targetLang || DEFAULT_TRANSLATION_SETTINGS.targetLang,
             customPrompt: state.customPrompt ?? "",
+            modelId: state.modelId ?? "",
+            customPromptId: state.customPromptId ?? "",
           });
         }
-        const defaultModel = getDefaultAiModel(models);
-        setModel(defaultModel);
-        if (!defaultModel) {
+        const savedModel = state?.modelId ? modelRows.find((row) => row.Id === state.modelId) : undefined;
+        setModel(savedModel ?? getDefaultAiModel(modelRows));
+        if (modelRows.length === 0) {
           setModelsError("No AI model configured. Add one in Settings → AI Models.");
         }
+        const ocrInfo = await window.readlynx?.ocr.getInfo();
+        if (!cancelled && ocrInfo) setInstalled(ocrInfo.installed);
       } catch {
         // keep defaults
       }
@@ -137,11 +147,13 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef }: UseTrans
     void window.readlynx?.db.updateReadingState(bookId, { ...positionRef.current, ...settings });
   }, [bookId, settings]);
 
-  /** Resets per-unit state whenever the unit or pipeline changes. Done
-   *  during render (React's recommended pattern) so no stale labels flash
-   *  before the refresh effect below completes. */
+  /** Resets per-unit state whenever the unit changes. Done during render
+   *  (React's recommended pattern) so no stale labels flash before the
+   *  refresh effect below completes. The pipeline (OCR / AI vision) is
+   *  deliberately left out of the key: a unit has one translation,
+   *  regardless of how it was produced. */
   const [pipelineKey, setPipelineKey] = useState("");
-  const pipeline = `${bookId}|${unitKey ?? ""}|${sourceType}|${pdfMethod}`;
+  const pipeline = `${bookId}|${unitKey ?? ""}|${sourceType}`;
   if (pipelineKey !== pipeline) {
     setPipelineKey(pipeline);
     setMarkdown(null);
@@ -152,11 +164,11 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef }: UseTrans
   }
 
   /** Refresh the cached translation whenever the unit (PDF page / EPUB
-   *  chapter) or the chosen pipeline changes. */
+   *  chapter) changes. The lookup is method-agnostic — one translation per
+   *  page / chapter, whatever pipeline produced it. */
   useEffect(() => {
     if (!unitKey) return;
     let cancelled = false;
-    const method = methodFor(sourceType, pdfMethodRef.current);
     const db = window.readlynx?.db;
     if (!db) return;
     const refresh = async () => {
@@ -165,8 +177,8 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef }: UseTrans
         const chapter = unitToChapter(unitKey);
         const rows = await db.getTranslations(
           sourceType === "epub"
-            ? { bookId, method: "chapter", chunkKeyPrefix: chapter ?? undefined }
-            : { bookId, method, pageNumber: page ?? undefined },
+            ? { bookId, chunkKeyPrefix: chapter ?? undefined }
+            : { bookId, pageNumber: page ?? undefined },
         );
         if (cancelled) return;
         if (rows.length === 0) {
@@ -199,7 +211,7 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef }: UseTrans
     return () => {
       cancelled = true;
     };
-  }, [unitKey, bookId, sourceType, pdfMethod, epubRef]);
+  }, [unitKey, bookId, sourceType, epubRef]);
 
   const setViewMode = useCallback((mode: TranslationViewMode) => {
     setViewModeState(mode);
@@ -207,6 +219,14 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef }: UseTrans
 
   const updateSettings = useCallback((patch: Partial<TranslationSettings>) => {
     setSettings((current) => ({ ...current, ...patch }));
+  }, []);
+
+  /** Picks the AI model used for translation and remembers it per book.
+   *  An id that is not in the list falls back to the app default. */
+  const selectModel = useCallback((id: string) => {
+    const chosen = modelsRef.current.find((row) => row.Id === id) ?? null;
+    setModel(chosen);
+    setSettings((current) => ({ ...current, modelId: chosen ? id : "" }));
   }, []);
 
   /** Loads cached rows for a unit and exposes them (used by the panel). */
@@ -280,7 +300,7 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef }: UseTrans
         method: translation.method,
         pageNumber: translation.pageNumber,
         chunkKey: translation.chunkKey,
-        sourceLang: current.sourceLang,
+        sourceLang: "",
         targetLang: current.targetLang,
         customPrompt: current.customPrompt,
         markdown: translation.markdown,
@@ -326,7 +346,6 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef }: UseTrans
     const input = { url, apiKey: currentModel.APIKey, modelName: currentModel.ModelName };
     const promptContext = {
       docType,
-      sourceLang: currentSettings.sourceLang,
       ocrLangs: currentSettings.ocrLangs,
       targetLang: currentSettings.targetLang,
       customPrompt: currentSettings.customPrompt,
@@ -354,7 +373,7 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef }: UseTrans
         // this chapter (incl. stale chunks from earlier, differently-chunked
         // generations) before the fresh chunks are written.
         if (force) {
-          await db.deleteTranslations({ bookId, method: "chapter", chunkKeyPrefix: chapterKey });
+          await db.deleteTranslations({ bookId, chunkKeyPrefix: chapterKey });
         }
         const results: string[] = [];
         for (let index = 0; index < chunks.length; index += 1) {
@@ -382,11 +401,11 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef }: UseTrans
           throw new Error("The page image is not ready yet.");
         }
         const page = unitToPage(key) ?? 1;
-        // Regenerate replaces the whole page translation: remove the previous
-        // row (page rows share `chunkKey IS NULL`, so upserts could otherwise
-        // leave duplicates) before the fresh result is saved.
+        // Regenerate replaces the whole page translation: remove every row
+        // of this page (whatever pipeline produced it, so OCR and AI vision
+        // can never leave duplicates) before the fresh result is saved.
         if (force) {
-          await db.deleteTranslations({ bookId, method, pageNumber: page });
+          await db.deleteTranslations({ bookId, pageNumber: page });
         }
         if (method === "ocr") {
           setStatus("Recognizing page…");
@@ -469,7 +488,9 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef }: UseTrans
     error,
     hasTranslation,
     model,
+    models,
     modelsError,
+    selectModel,
     installed,
     downloading,
     downloadProgress,

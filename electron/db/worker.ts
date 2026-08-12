@@ -4,13 +4,14 @@ import { createConnection } from "../../src/infrastructure/db/connection.ts";
 import { applySchema } from "../../src/infrastructure/db/schema.ts";
 import { seedDatabase } from "../../src/infrastructure/db/seed/seedDatabase.ts";
 import type { CreateReadingBookPayload, CreateTranslatedBookPayload, SaveDocumentPayload } from "../../src/infrastructure/db/entities/types.ts";
-import type { AiModel, TranslationEntity, TranslationMethod } from "../../src/infrastructure/db/entities/index.ts";
+import type { AiModel, CustomInstructionEntity, TranslationEntity, TranslationMethod } from "../../src/infrastructure/db/entities/index.ts";
 import type { ReadingStateInput } from "../../src/infrastructure/db/repositories/index.ts";
 import {
   AiModelRepository,
   AppSettingsRepository,
   BookRepository,
   BookSourceRepository,
+  CustomInstructionRepository,
   DocumentRepository,
   DocumentSettingsRepository,
   ReadingStateRepository,
@@ -54,6 +55,7 @@ const appSettings = new AppSettingsRepository(db);
 const aiModels = new AiModelRepository(db);
 const readingState = new ReadingStateRepository(db);
 const translations = new TranslationRepository(db);
+const customInstructions = new CustomInstructionRepository(db);
 
 function handleCreateBook(): { bookId: string; documentId: string } {
   const bookId = randomUUID();
@@ -196,11 +198,11 @@ const handlers: Record<string, (payload: unknown) => unknown> = {
   "translation-get": (payload) => {
     const { bookId, method, pageNumber, chunkKeyPrefix } = payload as {
       bookId: string;
-      method: TranslationMethod;
+      method?: TranslationMethod | null;
       pageNumber?: number | null;
       chunkKeyPrefix?: string | null;
     };
-    return translations.findByKey(bookId, method, pageNumber ?? null, chunkKeyPrefix ?? null);
+    return translations.findByKey(bookId, method ?? null, pageNumber ?? null, chunkKeyPrefix ?? null);
   },
   "translation-put": (payload) => {
     translations.upsert(payload as TranslationEntity);
@@ -209,11 +211,24 @@ const handlers: Record<string, (payload: unknown) => unknown> = {
   "translation-delete": (payload) => {
     const { bookId, method, pageNumber, chunkKeyPrefix } = payload as {
       bookId: string;
-      method: TranslationMethod;
+      method?: TranslationMethod | null;
       pageNumber?: number | null;
       chunkKeyPrefix?: string | null;
     };
-    translations.deleteWhere(bookId, method, pageNumber ?? null, chunkKeyPrefix ?? null);
+    translations.deleteWhere(bookId, method ?? null, pageNumber ?? null, chunkKeyPrefix ?? null);
+    return true;
+  },
+  "custom-instructions-list": () => customInstructions.list(),
+  "custom-instruction-create": (payload) => {
+    customInstructions.insert(payload as CustomInstructionEntity);
+    return true;
+  },
+  "custom-instruction-update": (payload) => {
+    customInstructions.update(payload as CustomInstructionEntity);
+    return true;
+  },
+  "custom-instruction-delete": (payload) => {
+    customInstructions.remove(payload as string);
     return true;
   },
 };

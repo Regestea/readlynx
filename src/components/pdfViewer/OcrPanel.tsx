@@ -17,11 +17,13 @@ interface OcrPanelProps {
   downloadProgress: number | null;
   onDownload: (lang: string) => void;
   onDelete: (lang: string) => void;
-  /** Runs OCR on the current page. */
-  onExtract: () => void;
+  /** Runs the action shown in the footer (e.g. extract the page text or
+   *  translate the page). When omitted, the panel becomes a language-only
+   *  picker: no footer is rendered at all. */
+  onExtract?: () => void;
   extracting: boolean;
   /** Status line shown in the footer (progress / errors / info). */
-  status: string | null;
+  status?: string | null;
   onClose: () => void;
   /** Overrides the panel header title (e.g. "OCR source languages"). */
   title?: string;
@@ -171,23 +173,25 @@ export function OcrPanel({
         </div>
       )}
 
-      <footer className={styles.footer}>
-        <span className={styles.status} role="status">
-          {status ?? ""}
-        </span>
-        <Button
-          variant="primary"
-          className={styles.extractButton}
-          onClick={onExtract}
-          disabled={!canExtract}
-        >
-          {extracting && (
-            <Loader2 size={14} strokeWidth={2} className={styles.spinner} aria-hidden="true" />
-          )}
-          <ScanText size={14} strokeWidth={1.8} aria-hidden="true" />
-          {extracting ? actionBusyLabel : actionLabel}
-        </Button>
-      </footer>
+      {onExtract && (
+        <footer className={styles.footer}>
+          <span className={styles.status} role="status">
+            {status ?? ""}
+          </span>
+          <Button
+            variant="primary"
+            className={styles.extractButton}
+            onClick={onExtract}
+            disabled={!canExtract}
+          >
+            {extracting && (
+              <Loader2 size={14} strokeWidth={2} className={styles.spinner} aria-hidden="true" />
+            )}
+            <ScanText size={14} strokeWidth={1.8} aria-hidden="true" />
+            {extracting ? actionBusyLabel : actionLabel}
+          </Button>
+        </footer>
+      )}
     </div>
   );
 }

@@ -15,19 +15,22 @@ export type TranslationDocType = "EPUB chapter" | "PDF OCR text" | "PDF image";
 export interface TranslationSettings {
   /** Tesseract language codes used to OCR PDF pages. */
   ocrLangs: string[];
-  /** Source language code (`auto` = let the model detect it). */
-  sourceLang: string;
-  /** Target language code. */
+  /** Target language code (shared by OCR and AI vision pipelines). */
   targetLang: string;
-  /** Optional extra instruction layered on top of the default prompt. */
+  /** Effective custom instruction text sent to the model ("" = none). */
   customPrompt: string;
+  /** Id of the chosen AI model ("" = the app default model). */
+  modelId: string;
+  /** Id of the chosen saved instruction ("" = no instruction). */
+  customPromptId: string;
 }
 
 export const DEFAULT_TRANSLATION_SETTINGS: TranslationSettings = {
   ocrLangs: ["eng"],
-  sourceLang: "auto",
   targetLang: "en",
   customPrompt: "",
+  modelId: "",
+  customPromptId: "",
 };
 
 /** Identifies the unit of content currently on screen: `pdf:<page>` or

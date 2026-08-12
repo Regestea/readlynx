@@ -1,10 +1,8 @@
 import type { TranslationDocType } from "./types.ts";
-import { AUTO_LANGUAGE, languageLabel, ocrLanguagesLabel } from "./languages.ts";
+import { languageLabel, ocrLanguagesLabel } from "./languages.ts";
 
 export interface TranslationPromptContext {
   docType: TranslationDocType;
-  /** Source language code ("auto" = detect). */
-  sourceLang: string;
   /** Tesseract codes of the OCR page, when `docType` is "PDF OCR text". */
   ocrLangs?: string[];
   /** Target language code. */
@@ -18,10 +16,7 @@ function sourceDescription(context: TranslationPromptContext): string {
     const langs = ocrLanguagesLabel(context.ocrLangs);
     return `the text extracted from the page (recognized as ${langs})`;
   }
-  if (context.sourceLang === AUTO_LANGUAGE) {
-    return "the source language (detected automatically from the content)";
-  }
-  return languageLabel(context.sourceLang);
+  return "the source language (detected automatically from the content)";
 }
 
 /** The behaviour contract sent to the model on every translation request. */

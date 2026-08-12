@@ -8,6 +8,7 @@ import type {
   SaveDocumentPayload,
 } from "./infrastructure/db/entities/types.ts";
 import type { AiModel } from "./infrastructure/db/entities/AiModel.ts";
+import type { CustomInstructionEntity } from "./infrastructure/db/entities/CustomInstruction.ts";
 import type { ReadingStateEntity } from "./infrastructure/db/entities/ReadingState.ts";
 import type { ReadingStateInput } from "./infrastructure/db/repositories/ReadingStateRepository.ts";
 import type { TranslationEntity, TranslationMethod } from "./infrastructure/db/entities/Translation.ts";
@@ -76,17 +77,25 @@ declare global {
         ): Promise<ReadingStateEntity | null>;
         getTranslations(options: {
           bookId: string;
-          method: TranslationMethod;
+          method?: TranslationMethod;
           pageNumber?: number | null;
           chunkKeyPrefix?: string | null;
         }): Promise<TranslationEntity[]>;
         putTranslation(translation: TranslationEntity): Promise<boolean>;
         deleteTranslations(options: {
           bookId: string;
-          method: TranslationMethod;
+          method?: TranslationMethod;
           pageNumber?: number | null;
           chunkKeyPrefix?: string | null;
         }): Promise<boolean>;
+        listCustomInstructions(): Promise<CustomInstructionEntity[]>;
+        createCustomInstruction(
+          instruction: CustomInstructionEntity,
+        ): Promise<boolean>;
+        updateCustomInstruction(
+          instruction: CustomInstructionEntity,
+        ): Promise<boolean>;
+        deleteCustomInstruction(id: string): Promise<boolean>;
       };
       ai: {
         testConnection(input: {

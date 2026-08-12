@@ -46,6 +46,8 @@ CREATE TABLE IF NOT EXISTS ReadingState (
   sourceLang     TEXT NOT NULL DEFAULT '',
   targetLang     TEXT NOT NULL DEFAULT 'English',
   customPrompt   TEXT NOT NULL DEFAULT '',
+  modelId        TEXT NOT NULL DEFAULT '',
+  customPromptId TEXT NOT NULL DEFAULT '',
   updatedAt      TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -68,6 +70,14 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_translations_lookup
 
 CREATE TABLE IF NOT EXISTS AppSettings (
   theme TEXT NOT NULL DEFAULT 'light'
+);
+
+CREATE TABLE IF NOT EXISTS CustomInstructions (
+  id        TEXT PRIMARY KEY,
+  name      TEXT NOT NULL,
+  content   TEXT NOT NULL,
+  createdAt TEXT NOT NULL DEFAULT (datetime('now')),
+  updatedAt TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE TABLE IF NOT EXISTS AiModels (
@@ -162,14 +172,16 @@ function ensureCascadeForeignKeys(db: Database.Database): void {
         sourceLang     TEXT NOT NULL DEFAULT '',
         targetLang     TEXT NOT NULL DEFAULT 'English',
         customPrompt   TEXT NOT NULL DEFAULT '',
+        modelId        TEXT NOT NULL DEFAULT '',
+        customPromptId TEXT NOT NULL DEFAULT '',
         updatedAt      TEXT NOT NULL DEFAULT (datetime('now'))
       );
       INSERT INTO ReadingState_new (
         bookId, currentPage, scrollPosition, ocrLangs, sourceLang, targetLang,
-        customPrompt, updatedAt
+        customPrompt, modelId, customPromptId, updatedAt
       )
         SELECT bookId, currentPage, scrollPosition, ocrLangs, sourceLang, targetLang,
-               customPrompt, updatedAt
+               customPrompt, modelId, customPromptId, updatedAt
         FROM ReadingState;
       DROP TABLE ReadingState;
       ALTER TABLE ReadingState_new RENAME TO ReadingState;
@@ -237,6 +249,8 @@ function ensureReadingStateSettingsColumns(db: Database.Database): void {
   addColumn("sourceLang", "TEXT NOT NULL DEFAULT ''");
   addColumn("targetLang", "TEXT NOT NULL DEFAULT 'English'");
   addColumn("customPrompt", "TEXT NOT NULL DEFAULT ''");
+  addColumn("modelId", "TEXT NOT NULL DEFAULT ''");
+  addColumn("customPromptId", "TEXT NOT NULL DEFAULT ''");
 }
 
 /** Databases created before the default-model concept lack `IsDefault` on

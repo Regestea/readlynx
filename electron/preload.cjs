@@ -44,6 +44,13 @@ contextBridge.exposeInMainWorld("readlynx", {
     getTranslations: (options) => ipcRenderer.invoke("db:translation-get", options),
     putTranslation: (translation) => ipcRenderer.invoke("db:translation-put", translation),
     deleteTranslations: (options) => ipcRenderer.invoke("db:translation-delete", options),
+    listCustomInstructions: () => ipcRenderer.invoke("db:custom-instructions-list"),
+    createCustomInstruction: (instruction) =>
+      ipcRenderer.invoke("db:custom-instruction-create", instruction),
+    updateCustomInstruction: (instruction) =>
+      ipcRenderer.invoke("db:custom-instruction-update", instruction),
+    deleteCustomInstruction: (id) =>
+      ipcRenderer.invoke("db:custom-instruction-delete", id),
   },
   ai: {
     testConnection: (input) => ipcRenderer.invoke("ai:test", input),
