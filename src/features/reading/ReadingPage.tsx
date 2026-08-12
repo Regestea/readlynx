@@ -6,7 +6,7 @@ import type { PdfViewerHandle } from "../../components/pdfViewer/PdfViewer";
 import { EpubViewer } from "../../components/epubViewer/EpubViewer";
 import type { EpubViewerHandle } from "../../components/epubViewer/EpubViewer";
 import { Markdown } from "../../components/markdown/Markdown";
-import { AiChatPanel } from "./aiChat/AiChatPanel";
+import { AiChatPanel } from "../../components/aiChat/AiChatPanel";
 import type { BookSourceType } from "../../infrastructure/db/entities/types";
 import { TranslationSettingsPanel, TranslationToggle } from "./translation/TranslationPanel";
 import { useTranslation } from "./translation/useTranslation";

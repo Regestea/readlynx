@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Loader2, Send, Sparkles, X } from "lucide-react";
-import { Markdown } from "../../../components/markdown/Markdown";
-import { useDefaultAiModel } from "../../../infrastructure/ai/useDefaultAiModel";
-import { resolveProviderBaseUrl } from "../../../infrastructure/ai/modelResolver";
+import { Markdown } from "../markdown/Markdown";
+import { useDefaultAiModel } from "../../infrastructure/ai/useDefaultAiModel";
+import { resolveProviderBaseUrl } from "../../infrastructure/ai/modelResolver";
 import styles from "./AiChatPanel.module.css";
 
 interface ChatMessage {

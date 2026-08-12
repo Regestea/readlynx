@@ -4,7 +4,7 @@ import { ChevronLeft, ChevronRight, FileWarning, Loader2, Maximize2, Minimize2, 
 import * as pdfjsLib from "pdfjs-dist";
 import type { PDFDocumentLoadingTask, PDFDocumentProxy, PDFPageProxy, RenderTask } from "pdfjs-dist";
 import { OcrPanel } from "./OcrPanel";
-import { AiSelectionBubble } from "../ui/AiSelectionBubble/AiSelectionBubble";
+import { AiSelectionBubble } from "../AiSelectionBubble/AiSelectionBubble";
 import styles from "./PdfViewer.module.css";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(

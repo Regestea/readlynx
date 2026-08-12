@@ -3,7 +3,7 @@ import { ImagePlus, NotebookPen, Pencil, Trash2 } from "lucide-react";
 import { Modal } from "../../../components/ui/Modal/Modal";
 import { Button } from "../../../components/ui/Button/Button";
 import { Input } from "../../../components/ui/Input/Input";
-import { ImageEditorDialog } from "../../../components/ui/ImageEditorDialog/ImageEditorDialog";
+import { ImageEditorDialog } from "../../../components/ImageEditorDialog/ImageEditorDialog";
 import styles from "./CreateBookDialog.module.css";
 
 export interface CreateBookDetails {

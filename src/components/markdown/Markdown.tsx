@@ -12,9 +12,9 @@ import { Code } from "../ui/Code/Code";
 import { Image } from "../ui/Image/Image";
 import { Table } from "../ui/Table/Table";
 import type { TableColumn } from "../ui/Table/Table";
-import { FontFamilySelect } from "../ui/FontFamilySelect/FontFamilySelect";
+import { FontFamilySelect } from "../FontFamilySelect/FontFamilySelect";
 import { ColorSelect } from "../ui/ColorSelect/ColorSelect";
-import { AiSelectionBubble } from "../ui/AiSelectionBubble/AiSelectionBubble";
+import { AiSelectionBubble } from "../AiSelectionBubble/AiSelectionBubble";
 import { useReaderSettings } from "../../hooks/useReaderSettings.ts";
 import styles from "./Markdown.module.css";
 

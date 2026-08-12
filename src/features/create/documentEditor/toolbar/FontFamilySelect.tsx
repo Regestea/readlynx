@@ -6,8 +6,8 @@ import { useDefaultFont, useToolbarState } from "../context";
 import {
   FontFamilySelect as SharedFontFamilySelect,
   labelForFont,
-} from "../../../../components/ui/FontFamilySelect/FontFamilySelect";
-import sharedStyles from "../../../../components/ui/FontFamilySelect/FontFamilySelect.module.css";
+} from "../../../../components/FontFamilySelect/FontFamilySelect";
+import sharedStyles from "../../../../components/FontFamilySelect/FontFamilySelect.module.css";
 
 /** Font used when neither the selection nor a user default is set: the app's
  *  CSS default (`--font-sans`). */

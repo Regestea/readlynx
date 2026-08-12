@@ -45,7 +45,7 @@ import { InsertButtons } from "./InsertButtons";
 import { insertImage } from "../plugins/ImagePlugin";
 import { insertTable } from "../plugins/TablePlugin";
 import { $createPageBreakNode } from "../nodes/PageBreakNode";
-import { ImageEditorDialog } from "../../../../components/ui/ImageEditorDialog/ImageEditorDialog";
+import { ImageEditorDialog } from "../../../../components/ImageEditorDialog/ImageEditorDialog";
 import { FontFamilySelect } from "./FontFamilySelect";
 import { ExportDialog, type ExportSettings } from "./ExportDialog";
 import { MarginDialog } from "./MarginDialog";

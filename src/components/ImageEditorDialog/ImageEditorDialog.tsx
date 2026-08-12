@@ -13,8 +13,8 @@ import {
   ZoomIn,
   ZoomOut,
 } from "lucide-react";
-import { Button } from "../Button/Button";
-import { Modal } from "../Modal/Modal";
+import { Button } from "../ui/Button/Button";
+import { Modal } from "../ui/Modal/Modal";
 import styles from "./ImageEditorDialog.module.css";
 
 interface ImageEditorDialogProps {

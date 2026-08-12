@@ -6,7 +6,7 @@ import { Button } from "../../../components/ui/Button/Button";
 import { Input } from "../../../components/ui/Input/Input";
 import { PdfViewer } from "../../../components/pdfViewer/PdfViewer";
 import { EpubViewer } from "../../../components/epubViewer/EpubViewer";
-import { ImageEditorDialog } from "../../../components/ui/ImageEditorDialog/ImageEditorDialog";
+import { ImageEditorDialog } from "../../../components/ImageEditorDialog/ImageEditorDialog";
 import type { BookSourceType } from "../../../infrastructure/db/entities/types";
 import styles from "./TranslateBookDialog.module.css";
 
