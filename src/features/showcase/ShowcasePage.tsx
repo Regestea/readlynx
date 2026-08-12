@@ -12,43 +12,43 @@ import {
   NotebookPen,
   Plus,
 } from "lucide-react";
-import dayBackground from "../../../assets/backgrounds/day-background.png";
-import { Avatar } from "../../../components/ui/Avatar/Avatar";
-import { BookCard } from "../../../features/home/widgets/BookCard/BookCard";
-import { Button } from "../../../components/ui/Button/Button";
-import { Card } from "../../../components/ui/Card/Card";
-import { Checkbox } from "../../../components/ui/Checkbox/Checkbox";
-import { Code } from "../../../components/ui/Code/Code";
-import { ColorSelect } from "../../../components/ui/ColorSelect/ColorSelect";
-import { FileInput } from "../../../components/ui/FileInput/FileInput";
-import { Image } from "../../../components/ui/Image/Image";
-import { Input } from "../../../components/ui/Input/Input";
-import { List } from "../../../components/ui/List/List";
-import type { ListItemData } from "../../../components/ui/List/List";
-import { Markdown } from "../../../components/markdown/Markdown";
-import { PdfViewer } from "../../../components/pdfViewer/PdfViewer";
-import { EpubViewer } from "../../../components/epubViewer/EpubViewer";
-import { DocumentEditor } from "../../../features/create/documentEditor";
-import { Modal } from "../../../components/ui/Modal/Modal";
-import { NumberInput } from "../../../components/ui/NumberInput/NumberInput";
-import { Progress } from "../../../components/ui/Progress/Progress";
-import { QuoteCard } from "../../../features/home/widgets/QuoteCard/QuoteCard";
-import { SearchBar } from "../../../components/ui/SearchBar/SearchBar";
-import { Select } from "../../../components/ui/Select/Select";
-import type { SelectOption } from "../../../components/ui/Select/Select";
-import { StatisticsCard } from "../../../features/home/widgets/StatisticsCard/StatisticsCard";
-import { Table } from "../../../components/ui/Table/Table";
-import type { TableColumn } from "../../../components/ui/Table/Table";
-import { Tabs } from "../../../components/ui/Tabs/Tabs";
-import type { TabItem } from "../../../components/ui/Tabs/Tabs";
-import { TextArea } from "../../../components/ui/TextArea/TextArea";
-import type { Book } from "../../../shared/types";
+import dayBackground from "../../assets/backgrounds/day-background.png";
+import { Avatar } from "../../components/ui/Avatar/Avatar";
+import { BookCard } from "../../features/home/widgets/BookCard/BookCard";
+import { Button } from "../../components/ui/Button/Button";
+import { Card } from "../../components/ui/Card/Card";
+import { Checkbox } from "../../components/ui/Checkbox/Checkbox";
+import { Code } from "../../components/ui/Code/Code";
+import { ColorSelect } from "../../components/ui/ColorSelect/ColorSelect";
+import { FileInput } from "../../components/ui/FileInput/FileInput";
+import { Image } from "../../components/ui/Image/Image";
+import { Input } from "../../components/ui/Input/Input";
+import { List } from "../../components/ui/List/List";
+import type { ListItemData } from "../../components/ui/List/List";
+import { Markdown } from "../../components/markdown/Markdown";
+import { PdfViewer } from "../../components/pdfViewer/PdfViewer";
+import { EpubViewer } from "../../components/epubViewer/EpubViewer";
+import { DocumentEditor } from "../../features/create/documentEditor";
+import { Modal } from "../../components/ui/Modal/Modal";
+import { NumberInput } from "../../components/ui/NumberInput/NumberInput";
+import { Progress } from "../../components/ui/Progress/Progress";
+import { QuoteCard } from "../../features/home/widgets/QuoteCard/QuoteCard";
+import { SearchBar } from "../../components/ui/SearchBar/SearchBar";
+import { Select } from "../../components/ui/Select/Select";
+import type { SelectOption } from "../../components/ui/Select/Select";
+import { StatisticsCard } from "../../features/home/widgets/StatisticsCard/StatisticsCard";
+import { Table } from "../../components/ui/Table/Table";
+import type { TableColumn } from "../../components/ui/Table/Table";
+import { Tabs } from "../../components/ui/Tabs/Tabs";
+import type { TabItem } from "../../components/ui/Tabs/Tabs";
+import { TextArea } from "../../components/ui/TextArea/TextArea";
+import type { Book } from "../../shared/types";
 import {
   continueReadingBooks,
   dailyQuote,
   recommendedBooks,
   weekStats,
-} from "../../home/data/mockData";
+} from "../home/data/mockData";
 import styles from "./ShowcasePage.module.css";
 
 interface SectionProps {

@@ -1,16 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowLeft, BookOpen, FileWarning, Languages, Loader2 } from "lucide-react";
-import { Button } from "../../../components/ui/Button/Button";
-import { PdfViewer } from "../../../components/pdfViewer/PdfViewer";
-import type { PdfViewerHandle } from "../../../components/pdfViewer/PdfViewer";
-import { EpubViewer } from "../../../components/epubViewer/EpubViewer";
-import type { EpubViewerHandle } from "../../../components/epubViewer/EpubViewer";
-import { Markdown } from "../../../components/markdown/Markdown";
-import { AiChatPanel } from "../../../features/reading/aiChat/AiChatPanel";
-import type { BookSourceType } from "../../../infrastructure/db/entities/types";
-import { TranslationSettingsPanel, TranslationToggle } from "../translation/TranslationPanel";
-import { useTranslation } from "../translation/useTranslation";
-import { epubUnitKey, methodFor, pdfUnitKey } from "../translation/types";
+import { Button } from "../../components/ui/Button/Button";
+import { PdfViewer } from "../../components/pdfViewer/PdfViewer";
+import type { PdfViewerHandle } from "../../components/pdfViewer/PdfViewer";
+import { EpubViewer } from "../../components/epubViewer/EpubViewer";
+import type { EpubViewerHandle } from "../../components/epubViewer/EpubViewer";
+import { Markdown } from "../../components/markdown/Markdown";
+import { AiChatPanel } from "./aiChat/AiChatPanel";
+import type { BookSourceType } from "../../infrastructure/db/entities/types";
+import { TranslationSettingsPanel, TranslationToggle } from "./translation/TranslationPanel";
+import { useTranslation } from "./translation/useTranslation";
+import { epubUnitKey, methodFor, pdfUnitKey } from "./translation/types";
 import styles from "./ReadingPage.module.css";
 
 interface ReadingPageProps {

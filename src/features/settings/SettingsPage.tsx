@@ -8,18 +8,18 @@ import {
   Sun,
   User,
 } from "lucide-react";
-import { useTheme } from "../../../app/providers/theme/ThemeContext";
-import { Avatar } from "../../../components/ui/Avatar/Avatar";
-import { Button } from "../../../components/ui/Button/Button";
-import { Card } from "../../../components/ui/Card/Card";
-import { Checkbox } from "../../../components/ui/Checkbox/Checkbox";
-import { ColorSelect } from "../../../components/ui/ColorSelect/ColorSelect";
-import { Input } from "../../../components/ui/Input/Input";
-import { NumberInput } from "../../../components/ui/NumberInput/NumberInput";
-import { Select } from "../../../components/ui/Select/Select";
-import type { SelectOption } from "../../../components/ui/Select/Select";
-import type { Theme } from "../../../shared/types";
-import { AiModelsSection } from "../aiModels/AiModelsSection.tsx";
+import { useTheme } from "../../app/providers/theme/ThemeContext";
+import { Avatar } from "../../components/ui/Avatar/Avatar";
+import { Button } from "../../components/ui/Button/Button";
+import { Card } from "../../components/ui/Card/Card";
+import { Checkbox } from "../../components/ui/Checkbox/Checkbox";
+import { ColorSelect } from "../../components/ui/ColorSelect/ColorSelect";
+import { Input } from "../../components/ui/Input/Input";
+import { NumberInput } from "../../components/ui/NumberInput/NumberInput";
+import { Select } from "../../components/ui/Select/Select";
+import type { SelectOption } from "../../components/ui/Select/Select";
+import type { Theme } from "../../shared/types";
+import { AiModelsSection } from "./aiModels/AiModelsSection.tsx";
 import styles from "./SettingsPage.module.css";
 
 interface SectionProps {

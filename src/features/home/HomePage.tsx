@@ -1,16 +1,16 @@
 import { useEffect, useState } from "react";
 import { BookOpen, Languages, NotebookPen } from "lucide-react";
-import { AddModeCard } from "../widgets/AddModeCard/AddModeCard";
-import { Shelf } from "../widgets/Shelf/Shelf";
-import { CreateBookDialog } from "./CreateBookDialog";
-import type { CreateBookDetails } from "./CreateBookDialog";
-import { TranslateBookDialog } from "./TranslateBookDialog";
-import { ReadBookDialog } from "./ReadBookDialog";
-import { Modal } from "../../../components/ui/Modal/Modal";
-import { Button } from "../../../components/ui/Button/Button";
-import { coverUrl } from "../../../shared/coverUrl";
-import type { Book, CoverStyle } from "../../../shared/types";
-import type { BookListItem } from "../../../infrastructure/db/entities/types";
+import { AddModeCard } from "./widgets/AddModeCard/AddModeCard";
+import { Shelf } from "./widgets/Shelf/Shelf";
+import { CreateBookDialog } from "./components/CreateBookDialog";
+import type { CreateBookDetails } from "./components/CreateBookDialog";
+import { TranslateBookDialog } from "./components/TranslateBookDialog";
+import { ReadBookDialog } from "./components/ReadBookDialog";
+import { Modal } from "../../components/ui/Modal/Modal";
+import { Button } from "../../components/ui/Button/Button";
+import { coverUrl } from "../../shared/coverUrl";
+import type { Book, CoverStyle } from "../../shared/types";
+import type { BookListItem } from "../../infrastructure/db/entities/types";
 import styles from "./HomePage.module.css";
 
 interface HomePageProps {
