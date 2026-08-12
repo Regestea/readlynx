@@ -289,7 +289,7 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef }: UseTrans
     async (translation: {
       method: TranslationMethod;
       pageNumber: number | null;
-      chunkKey: string | null;
+      chunkKey: string;
       markdown: string;
     }) => {
       const current = settingsRef.current;
@@ -439,7 +439,7 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef }: UseTrans
           result = response.trim();
         }
         if (!result) throw new Error("The AI returned an empty translation.");
-        await saveRow({ method, pageNumber: page, chunkKey: null, markdown: result });
+        await saveRow({ method, pageNumber: page, chunkKey: "", markdown: result });
       }
       setMarkdown(result);
       setHasTranslation(true);

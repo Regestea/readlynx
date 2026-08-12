@@ -12,9 +12,10 @@ export class TranslationRepository {
 
   /** Finds cached translations for a unit of content. There is one result
    *  per page / per chapter regardless of the pipeline (ocr / vision /
-   *  chapter) that produced it, so the method is optional: match PDF rows
-   *  exactly on `pageNumber`, and every chunk of an EPUB chapter via
-   *  `chunkKeyPrefix` (e.g. `"chapter_001.xhtml"`). */
+   *  chapter) that produced it, so the method is optional: PDF rows match
+   *  exactly on `pageNumber` (their `chunkKey` is `""`), and every chunk of
+   *  an EPUB chapter matches via `chunkKeyPrefix` (e.g.
+   *  `"chapter_001.xhtml"`). */
   findByKey(
     bookId: string,
     method?: TranslationMethod | null,
@@ -43,14 +44,14 @@ export class TranslationRepository {
       ? this.db
           .prepare(
             `SELECT * FROM Translations
-             WHERE bookId = ? AND method = ? AND pageNumber = ? AND chunkKey IS NULL
+             WHERE bookId = ? AND method = ? AND pageNumber = ? AND chunkKey = ''
              ORDER BY updatedAt DESC`,
           )
           .all(bookId, method, pageNumber ?? null)
       : this.db
           .prepare(
             `SELECT * FROM Translations
-             WHERE bookId = ? AND pageNumber = ? AND chunkKey IS NULL
+             WHERE bookId = ? AND pageNumber = ? AND chunkKey = ''
              ORDER BY updatedAt DESC`,
           )
           .all(bookId, pageNumber ?? null);
@@ -58,8 +59,8 @@ export class TranslationRepository {
   }
 
   /** Inserts or replaces the cached translation for its unit of content
-   *  (unique on `bookId + method + pageNumber` for PDF and
-   *  `bookId + method + chunkKey` for EPUB). */
+   *  (unique on `bookId + pageNumber + chunkKey`, so switching the OCR /
+   *  AI-vision pipeline overwrites the page's only row). */
   upsert(entity: TranslationEntity): void {
     this.db
       .prepare(
@@ -67,8 +68,9 @@ export class TranslationRepository {
            id, bookId, sourceType, method, pageNumber, chunkKey,
            sourceLang, targetLang, customPrompt, markdown, updatedAt
          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
-         ON CONFLICT(bookId, method, pageNumber, chunkKey) DO UPDATE SET
+         ON CONFLICT(bookId, pageNumber, chunkKey) DO UPDATE SET
            sourceType   = excluded.sourceType,
+           method       = excluded.method,
            sourceLang   = excluded.sourceLang,
            targetLang   = excluded.targetLang,
            customPrompt = excluded.customPrompt,
@@ -114,13 +116,13 @@ export class TranslationRepository {
     } else if (method) {
       this.db
         .prepare(
-          "DELETE FROM Translations WHERE bookId = ? AND method = ? AND pageNumber = ? AND chunkKey IS NULL",
+          "DELETE FROM Translations WHERE bookId = ? AND method = ? AND pageNumber = ? AND chunkKey = ''",
         )
         .run(bookId, method, pageNumber ?? null);
     } else {
       this.db
         .prepare(
-          "DELETE FROM Translations WHERE bookId = ? AND pageNumber = ? AND chunkKey IS NULL",
+          "DELETE FROM Translations WHERE bookId = ? AND pageNumber = ? AND chunkKey = ''",
         )
         .run(bookId, pageNumber ?? null);
     }

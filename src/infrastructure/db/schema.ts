@@ -65,8 +65,12 @@ CREATE TABLE IF NOT EXISTS Translations (
   updatedAt    TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- One translation per unit of content: per PDF page (chunkKey is '') or per
+-- EPUB chunk (chunkKey = '<chapter>#<index>'). The method that produced it
+-- (ocr / vision / chapter) is irrelevant — regenerating via another pipeline
+-- replaces the row instead of adding a second one.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_translations_lookup
-  ON Translations (bookId, method, pageNumber, chunkKey);
+  ON Translations (bookId, pageNumber, chunkKey);
 
 CREATE TABLE IF NOT EXISTS AppSettings (
   theme TEXT NOT NULL DEFAULT 'light'
@@ -114,6 +118,7 @@ export function applySchema(db: Database.Database): void {
     ensureCascadeForeignKeys(db);
     ensureReadingStateSettingsColumns(db);
     ensureAiModelDefaultColumn(db);
+    ensureTranslationLookupIndex(db);
   });
 }
 
@@ -251,6 +256,27 @@ function ensureReadingStateSettingsColumns(db: Database.Database): void {
   addColumn("customPrompt", "TEXT NOT NULL DEFAULT ''");
   addColumn("modelId", "TEXT NOT NULL DEFAULT ''");
   addColumn("customPromptId", "TEXT NOT NULL DEFAULT ''");
+}
+
+/** Translations used to be indexed on `(bookId, method, pageNumber,
+ *  chunkKey)`, letting one page hold both an OCR and an AI-vision row — and
+ *  PDF rows stored `chunkKey IS NULL`, which a unique index treats as
+ *  never-equal, so upserts could not replace them either. Rebuilds the index
+ *  without the method column (one row per page / chunk) and cleans up
+ *  pre-existing duplicates (keeping the newest). */
+function ensureTranslationLookupIndex(db: Database.Database): void {
+  const columns = db.pragma("index_info(idx_translations_lookup)") as Array<{ name: string }>;
+  if (columns.length === 3) return;
+  db.exec(`
+    UPDATE Translations SET chunkKey = '' WHERE pageNumber IS NOT NULL AND chunkKey IS NULL;
+    DELETE FROM Translations
+      WHERE rowid NOT IN (
+        SELECT MAX(rowid) FROM Translations GROUP BY bookId, pageNumber, chunkKey
+      );
+    DROP INDEX IF EXISTS idx_translations_lookup;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_translations_lookup
+      ON Translations (bookId, pageNumber, chunkKey);
+  `);
 }
 
 /** Databases created before the default-model concept lack `IsDefault` on
