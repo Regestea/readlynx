@@ -152,13 +152,19 @@
 
 .canvas {
   display: block;
-  background: #ffffff;
+  background: var(--pdf-background-color, #ffffff);
   border-radius: 2px;
+}
+
+.themeWrap {
+  position: relative;
+  display: inline-flex;
 }
 
 .renderingOverlay {
   position: absolute;
   inset: 0;
+  z-index: 4;
   display: grid;
   place-items: center;
   background: rgba(255, 255, 255, 0.5);

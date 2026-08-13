@@ -1,11 +1,18 @@
-import { useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
-import type { MouseEvent as ReactMouseEvent, Ref } from "react";
-import { ChevronLeft, ChevronRight, FileWarning, Loader2, Maximize2, Minimize2, ScanText, ZoomIn, ZoomOut } from "lucide-react";
+import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
+import type { CSSProperties, MouseEvent as ReactMouseEvent, Ref } from "react";
+import { ChevronLeft, ChevronRight, FileWarning, Loader2, Maximize2, Minimize2, Palette, ScanText, ZoomIn, ZoomOut } from "lucide-react";
 import * as pdfjsLib from "pdfjs-dist";
+import { AnnotationLayer, TextLayer } from "pdfjs-dist";
 import type { PDFDocumentLoadingTask, PDFDocumentProxy, PDFPageProxy, RenderTask } from "pdfjs-dist";
+import type { PDFLinkService } from "pdfjs-dist/types/web/pdf_link_service";
 import { OcrPanel } from "./OcrPanel";
 import { AiSelectionBubble } from "../AiSelectionBubble/AiSelectionBubble";
+import { usePdfTheme } from "./theme/PdfThemeContext";
+import { applyPdfTheme } from "./theme/PdfThemeManager";
+import { PdfThemeProvider } from "./theme/PdfThemeProvider";
+import { PdfThemeSettings } from "./theme/PdfThemeSettings";
 import styles from "./PdfViewer.module.css";
+import "./theme/pdf-theme.css";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
   "pdfjs-dist/build/pdf.worker.min.mjs",
@@ -51,9 +58,20 @@ interface PdfViewerProps {
    *  clicking the bubble hands a PNG of the current page to the host, which
    *  decides between OCR and AI vision. */
   onAskAi?: (payload: { image: string }) => void;
+  /** localStorage key for the reading theme. Defaults to a shared global key;
+   *  pass a per-book key (e.g. `<bookId>:pdf`) to persist themes per document. */
+  themeKey?: string;
 }
 
-export function PdfViewer({
+export function PdfViewer(props: PdfViewerProps & { ref?: Ref<PdfViewerHandle> }) {
+  return (
+    <PdfThemeProvider storageKey={props.themeKey}>
+      <PdfViewerInner {...props} />
+    </PdfThemeProvider>
+  );
+}
+
+function PdfViewerInner({
   filePath,
   className = "",
   ariaLabel = "PDF document",
@@ -97,11 +115,39 @@ export function PdfViewer({
   const [aiSelection, setAiSelection] = useState<{ x: number; y: number } | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [spacerHeight, setSpacerHeight] = useState(0);
+  const [themeOpen, setThemeOpen] = useState(false);
   const viewerRef = useRef<HTMLDivElement>(null);
   const downloadingRef = useRef<string | null>(null);
   const extractingRef = useRef(false);
+  const textLayerRef = useRef<HTMLDivElement>(null);
+  const annotationLayerRef = useRef<HTMLDivElement>(null);
+  const textLayerTaskRef = useRef<TextLayer | null>(null);
+  const annotationLayerTaskRef = useRef<AnnotationLayer | null>(null);
+  const themeWrapRef = useRef<HTMLSpanElement>(null);
 
   const showOcr = ocrEnabled || Boolean(onOcrText);
+  const { state: pdfTheme } = usePdfTheme();
+
+  /** The subset of pdf.js's PDFLinkService the annotation layer touches. This
+   *  viewer renders pages standalone (no document-outline navigation), so
+   *  links render and follow the theme but do not jump anywhere. */
+  const pdfLinkService = useMemo<PDFLinkService>(
+    () =>
+      ({
+        externalLinkTarget: 2,
+        getDestinationHash: () => "",
+        getAnchorUrl: (anchor: string) => anchor,
+        setHash: () => {},
+        navigateTo: () => {},
+        goToDestination: () => Promise.resolve(),
+        executeSetOCGState: () => Promise.resolve(),
+        addLinkAttributes: (link: HTMLAnchorElement, url: string, newWindow = false) => {
+          link.href = url;
+          if (newWindow) link.target = "_blank";
+        },
+      }) as unknown as PDFLinkService,
+    [],
+  );
 
   useImperativeHandle(ref, () => ({
     getCurrentPageImage: () => canvasRef.current?.toDataURL("image/png") ?? null,
@@ -159,6 +205,27 @@ export function PdfViewer({
     document.addEventListener("pointerdown", handlePointerDown);
     return () => document.removeEventListener("pointerdown", handlePointerDown);
   }, [ocrOpen]);
+
+  /** Close the theme panel when clicking outside of it. */
+  useEffect(() => {
+    if (!themeOpen) return;
+    const handlePointerDown = (event: PointerEvent) => {
+      if (themeWrapRef.current && !themeWrapRef.current.contains(event.target as Node)) {
+        setThemeOpen(false);
+      }
+    };
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, [themeOpen]);
+
+  /** Applies the reading theme to the viewer root. Purely a CSS custom
+   *  property swap — no pdfjs-dist re-render happens on theme changes, so
+   *  switching themes stays instant even on multi-hundred-page documents. */
+  useEffect(() => {
+    const root = viewerRef.current;
+    if (!root) return;
+    applyPdfTheme(root, pdfTheme);
+  }, [pdfTheme]);
 
   const handleDownload = useCallback(async (lang: string) => {
     if (downloadingRef.current) return;
@@ -327,6 +394,8 @@ export function PdfViewer({
     return () => {
       cancelled = true;
       renderTaskRef.current?.cancel();
+      textLayerTaskRef.current?.cancel();
+      annotationLayerTaskRef.current?.destroy();
       void loadTaskRef.current?.destroy();
       loadTaskRef.current = null;
     };
@@ -336,6 +405,10 @@ export function PdfViewer({
     const canvas = canvasRef.current;
     if (!canvas) return;
     renderTaskRef.current?.cancel();
+    textLayerTaskRef.current?.cancel();
+    textLayerTaskRef.current = null;
+    annotationLayerTaskRef.current?.destroy();
+    annotationLayerTaskRef.current = null;
     try {
       const pageProxy: PDFPageProxy = await pdf.getPage(page);
       setRendering(true);
@@ -378,13 +451,57 @@ const task = pageProxy.render({ canvas, viewport, transform });
             }
           }
         }
+        const textContainer = textLayerRef.current;
+        if (textContainer) {
+          textContainer.textContent = "";
+          const textLayer = new TextLayer({
+            textContentSource: pageProxy.streamTextContent(),
+            container: textContainer,
+            viewport,
+          });
+          textLayerTaskRef.current = textLayer;
+          void textLayer.render().catch(() => {
+            // Cosmetic overlay: a failed text layer must not break the page.
+          });
+        }
+        const annotationDiv = annotationLayerRef.current;
+        if (annotationDiv) {
+          try {
+            annotationDiv.textContent = "";
+            const annotations = await pageProxy.getAnnotations();
+            const annotationLayer = new AnnotationLayer({
+              div: annotationDiv,
+              page: pageProxy,
+              viewport,
+              linkService: pdfLinkService,
+              accessibilityManager: undefined,
+              annotationCanvasMap: undefined,
+              annotationEditorUIManager: undefined,
+              structTreeLayer: undefined,
+              commentManager: undefined,
+              annotationStorage: undefined,
+            });
+            annotationLayerTaskRef.current = annotationLayer;
+            await annotationLayer.render({
+              annotations,
+              viewport,
+              div: annotationDiv,
+              page: pageProxy,
+              linkService: pdfLinkService,
+              renderForms: false,
+            });
+          } catch (err: unknown) {
+            if (err instanceof Error && err.name === "RenderingCancelledException") return;
+            // Annotation rendering is decorative — a failure must not fail the page.
+          }
+        }
       } catch (err: unknown) {
       if (err instanceof Error && err.name === "RenderingCancelledException") return;
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setRendering(false);
     }
-  }, []);
+  }, [pdfLinkService]);
 
   useEffect(() => {
     if (!doc) return;
@@ -410,6 +527,7 @@ const task = pageProxy.render({ canvas, viewport, transform });
     styles.viewer,
     fill ? styles.fill : "",
     isFullscreen ? styles.viewerFullscreen : "",
+    "pdf-theme-root",
     className,
   ].filter(Boolean).join(" ");
   const showCanvas = doc && !error;
@@ -417,7 +535,7 @@ const task = pageProxy.render({ canvas, viewport, transform });
   return (
     <div ref={viewerRef} className={classes} aria-label={ariaLabel}>
       {toolbar && (
-        <div className={styles.toolbar} role="toolbar" aria-label="PDF controls">
+        <div className={`${styles.toolbar} pdf-toolbar`} role="toolbar" aria-label="PDF controls">
         <button
           type="button"
           className={styles.toolButton}
@@ -527,12 +645,28 @@ const task = pageProxy.render({ canvas, viewport, transform });
             onClose={() => setOcrOpen(false)}
           />
         )}
+        <span className={styles.divider} aria-hidden="true" />
+        <span className={styles.themeWrap} ref={themeWrapRef}>
+          <button
+            type="button"
+            className={`${styles.toolButton} ${themeOpen ? styles.toolButtonActive : ""}`}
+            onClick={() => setThemeOpen((open) => !open)}
+            aria-label="Reading theme"
+            title="Reading theme"
+            aria-haspopup="true"
+            aria-expanded={themeOpen}
+          >
+            <Palette size={16} strokeWidth={2} aria-hidden="true" />
+          </button>
+          <PdfThemeSettings open={themeOpen} onClose={() => setThemeOpen(false)} />
+        </span>
       </div>
       )}
 
       <div
         className={styles.scroll}
         ref={scrollRef}
+        style={{ background: "var(--pdf-background-color)" }}
         onClick={(event) => {
           if (event.target !== canvasRef.current) setAiSelection(null);
         }}
@@ -543,8 +677,14 @@ const task = pageProxy.render({ canvas, viewport, transform });
             <p className={styles.errorText}>{error}</p>
           </div>
         ) : showCanvas ? (
-          <div className={styles.page}>
-            <canvas ref={canvasRef} className={styles.canvas} onClick={handlePageClick} />
+          <div
+            className={`${styles.page} pdf-page`}
+            style={{ "--scale-factor": String(scale) } as CSSProperties}
+          >
+            <canvas ref={canvasRef} className={`${styles.canvas} pdf-canvas`} onClick={handlePageClick} />
+            <div className="pdf-canvas-tint" aria-hidden="true" />
+            <div ref={textLayerRef} className="pdf-text-layer textLayer" />
+            <div ref={annotationLayerRef} className="pdf-annotation-layer annotationLayer" />
             {rendering && (
               <div className={styles.renderingOverlay} aria-hidden="true">
                 <Loader2 className={styles.spinner} size={20} strokeWidth={2} />

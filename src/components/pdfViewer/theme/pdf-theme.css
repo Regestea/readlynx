@@ -1,0 +1,120 @@
+/* ============================================================
+   PDF reader background theme — presentation only.
+   The PDF binary is never touched; the theme is applied through
+   CSS custom properties on the viewer root (`data-pdf-theme`,
+   set by PdfThemeManager). Changing the background is a pure
+   style swap: pdfjs-dist never re-renders, so it is instant even
+   on multi-hundred-page documents.
+   ============================================================ */
+
+/* pdfjs-dist layer styles (text-layer spans, annotation elements) */
+@import "pdfjs-dist/web/pdf_viewer.css";
+
+/* ---------- Theme variables ---------- */
+:root {
+  --pdf-background-color: #f4ecd8;
+  --pdf-canvas-filter: none;
+}
+
+/* Dark backgrounds: the canvas is inverted so the page stays readable.
+   (Inline variables from applyPdfTheme always win; these are the
+   fallback while the effect has not run yet.) */
+[data-pdf-theme="dark"],
+.pdf-theme-dark,
+.dark {
+  --pdf-background-color: #242424;
+  --pdf-canvas-filter: invert(0.92) hue-rotate(180deg) contrast(0.9);
+}
+
+/* ---------- Toolbar ----------
+   On dark reader backgrounds the PDF toolbar icons (SVG strokes follow
+   `currentColor`) and texts turn white, so the controls stay readable
+   next to the dark page. Only the PDF viewer toolbar is affected.
+
+   The color comes from the `--pdf-toolbar-color` variable that
+   `applyPdfTheme` sets inline on the viewer root (white for dark
+   backgrounds, removed for light ones) — the same mechanism as the
+   background color, so no stylesheet order or specificity of the CSS
+   module rules can win. Popover panels (theme settings, OCR) are marked
+   `.pdf-toolbar-popover` and keep their own colors. */
+.pdf-toolbar {
+  color: var(--pdf-toolbar-color);
+}
+
+.pdf-toolbar > :not(.pdf-toolbar-popover),
+.pdf-toolbar > :not(.pdf-toolbar-popover) > :not(.pdf-toolbar-popover) {
+  color: inherit !important;
+}
+
+/* ---------- Viewer container ----------
+   The whole PDF area follows the theme background. */
+[data-pdf-theme].pdf-theme-root {
+  background: var(--pdf-background-color);
+}
+
+/* ---------- Page shell ----------
+   pdfjs layers size and scale their content with these variables;
+   PdfViewer sets --scale-factor inline from the current zoom. */
+.pdf-page {
+  --user-unit: 1;
+  --total-scale-factor: calc(var(--scale-factor, 1) * var(--user-unit));
+  --scale-round-x: 1px;
+  --scale-round-y: 1px;
+}
+
+/* ---------- Canvas layer ----------
+   Dark pages are simulated with a pure CSS filter — no pixel-by-pixel
+   processing, no pdfjs re-render. Light pages are recolored by the
+   multiply tint overlay below, which maps the page's white onto the
+   chosen background color exactly. */
+[data-pdf-theme] .pdf-canvas {
+  background: var(--pdf-background-color);
+  filter: var(--pdf-canvas-filter);
+}
+
+/* Multiply tint: blends the theme background into the canvas pixels
+   (white × color = color), so any custom background visibly repaints the
+   page. Sits below the text/annotation layers and never intercepts
+   clicks. */
+.pdf-canvas-tint {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  border-radius: 2px;
+  pointer-events: none;
+  mix-blend-mode: multiply;
+  background: var(--pdf-background-color);
+  opacity: var(--pdf-canvas-tint-opacity, 1);
+}
+
+/* ---------- Text layer ---------- */
+.pdf-text-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+}
+
+.pdf-text-layer .textLayer ::selection {
+  background: var(--color-selection, rgba(138, 140, 103, 0.3));
+}
+
+/* ---------- Annotation layer ---------- */
+.pdf-annotation-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 3;
+}
+
+/* Popups blend into the chosen background. */
+.pdf-annotation-layer .annotationLayer .popupAnnotation .popup {
+  background: var(--pdf-background-color);
+}

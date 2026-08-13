@@ -79,7 +79,7 @@ export function OcrPanel({
     : OCR_LANGUAGES;
 
   return (
-    <div className={`${styles.panel} ${className}`} role="dialog" aria-label="OCR text extraction">
+    <div className={`${styles.panel} pdf-toolbar-popover ${className}`} role="dialog" aria-label="OCR text extraction">
       <header className={styles.header}>
         <span className={styles.headerTitle}>
           <ScanText size={15} strokeWidth={1.8} aria-hidden="true" />
