@@ -27,6 +27,8 @@ interface ProgressEntry {
 function toEntry(row: ReadingProgressRow): ProgressEntry | null {
   if (row.totalPages > 0) {
     const read = Math.min(Math.max(0, row.currentPage), row.totalPages);
+    // Finished books (100%) drop out of the list.
+    if (read >= row.totalPages) return null;
     return {
       id: row.bookId,
       title: row.title,
@@ -38,6 +40,7 @@ function toEntry(row: ReadingProgressRow): ProgressEntry | null {
   }
   if (row.totalChapters > 0) {
     const progress = Math.min(1, Math.max(0, row.progressPercent));
+    if (progress >= 1) return null;
     return {
       id: row.bookId,
       title: row.title,
