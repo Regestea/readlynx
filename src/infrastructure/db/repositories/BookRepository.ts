@@ -38,11 +38,21 @@ export class BookRepository {
       | undefined;
   }
 
-  /** All books, most recently updated first (shelf order). */
+  /** All books, most recently active first (shelf order). Reading books have
+   *  no edit flow to bump `updatedAt`, so they sort by their last opened time
+   *  instead (falling back to `updatedAt` if never opened). */
   list(): BookListItem[] {
     return this.db
       .prepare(
-        "SELECT id, title, kind, coverImage, createdAt, updatedAt FROM Books ORDER BY updatedAt DESC, createdAt DESC",
+        `SELECT b.id, b.title, b.kind, b.coverImage, b.createdAt, b.updatedAt
+         FROM Books b
+         LEFT JOIN ReadingState rs ON rs.bookId = b.id
+         ORDER BY
+           CASE WHEN b.kind = 'reading'
+             THEN COALESCE(rs.lastOpenedAt, b.updatedAt)
+             ELSE b.updatedAt
+           END DESC,
+           b.createdAt DESC`,
       )
       .all() as BookListItem[];
   }
