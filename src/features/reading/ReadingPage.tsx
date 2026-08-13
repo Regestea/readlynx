@@ -44,6 +44,15 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
   /** Last position write still in flight, so closing waits for the worker to
    *  finish it before the app quits. */
   const lastPositionWriteRef = useRef<Promise<unknown> | null>(null);
+  /** When the current reading session started; null while no session is
+   *  active. The elapsed time is added to `readingSeconds` on close. */
+  const sessionStartedAtRef = useRef<number | null>(null);
+  /** Guards against double-counting a session (back button + unmount +
+   *  app-quit flush can all fire around the same close). */
+  const timeFlushedRef = useRef(false);
+  /** Latest EPUB position 0..1 reported by the viewer, kept in a ref so
+   *  closes can persist it after the viewer is gone. */
+  const epubProgressRef = useRef(0);
 
   const readyBook = state.status === "ready" ? state.book : null;
   const translation = useTranslation({
@@ -77,6 +86,9 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
       // Records "last read" so the book can be offered as a continue-reading
       // entry, and creates the state row when this is the first open.
       void db.markReadingStateOpened(bookId);
+      // Starts the reading-time session (counted until the book is closed).
+      sessionStartedAtRef.current = Date.now();
+      timeFlushedRef.current = false;
     });
     return () => {
       cancelled = true;
@@ -96,16 +108,66 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
     (chapterKey: string) => {
       setTranslationUnit(epubUnitKey(chapterKey));
       lastPositionWriteRef.current =
-        window.readlynx?.db.updateReadingState(bookId, { currentChapter: chapterKey }) ?? null;
+        window.readlynx?.db.updateReadingState(bookId, {
+          currentChapter: chapterKey,
+          progressPercent: epubProgressRef.current,
+        }) ?? null;
     },
     [bookId, setTranslationUnit],
   );
 
-  /** Closing the app waits for the last position write, the same save the
-   *  back button's page-turn handlers perform. */
+  /** Counts the reading session (open → close) into `readingSeconds`. Returns
+   *  the in-flight write so closing the window can await it; a no-op once the
+   *  session has been counted. */
+  const flushReadingTime = useCallback((): Promise<unknown> | null => {
+    if (timeFlushedRef.current || sessionStartedAtRef.current === null) return null;
+    const seconds = Math.round((Date.now() - sessionStartedAtRef.current) / 1000);
+    timeFlushedRef.current = true;
+    sessionStartedAtRef.current = null;
+    if (seconds <= 0) return null;
+    return window.readlynx?.db.addReadingTime(bookId, seconds) ?? null;
+  }, [bookId]);
+
+  /** Persists the source's totals (`totalPages` for PDF, `totalChapters` for
+   *  EPUB) plus the restored EPUB position once the viewer reports it is
+   *  ready (onReady fires after the saved chapter was jumped to). */
+  const persistTotals = useCallback(() => {
+    const db = window.readlynx?.db;
+    if (!db) return;
+    const pageCount = pdfRef.current?.getPageCount();
+    if (pageCount && pageCount > 0) {
+      void db.updateReadingState(bookId, { totalPages: pageCount });
+    }
+    const chapterCount = epubRef.current?.getChapterCount();
+    if (chapterCount && chapterCount > 0) {
+      void db.updateReadingState(bookId, { totalChapters: chapterCount });
+    }
+    const progress = epubProgressRef.current;
+    if (progress > 0) {
+      void db.updateReadingState(bookId, { progressPercent: Math.min(1, progress) });
+    }
+  }, [bookId]);
+
+  /** Closing the app waits for the last position write and the reading-time
+   *  flush, the same saves the back button's close performs. */
   useCloseFlush(async () => {
     await lastPositionWriteRef.current;
+    await flushReadingTime();
   });
+
+  /** Leaving the page (sidebar navigation, back) without going through the
+   *  back button still counts the session and saves the last EPUB position. */
+  useEffect(() => {
+    return () => {
+      void flushReadingTime();
+      const progress = epubProgressRef.current;
+      if (progress > 0) {
+        void window.readlynx?.db.updateReadingState(bookId, {
+          progressPercent: Math.min(1, progress),
+        });
+      }
+    };
+  }, [flushReadingTime, bookId]);
 
   /** PDF click-to-ask: follows the translate panel's top setting — OCR the
    *  whole current page locally and seed the chat with the recognized text
@@ -151,7 +213,15 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
   return (
     <main className={styles.page} aria-label="Reading book">
       <header className={`${styles.topBar} animate-fade-up`}>
-        <Button variant="icon" className={styles.backButton} aria-label="Back to home" onClick={onBack}>
+        <Button
+          variant="icon"
+          className={styles.backButton}
+          aria-label="Back to home"
+          onClick={() => {
+            void flushReadingTime();
+            onBack?.();
+          }}
+        >
           <ArrowLeft size={18} strokeWidth={1.8} aria-hidden="true" />
         </Button>
 
@@ -228,6 +298,7 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
                   className={styles.viewer}
                   themeBookId={bookId}
                   initialPage={savedPage}
+                  onReady={persistTotals}
                   onPageChange={handlePageChange}
                   onAskAi={handleAskPdfRegion}
                 />
@@ -241,7 +312,11 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
                   settingsBookId={bookId}
                   initialChapter={savedChapter}
                   className={styles.viewer}
+                  onReady={persistTotals}
                   onChapterChange={handleChapterChange}
+                  onProgressChange={(progress) => {
+                    epubProgressRef.current = progress;
+                  }}
                   onAskAi={setAiContext}
                 />
               )}

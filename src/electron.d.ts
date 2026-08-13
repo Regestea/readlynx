@@ -5,6 +5,8 @@ import type {
   CreateReadingBookResult,
   CreateTranslatedBookPayload,
   GetBookResult,
+  ReadingProgressRow,
+  ReadingWeekSummary,
   SaveDocumentPayload,
   UpdateBookPayload,
 } from "./infrastructure/db/entities/types.ts";
@@ -82,6 +84,11 @@ declare global {
           state: ReadingStateInput,
         ): Promise<ReadingStateEntity | null>;
         markReadingStateOpened(bookId: string): Promise<boolean>;
+        addReadingTime(bookId: string, seconds: number): Promise<boolean>;
+        listReadingProgress(): Promise<ReadingProgressRow[]>;
+        getWeekReadingSessions(): Promise<ReadingWeekSummary>;
+        getDailyGoal(): Promise<{ goalMinutes: number }>;
+        setDailyGoal(minutes: number): Promise<{ goalMinutes: number }>;
         getReaderSettings(
           bookId: string,
           viewer: ReaderViewer,

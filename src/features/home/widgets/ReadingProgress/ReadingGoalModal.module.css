@@ -1,0 +1,122 @@
+.body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-6);
+  padding: var(--space-2) 0 var(--space-3);
+}
+
+/* ---------- Watch ---------- */
+
+.watch {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.watchSvg {
+  width: 210px;
+  height: 210px;
+}
+
+.bezel {
+  fill: var(--color-card);
+  stroke: var(--color-progress);
+  stroke-width: 4;
+  opacity: 0.35;
+}
+
+.face {
+  fill: var(--color-card);
+  stroke: var(--color-border);
+  stroke-width: 1;
+}
+
+.tickMajor {
+  stroke: var(--color-text-secondary);
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.tickMinor {
+  stroke: var(--color-text-muted);
+  stroke-width: 1;
+  stroke-linecap: round;
+  opacity: 0.55;
+}
+
+.cap {
+  fill: var(--color-primary);
+}
+
+.readout {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  pointer-events: none;
+}
+
+.readoutTime {
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: -0.02em;
+  color: var(--color-text);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.readoutCaption {
+  font-size: 10px;
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+/* ---------- Controls ---------- */
+
+.controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.stepBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: var(--color-hover);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition:
+    background var(--transition-base) ease,
+    color var(--transition-base) ease,
+    border-color var(--transition-base) ease;
+}
+
+.stepBtn:hover {
+  background: var(--color-active);
+  color: var(--color-text);
+  border-color: var(--color-progress);
+}
+
+.hint {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
+.hint strong {
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+}

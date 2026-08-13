@@ -33,6 +33,30 @@
   color: var(--color-icon);
 }
 
+.headActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.headIconButton {
+  width: 38px;
+  height: 38px;
+  border-radius: var(--radius-small);
+  background: var(--color-active);
+  color: var(--color-icon);
+  transition:
+    background var(--transition-base) ease,
+    color var(--transition-base) ease,
+    transform var(--transition-base) ease;
+}
+
+.headIconButton:hover {
+  background: var(--color-progress);
+  color: var(--color-on-primary);
+  transform: translateY(-1px);
+}
+
 /* ---------- Ring ---------- */
 
 .ring {
@@ -40,7 +64,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: var(--space-2) 0;
+  padding: var(--space-2) 0 0;
 }
 
 .ringLabel {
@@ -66,7 +90,29 @@
   color: var(--color-text-muted);
 }
 
+.badge {
+  align-self: center;
+  margin-top: calc(-1 * var(--space-1));
+  padding: 5px 12px;
+  border-radius: var(--radius-pill);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0.02em;
+  color: var(--color-text-secondary);
+  background: var(--color-active);
+}
+
+.badgeDone {
+  color: var(--color-success);
+  background: var(--color-success-soft);
+}
+
 /* ---------- List ---------- */
+
+.empty {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
 
 .list {
   display: flex;

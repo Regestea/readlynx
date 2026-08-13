@@ -1,4 +1,4 @@
-import { TrendingUp } from "lucide-react";
+import { Clock } from "lucide-react";
 import type { WeekStat } from "../../../../shared/types";
 import { formatMinutes } from "../../../../shared/utils";
 import styles from "./StatisticsCard.module.css";
@@ -10,6 +10,7 @@ interface StatisticsCardProps {
 export function StatisticsCard({ stats }: StatisticsCardProps) {
   const maxMinutes = Math.max(...stats.map((day) => day.minutes), 1);
   const totalMinutes = stats.reduce((sum, day) => sum + day.minutes, 0);
+  const today = stats.find((day) => day.isToday);
 
   return (
     <div className={styles.stats}>
@@ -38,8 +39,8 @@ export function StatisticsCard({ stats }: StatisticsCardProps) {
           <strong>{formatMinutes(totalMinutes)}</strong> this week
         </p>
         <span className={styles.delta}>
-          <TrendingUp size={13} strokeWidth={2} aria-hidden="true" />
-          12% more
+          <Clock size={13} strokeWidth={2} aria-hidden="true" />
+          Today {formatMinutes(today?.minutes ?? 0)}
         </span>
       </div>
     </div>

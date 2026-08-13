@@ -247,6 +247,9 @@ interface EpubViewerProps {
   /** Called whenever the current chapter changes. The key is the EPUB spine
    *  index of the section being read (stable for the lifetime of the book). */
   onChapterChange?: (chapterKey: string) => void;
+  /** Called with the real book position 0..1 (epubjs location percentage,
+   *  proportional to content) whenever the rendered position changes. */
+  onProgressChange?: (progress: number) => void;
   /** Called with the currently rendered section converted to Markdown (headings,
    *  lists, quotes, emphasis, … preserved) when "Extract" is pressed. */
   onExtractPage?: (markdown: string) => void;
@@ -274,6 +277,8 @@ export interface EpubViewerHandle {
    *  `[IMG-n]` tokens so the AI never receives them, and are re-inserted into
    *  the translated Markdown afterwards. */
   getCurrentChapterExtraction(): EpubExtraction | null;
+  /** Total spine chapters of the loaded book (0 before it loads). */
+  getChapterCount(): number;
 }
 
 export function EpubViewer({
@@ -292,6 +297,7 @@ export function EpubViewer({
   onReady,
   onPageCountChange,
   onChapterChange,
+  onProgressChange,
   onExtractPage,
   onAskAi,
   ref,
@@ -327,6 +333,7 @@ export function EpubViewer({
   const onPageCountChangeRef = useRef(onPageCountChange);
   const onExtractPageRef = useRef(onExtractPage);
   const onChapterChangeRef = useRef(onChapterChange);
+  const onProgressChangeRef = useRef(onProgressChange);
   const lastChapterKeyRef = useRef<string | null>(null);
   const selectionGuardRef = useRef<(() => void) | null>(null);
 
@@ -345,6 +352,10 @@ export function EpubViewer({
   useEffect(() => {
     onChapterChangeRef.current = onChapterChange;
   }, [onChapterChange]);
+
+  useEffect(() => {
+    onProgressChangeRef.current = onProgressChange;
+  }, [onProgressChange]);
 
   /** Markdown of the currently rendered section (the chapter being read),
    *  extracted the same way as the toolbar's "Extract" action. */
@@ -386,6 +397,9 @@ export function EpubViewer({
     getCurrentChapterMarkdown: currentChapterMarkdown,
     getCurrentChapterText: currentChapterText,
     getCurrentChapterExtraction: currentChapterExtraction,
+    // `spineItems` exists at runtime but is missing from epubjs's typings.
+    getChapterCount: () =>
+      (bookRef.current?.spine as { spineItems?: unknown[] } | undefined)?.spineItems?.length ?? 0,
   }));
 
   /** Exits the in-page fullscreen overlay with Escape. */
@@ -548,6 +562,10 @@ export function EpubViewer({
       if (chapterKey !== lastChapterKeyRef.current) {
         lastChapterKeyRef.current = chapterKey;
         onChapterChangeRef.current?.(chapterKey);
+      }
+      const pct = bookRef.current.locations.percentageFromCfi(location.start.cfi);
+      if (typeof pct === "number") {
+        onProgressChangeRef.current?.(Math.min(1, Math.max(0, pct)));
       }
       setAiSelection(null);
     };

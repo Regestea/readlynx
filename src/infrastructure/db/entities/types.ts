@@ -75,3 +75,37 @@ export interface BookListItem {
   createdAt: string;
   updatedAt: string;
 }
+
+/** One day of reading time in the `ReadingSessions` buckets. `day` is the
+ *  local calendar date "YYYY-MM-DD". */
+export interface ReadingDayBucket {
+  day: string;
+  /** Reading seconds accumulated that day (across all books). */
+  seconds: number;
+}
+
+/** Result of `db:reading-sessions-week`: the last 7 local days (oldest
+ *  first, zero-filled) plus today's and the week's totals. */
+export interface ReadingWeekSummary {
+  days: ReadingDayBucket[];
+  todaySeconds: number;
+  weekSeconds: number;
+}
+
+/** Row of `db:list-reading-progress`: one per reading-kind book that has
+ *  position data (PDF books carry `totalPages`, EPUB books
+ *  `totalChapters`). `currentChapter` is the spine index (string) or "".
+ *  `progressPercent` is the real 0..1 position for EPUB books (epubjs
+ *  location percentage); PDF progress derives from `currentPage`. */
+export interface ReadingProgressRow {
+  bookId: string;
+  title: string;
+  currentPage: number;
+  totalPages: number;
+  currentChapter: string;
+  totalChapters: number;
+  progressPercent: number;
+  /** Cumulative reading time in seconds. */
+  readingSeconds: number;
+  lastOpenedAt: string;
+}

@@ -18,6 +18,16 @@ export interface ReadingStateEntity {
   modelId: string;
   /** Chosen saved instruction id ("" = no instruction). */
   customPromptId: string;
+  /** Total pages of the source PDF (0 until the document is opened). */
+  totalPages: number;
+  /** Total chapters of the source EPUB (0 until the book is opened). */
+  totalChapters: number;
+  /** Real reading progress 0..1 for EPUB books (epubjs location percentage,
+   *  proportional to content). PDF books leave this at 0 — they progress by
+   *  `currentPage / totalPages` instead. */
+  progressPercent: number;
+  /** Cumulative reading time in seconds, counted from open to close. */
+  readingSeconds: number;
   /** When the book was last opened (drives "continue reading" ordering). */
   lastOpenedAt: string;
   updatedAt: string;

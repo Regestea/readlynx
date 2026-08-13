@@ -47,6 +47,10 @@ CREATE TABLE IF NOT EXISTS ReadingState (
   targetLang     TEXT NOT NULL DEFAULT 'English',
   modelId        TEXT NOT NULL DEFAULT '',
   customPromptId TEXT NOT NULL DEFAULT '',
+  totalPages     INTEGER NOT NULL DEFAULT 0,
+  totalChapters  INTEGER NOT NULL DEFAULT 0,
+  progressPercent REAL NOT NULL DEFAULT 0,
+  readingSeconds INTEGER NOT NULL DEFAULT 0,
   lastOpenedAt   TEXT NOT NULL DEFAULT (datetime('now')),
   updatedAt      TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -109,6 +113,22 @@ CREATE TABLE IF NOT EXISTS AiModels (
   Provider    TEXT NOT NULL,
   IsDefault   INTEGER NOT NULL DEFAULT 0
 );
+
+-- Per-book daily reading buckets (one row per book per local day, day is
+-- "YYYY-MM-DD" computed in the worker). The source for the home daily-goal
+-- ring and the weekly hours stats.
+CREATE TABLE IF NOT EXISTS ReadingSessions (
+  bookId  TEXT NOT NULL REFERENCES Books(id) ON DELETE CASCADE,
+  day     TEXT NOT NULL,
+  seconds INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (bookId, day)
+);
+
+-- The user's daily reading goal in minutes (single row).
+CREATE TABLE IF NOT EXISTS ReadingGoals (
+  id          INTEGER PRIMARY KEY CHECK (id = 1),
+  goalMinutes INTEGER NOT NULL DEFAULT 30
+);
 `;
 
 /** Runs `fn` with SQLite's foreign-key enforcement switched off, restoring it
@@ -136,6 +156,7 @@ export function applySchema(db: Database.Database): void {
     ensureReadingStateSettingsColumns(db);
     ensureCascadeForeignKeys(db);
     ensureReadingStateV2(db);
+    ensureReadingStateStatsColumns(db);
     ensureAiModelDefaultColumn(db);
     ensureTranslationLookupIndex(db);
   });
@@ -197,6 +218,10 @@ function ensureCascadeForeignKeys(db: Database.Database): void {
         targetLang     TEXT NOT NULL DEFAULT 'English',
         modelId        TEXT NOT NULL DEFAULT '',
         customPromptId TEXT NOT NULL DEFAULT '',
+        totalPages     INTEGER NOT NULL DEFAULT 0,
+        totalChapters  INTEGER NOT NULL DEFAULT 0,
+        progressPercent REAL NOT NULL DEFAULT 0,
+        readingSeconds INTEGER NOT NULL DEFAULT 0,
         lastOpenedAt   TEXT NOT NULL DEFAULT (datetime('now')),
         updatedAt      TEXT NOT NULL DEFAULT (datetime('now'))
       );
@@ -299,6 +324,10 @@ function ensureReadingStateV2(db: Database.Database): void {
         targetLang     TEXT NOT NULL DEFAULT 'English',
         modelId        TEXT NOT NULL DEFAULT '',
         customPromptId TEXT NOT NULL DEFAULT '',
+        totalPages     INTEGER NOT NULL DEFAULT 0,
+        totalChapters  INTEGER NOT NULL DEFAULT 0,
+        progressPercent REAL NOT NULL DEFAULT 0,
+        readingSeconds INTEGER NOT NULL DEFAULT 0,
         lastOpenedAt   TEXT NOT NULL DEFAULT (datetime('now')),
         updatedAt      TEXT NOT NULL DEFAULT (datetime('now'))
       );
@@ -312,6 +341,21 @@ function ensureReadingStateV2(db: Database.Database): void {
       DROP TABLE ReadingState;
       ALTER TABLE ReadingState_new RENAME TO ReadingState;
     `);
+  })();
+}
+
+/** Databases created before the reading-stats columns existed (`totalPages`,
+ *  `totalChapters`, `readingSeconds`, `progressPercent`) lack them. Adds the
+ *  columns with defaults; existing rows start at zero. */
+function ensureReadingStateStatsColumns(db: Database.Database): void {
+  const columns = db.pragma("table_info(ReadingState)") as Array<{ name: string }>;
+  const has = (name: string) => columns.some((entry) => entry.name === name);
+  if (has("totalPages") && has("totalChapters") && has("readingSeconds") && has("progressPercent")) return;
+  db.transaction(() => {
+    if (!has("totalPages")) db.exec("ALTER TABLE ReadingState ADD COLUMN totalPages INTEGER NOT NULL DEFAULT 0");
+    if (!has("totalChapters")) db.exec("ALTER TABLE ReadingState ADD COLUMN totalChapters INTEGER NOT NULL DEFAULT 0");
+    if (!has("progressPercent")) db.exec("ALTER TABLE ReadingState ADD COLUMN progressPercent REAL NOT NULL DEFAULT 0");
+    if (!has("readingSeconds")) db.exec("ALTER TABLE ReadingState ADD COLUMN readingSeconds INTEGER NOT NULL DEFAULT 0");
   })();
 }
 

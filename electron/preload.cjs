@@ -49,6 +49,12 @@ contextBridge.exposeInMainWorld("readlynx", {
     updateReadingState: (bookId, state) =>
       ipcRenderer.invoke("db:reading-state-update", { bookId, ...state }),
     markReadingStateOpened: (bookId) => ipcRenderer.invoke("db:reading-state-mark-opened", bookId),
+    addReadingTime: (bookId, seconds) =>
+      ipcRenderer.invoke("db:reading-state-add-time", { bookId, seconds }),
+    listReadingProgress: () => ipcRenderer.invoke("db:reading-progress-list"),
+    getWeekReadingSessions: () => ipcRenderer.invoke("db:reading-sessions-week"),
+    getDailyGoal: () => ipcRenderer.invoke("db:reading-goal-get"),
+    setDailyGoal: (minutes) => ipcRenderer.invoke("db:reading-goal-set", { minutes }),
     getReaderSettings: (bookId, viewer) =>
       ipcRenderer.invoke("db:reader-settings-get", { bookId, viewer }),
     updateReaderSettings: (bookId, viewer, settings) =>

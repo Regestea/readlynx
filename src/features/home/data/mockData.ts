@@ -56,15 +56,6 @@ export const recommendedBooks: Book[] = [
   { id: "r6", title: "Dune", author: "Frank Herbert", cover: "navy", category: "Sci-Fi" },
 ];
 
-export const weeklyProgressBooks: Book[] = [
-  { id: "p1", title: "The Hidden Life of Trees", author: "Peter Wohlleben", cover: "forest", progress: 0.68 },
-  { id: "p2", title: "Braiding Sweetgrass", author: "Robin Wall Kimmerer", cover: "moon", progress: 0.53 },
-  { id: "p3", title: "Where the Crawdads Sing", author: "Delia Owens", cover: "moss", progress: 0.24 },
-];
-
-export const overallProgress = 0.64;
-export const overallPages = 320;
-
 export const dailyQuote: Quote = {
   id: "q1",
   text: "We read to know we are not alone.",

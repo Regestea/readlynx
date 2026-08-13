@@ -217,6 +217,19 @@ const handlers: Record<string, (payload: unknown) => unknown> = {
     readingState.markOpened(payload as string);
     return true;
   },
+  "reading-state-add-time": (payload) => {
+    const { bookId, seconds } = payload as { bookId: string; seconds: number };
+    readingState.addReadingTime(bookId, seconds);
+    return true;
+  },
+  "reading-sessions-week": () => readingState.sessionsWeek(),
+  "reading-goal-get": () => ({ goalMinutes: readingState.getDailyGoal() }),
+  "reading-goal-set": (payload) => {
+    const { minutes } = payload as { minutes: number };
+    readingState.setDailyGoal(minutes);
+    return { goalMinutes: minutes };
+  },
+  "reading-progress-list": () => readingState.listReadingProgress(),
   "reader-settings-get": (payload) => {
     const { bookId, viewer } = payload as { bookId: string; viewer: ReaderViewer };
     return readerSettings.findByKey(bookId, viewer) ?? null;

@@ -59,6 +59,20 @@ export function registerDbIpc(db: DbWorkerClient) {
     db.markReadingStateOpened(bookId),
   );
 
+  ipcMain.handle("db:reading-state-add-time", (_event, payload: { bookId: string; seconds: number }) =>
+    db.addReadingTime(payload.bookId, payload.seconds),
+  );
+
+  ipcMain.handle("db:reading-progress-list", () => db.listReadingProgress());
+
+  ipcMain.handle("db:reading-sessions-week", () => db.getWeekReadingSessions());
+
+  ipcMain.handle("db:reading-goal-get", () => db.getDailyGoal());
+
+  ipcMain.handle("db:reading-goal-set", (_event, payload: { minutes: number }) =>
+    db.setDailyGoal(payload.minutes),
+  );
+
   ipcMain.handle("db:reader-settings-get", (_event, payload) =>
     db.getReaderSettings(payload.bookId, payload.viewer),
   );

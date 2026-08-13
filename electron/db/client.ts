@@ -6,6 +6,7 @@ import type {
   TranslationMethod,
 } from "../../src/infrastructure/db/entities/index.ts";
 import type { ReadingStateEntity } from "../../src/infrastructure/db/entities/ReadingState.ts";
+import type { ReadingProgressRow, ReadingWeekSummary } from "../../src/infrastructure/db/entities/types.ts";
 import type { ReaderSettingsEntity, ReaderViewer } from "../../src/infrastructure/db/entities/ReaderSettings.ts";
 import type { ReadingStateInput, ReaderSettingsInput } from "../../src/infrastructure/db/repositories/index.ts";
 import type {
@@ -137,6 +138,26 @@ export class DbWorkerClient {
 
   markReadingStateOpened(bookId: string): Promise<boolean> {
     return this.exec("reading-state-mark-opened", bookId);
+  }
+
+  addReadingTime(bookId: string, seconds: number): Promise<boolean> {
+    return this.exec("reading-state-add-time", { bookId, seconds });
+  }
+
+  listReadingProgress(): Promise<ReadingProgressRow[]> {
+    return this.exec("reading-progress-list");
+  }
+
+  getWeekReadingSessions(): Promise<ReadingWeekSummary> {
+    return this.exec("reading-sessions-week");
+  }
+
+  getDailyGoal(): Promise<{ goalMinutes: number }> {
+    return this.exec("reading-goal-get");
+  }
+
+  setDailyGoal(minutes: number): Promise<{ goalMinutes: number }> {
+    return this.exec("reading-goal-set", { minutes });
   }
 
   getReaderSettings(bookId: string, viewer: ReaderViewer): Promise<ReaderSettingsEntity | null> {

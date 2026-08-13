@@ -28,6 +28,8 @@ const ZOOM_MAX = 3;
 export interface PdfViewerHandle {
   /** PNG data URL of the currently rendered page, or null while unavailable. */
   getCurrentPageImage(): string | null;
+  /** Total page count of the loaded document (0 before it loads). */
+  getPageCount(): number;
 }
 
 interface PdfViewerProps {
@@ -155,6 +157,7 @@ function PdfViewerInner({
 
   useImperativeHandle(ref, () => ({
     getCurrentPageImage: () => canvasRef.current?.toDataURL("image/png") ?? null,
+    getPageCount: () => numPages,
   }));
 
   const refreshModels = useCallback(async () => {
