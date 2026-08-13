@@ -32,6 +32,7 @@ const SYSTEM_PROMPT = [
   "The user may ask about text they selected in a book, or about any topic.",
   "Always reply in Markdown.",
   "Be helpful, accurate and concise.",
+  "Mermaid diagrams are supported: render them in a fenced code block with the mermaid language (```mermaid ... ```). Pie charts are fully supported; quadrant charts are also supported if a chart fits the answer.",
 ].join("\n");
 
 /** Full AI chat panel (modal): chat history lives for as long as the modal is

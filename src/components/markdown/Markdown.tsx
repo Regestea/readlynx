@@ -16,6 +16,7 @@ import { FontFamilySelect } from "../FontFamilySelect/FontFamilySelect";
 import { ColorSelect } from "../ui/ColorSelect/ColorSelect";
 import { AiSelectionBubble } from "../AiSelectionBubble/AiSelectionBubble";
 import { useReaderSettings } from "../../hooks/useReaderSettings.ts";
+import { MermaidDiagram } from "./MermaidDiagram";
 import styles from "./Markdown.module.css";
 
 const ZOOM_STEP = 10;
@@ -375,6 +376,10 @@ const components: Components = {
   code: ({ className, children }) => {
     const match = /language-(\w+)/.exec(className ?? "");
     if (match) {
+      const language = match[1].toLowerCase();
+      if (language === "mermaid") {
+        return <MermaidDiagram chart={textContent(children).trim()} />;
+      }
       return <Code code={textContent(children)} language={match[1]} />;
     }
     return <code className={styles.inlineCode}>{children}</code>;

@@ -30,6 +30,7 @@ export function buildTranslationSystemPrompt(context: TranslationPromptContext):
     "- Return Markdown only. Do not wrap the whole response in code fences and do not add any explanation outside the Markdown.",
     "- Preserve useful structure whenever the source has it: headings, paragraphs, lists, tables, code blocks and block quotes.",
     "- Translate code as code: put any code in a fenced code block annotated with its language (```language ... ```). Never write code as plain text, and use inline backticks (`code`) only for short identifiers inside a sentence.",
+    "- Mermaid diagrams are supported: render them in a fenced code block with the mermaid language (```mermaid ... ```). Pie charts are fully supported; quadrant charts are also supported when a chart fits the content.",
     "- Do not summarize, shorten or omit content unless the user's instruction asks you to.",
     "- The user instruction below is an extra layer that overrides the default \"translate normally\" behaviour when it conflicts.",
   ];
