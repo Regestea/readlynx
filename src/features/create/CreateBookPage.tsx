@@ -11,6 +11,7 @@ import { DEFAULT_FONT_SIZE_VALUE, ZOOM_OPTIONS } from "./documentEditor/constant
 import { PAGE_MARGIN_MM, PAGE_FORMATS, uniformMargins } from "../../shared/document/pageGeometry";
 import type { PageFormat, PageMargins } from "../../shared/document/pageGeometry";
 import type { BookSourceType, SaveDocumentPayload } from "../../infrastructure/db/entities/types";
+import { useCloseFlush } from "../../shared/closeFlush";
 import styles from "./CreateBookPage.module.css";
 
 interface CreateBookPageProps {
@@ -215,6 +216,11 @@ export function CreateBookPage({
       onBack?.();
     }
   };
+
+  /** The app closing flushes the same pending save the back button would. */
+  useCloseFlush(async () => {
+    await saveNow();
+  });
 
   /** Appends OCR-recognized text (from the source PDF) to the document. */
   const handleOcrText = useCallback(

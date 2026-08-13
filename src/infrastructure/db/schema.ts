@@ -41,14 +41,30 @@ CREATE TABLE IF NOT EXISTS BookSources (
 CREATE TABLE IF NOT EXISTS ReadingState (
   bookId         TEXT PRIMARY KEY REFERENCES Books(id) ON DELETE CASCADE,
   currentPage    INTEGER NOT NULL DEFAULT 1,
-  scrollPosition REAL NOT NULL DEFAULT 0,
+  currentChapter TEXT NOT NULL DEFAULT '',
   ocrLangs       TEXT NOT NULL DEFAULT '["eng"]',
   sourceLang     TEXT NOT NULL DEFAULT '',
   targetLang     TEXT NOT NULL DEFAULT 'English',
-  customPrompt   TEXT NOT NULL DEFAULT '',
   modelId        TEXT NOT NULL DEFAULT '',
   customPromptId TEXT NOT NULL DEFAULT '',
+  lastOpenedAt   TEXT NOT NULL DEFAULT (datetime('now')),
   updatedAt      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Per-book, per-viewer reader settings (zoom, font, colors) that used to
+-- live in localStorage. One row per (book, viewer) pair; the same table
+-- serves the EPUB viewer ('epub'), the translation Markdown view ('markdown')
+-- and the PDF viewer's reading theme ('pdf').
+CREATE TABLE IF NOT EXISTS ReaderSettings (
+  bookId        TEXT NOT NULL REFERENCES Books(id) ON DELETE CASCADE,
+  viewer        TEXT NOT NULL,
+  zoomPct       REAL NOT NULL DEFAULT 100,
+  fontFamily    TEXT NOT NULL DEFAULT '',
+  customBg      TEXT,
+  customText    TEXT,
+  pdfBackground TEXT,
+  updatedAt     TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (bookId, viewer)
 );
 
 CREATE TABLE IF NOT EXISTS Translations (
@@ -115,8 +131,11 @@ export function applySchema(db: Database.Database): void {
   withoutForeignKeys(db, () => {
     ensureCoverImageTextColumn(db);
     ensureKindColumn(db);
-    ensureCascadeForeignKeys(db);
+    // The settings columns must exist before `ensureCascadeForeignKeys`
+    // rebuilds `ReadingState` (its data copy selects them).
     ensureReadingStateSettingsColumns(db);
+    ensureCascadeForeignKeys(db);
+    ensureReadingStateV2(db);
     ensureAiModelDefaultColumn(db);
     ensureTranslationLookupIndex(db);
   });
@@ -172,21 +191,21 @@ function ensureCascadeForeignKeys(db: Database.Database): void {
       CREATE TABLE ReadingState_new (
         bookId         TEXT PRIMARY KEY REFERENCES Books(id) ON DELETE CASCADE,
         currentPage    INTEGER NOT NULL DEFAULT 1,
-        scrollPosition REAL NOT NULL DEFAULT 0,
+        currentChapter TEXT NOT NULL DEFAULT '',
         ocrLangs       TEXT NOT NULL DEFAULT '["eng"]',
         sourceLang     TEXT NOT NULL DEFAULT '',
         targetLang     TEXT NOT NULL DEFAULT 'English',
-        customPrompt   TEXT NOT NULL DEFAULT '',
         modelId        TEXT NOT NULL DEFAULT '',
         customPromptId TEXT NOT NULL DEFAULT '',
+        lastOpenedAt   TEXT NOT NULL DEFAULT (datetime('now')),
         updatedAt      TEXT NOT NULL DEFAULT (datetime('now'))
       );
       INSERT INTO ReadingState_new (
-        bookId, currentPage, scrollPosition, ocrLangs, sourceLang, targetLang,
-        customPrompt, modelId, customPromptId, updatedAt
+        bookId, currentPage, ocrLangs, sourceLang, targetLang,
+        modelId, customPromptId, updatedAt
       )
-        SELECT bookId, currentPage, scrollPosition, ocrLangs, sourceLang, targetLang,
-               customPrompt, modelId, customPromptId, updatedAt
+        SELECT bookId, currentPage, ocrLangs, sourceLang, targetLang,
+               modelId, customPromptId, updatedAt
         FROM ReadingState;
       DROP TABLE ReadingState;
       ALTER TABLE ReadingState_new RENAME TO ReadingState;
@@ -241,7 +260,9 @@ function ensureCascadeForeignKeys(db: Database.Database): void {
 
 /** Databases created before reading settings existed lack the translation
  *  columns on `ReadingState`. Adds them with defaults; existing rows keep
- *  their saved page/scroll state. */
+ *  their saved page/scroll state. `ensureReadingStateV2` later rebuilds the
+ *  table when the v2 schema (chapter position, no scroll/customPrompt) is
+ *  required. */
 function ensureReadingStateSettingsColumns(db: Database.Database): void {
   const columns = db.pragma("table_info(ReadingState)") as Array<{ name: string }>;
   const has = (name: string) => columns.some((entry) => entry.name === name);
@@ -253,9 +274,45 @@ function ensureReadingStateSettingsColumns(db: Database.Database): void {
   addColumn("ocrLangs", "TEXT NOT NULL DEFAULT '[\"eng\"]'");
   addColumn("sourceLang", "TEXT NOT NULL DEFAULT ''");
   addColumn("targetLang", "TEXT NOT NULL DEFAULT 'English'");
-  addColumn("customPrompt", "TEXT NOT NULL DEFAULT ''");
   addColumn("modelId", "TEXT NOT NULL DEFAULT ''");
   addColumn("customPromptId", "TEXT NOT NULL DEFAULT ''");
+}
+
+/** Databases created before the v2 `ReadingState` schema carry the removed
+ *  `scrollPosition` / `customPrompt` columns and lack `currentChapter` /
+ *  `lastOpenedAt`. Rebuilds the table to the final shape; the position and
+ *  translation settings survive, the dropped columns do not. */
+function ensureReadingStateV2(db: Database.Database): void {
+  const columns = db.pragma("table_info(ReadingState)") as Array<{ name: string }>;
+  const names = new Set(columns.map((entry) => entry.name));
+  const hasOldColumns = names.has("scrollPosition") || names.has("customPrompt");
+  const missesNewColumns = !names.has("currentChapter") || !names.has("lastOpenedAt");
+  if (!hasOldColumns && !missesNewColumns) return;
+  db.transaction(() => {
+    db.exec(`
+      CREATE TABLE ReadingState_new (
+        bookId         TEXT PRIMARY KEY REFERENCES Books(id) ON DELETE CASCADE,
+        currentPage    INTEGER NOT NULL DEFAULT 1,
+        currentChapter TEXT NOT NULL DEFAULT '',
+        ocrLangs       TEXT NOT NULL DEFAULT '["eng"]',
+        sourceLang     TEXT NOT NULL DEFAULT '',
+        targetLang     TEXT NOT NULL DEFAULT 'English',
+        modelId        TEXT NOT NULL DEFAULT '',
+        customPromptId TEXT NOT NULL DEFAULT '',
+        lastOpenedAt   TEXT NOT NULL DEFAULT (datetime('now')),
+        updatedAt      TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      INSERT INTO ReadingState_new (
+        bookId, currentPage, ocrLangs, sourceLang, targetLang,
+        modelId, customPromptId, updatedAt
+      )
+        SELECT bookId, currentPage, ocrLangs, sourceLang, targetLang,
+               modelId, customPromptId, updatedAt
+        FROM ReadingState;
+      DROP TABLE ReadingState;
+      ALTER TABLE ReadingState_new RENAME TO ReadingState;
+    `);
+  })();
 }
 
 /** Translations used to be indexed on `(bookId, method, pageNumber,

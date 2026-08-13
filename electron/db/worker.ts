@@ -5,7 +5,8 @@ import { applySchema } from "../../src/infrastructure/db/schema.ts";
 import { seedDatabase } from "../../src/infrastructure/db/seed/seedDatabase.ts";
 import type { CreateReadingBookPayload, CreateTranslatedBookPayload, SaveDocumentPayload, UpdateBookPayload } from "../../src/infrastructure/db/entities/types.ts";
 import type { AiModel, CustomInstructionEntity, TranslationEntity, TranslationMethod } from "../../src/infrastructure/db/entities/index.ts";
-import type { ReadingStateInput } from "../../src/infrastructure/db/repositories/index.ts";
+import type { ReaderViewer } from "../../src/infrastructure/db/entities/index.ts";
+import type { ReadingStateInput, ReaderSettingsInput } from "../../src/infrastructure/db/repositories/index.ts";
 import type { BookListItem } from "../../src/infrastructure/db/entities/types.ts";
 import {
   AiModelRepository,
@@ -16,6 +17,7 @@ import {
   DocumentRepository,
   DocumentSettingsRepository,
   ReadingStateRepository,
+  ReaderSettingsRepository,
   TranslationRepository,
 } from "../../src/infrastructure/db/repositories/index.ts";
 import { EMPTY_DOCUMENT_STATE } from "../../src/infrastructure/db/repositories/DocumentRepository.ts";
@@ -55,6 +57,7 @@ const bookSources = new BookSourceRepository(db);
 const appSettings = new AppSettingsRepository(db);
 const aiModels = new AiModelRepository(db);
 const readingState = new ReadingStateRepository(db);
+const readerSettings = new ReaderSettingsRepository(db);
 const translations = new TranslationRepository(db);
 const customInstructions = new CustomInstructionRepository(db);
 
@@ -209,6 +212,22 @@ const handlers: Record<string, (payload: unknown) => unknown> = {
     const { bookId, ...state } = payload as { bookId: string } & ReadingStateInput;
     readingState.upsert(bookId, state);
     return readingState.findByBookId(bookId) ?? null;
+  },
+  "reading-state-mark-opened": (payload) => {
+    readingState.markOpened(payload as string);
+    return true;
+  },
+  "reader-settings-get": (payload) => {
+    const { bookId, viewer } = payload as { bookId: string; viewer: ReaderViewer };
+    return readerSettings.findByKey(bookId, viewer) ?? null;
+  },
+  "reader-settings-update": (payload) => {
+    const { bookId, viewer, ...settings } = payload as {
+      bookId: string;
+      viewer: ReaderViewer;
+    } & ReaderSettingsInput;
+    readerSettings.upsert(bookId, viewer, settings);
+    return true;
   },
   "translation-get": (payload) => {
     const { bookId, method, pageNumber, chunkKeyPrefix } = payload as {

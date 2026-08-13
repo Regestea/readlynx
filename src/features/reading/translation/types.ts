@@ -17,18 +17,17 @@ export interface TranslationSettings {
   ocrLangs: string[];
   /** Target language code (shared by OCR and AI vision pipelines). */
   targetLang: string;
-  /** Effective custom instruction text sent to the model ("" = none). */
-  customPrompt: string;
   /** Id of the chosen AI model ("" = the app default model). */
   modelId: string;
-  /** Id of the chosen saved instruction ("" = no instruction). */
+  /** Id of the chosen saved instruction ("" = no instruction). The prompt
+   *  text itself lives in the `CustomInstructions` table and is resolved by
+   *  id when a translation runs. */
   customPromptId: string;
 }
 
 export const DEFAULT_TRANSLATION_SETTINGS: TranslationSettings = {
   ocrLangs: ["eng"],
   targetLang: "en",
-  customPrompt: "",
   modelId: "",
   customPromptId: "",
 };

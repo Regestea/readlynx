@@ -6,4 +6,5 @@ export * from "./CustomInstructionRepository.ts";
 export * from "./DocumentRepository.ts";
 export * from "./DocumentSettingsRepository.ts";
 export * from "./ReadingStateRepository.ts";
+export * from "./ReaderSettingsRepository.ts";
 export * from "./TranslationRepository.ts";

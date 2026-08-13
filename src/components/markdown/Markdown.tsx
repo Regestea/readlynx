@@ -12,6 +12,7 @@ import { Code } from "../ui/Code/Code";
 import { Image } from "../ui/Image/Image";
 import { Table } from "../ui/Table/Table";
 import type { TableColumn } from "../ui/Table/Table";
+import tableStyles from "../ui/Table/Table.module.css";
 import { FontFamilySelect } from "../FontFamilySelect/FontFamilySelect";
 import { ColorSelect } from "../ui/ColorSelect/ColorSelect";
 import { AiSelectionBubble } from "../AiSelectionBubble/AiSelectionBubble";
@@ -137,9 +138,10 @@ interface MarkdownProps {
   /** Parses raw HTML embedded in the markdown. Defaults to true; disable for
    *  AI-produced content so HTML/JSX snippets render as literal text. */
   rawHtml?: boolean;
-  /** Per-book key for persisting reader settings (zoom, font, colors) in
-   *  localStorage; the EPUB viewer uses the same key per book. */
-  settingsKey?: string;
+  /** Book id for persisting reader settings (zoom, font, colors) in the
+   *  `ReaderSettings` table; the EPUB viewer uses the same book id with its
+   *  own viewer key. Omit in previews to keep settings in memory. */
+  settingsBookId?: string;
   /** When provided, a floating "Ask AI" bubble appears next to text
    *  selections and hands the selected text to the host. */
   onAskAi?: (text: string) => void;
@@ -385,33 +387,64 @@ const components: Components = {
     return <code className={styles.inlineCode}>{children}</code>;
   },
   pre: ({ children }) => <>{children}</>,
+  th: ({ children, node: _node, ...props }) => (
+    <th scope="col" className={tableStyles.headCell} {...props} {...dirProps(children)}>
+      {children}
+    </th>
+  ),
+  td: ({ children, node: _node, ...props }) => (
+    <td className={tableStyles.cell} {...props} {...dirProps(children)}>
+      {children}
+    </td>
+  ),
   table: ({ node, children }) => {
     const root = toMdNode(node);
     const thead = (root?.children ?? []).find((child) => child.tagName === "thead");
     const tbody = (root?.children ?? []).find((child) => child.tagName === "tbody");
-    const headers = (thead?.children?.[0]?.children ?? []).map((cell) =>
-      mdText(cell).trim(),
-    );
-    const rows = (tbody?.children ?? [])
+    const headerCells = (thead?.children?.[0]?.children ?? []).map(toMdNode);
+    const rowCells = (tbody?.children ?? [])
       .filter((row) => toMdNode(row)?.tagName === "tr")
-      .map((row) =>
-        (toMdNode(row)?.children ?? []).map((cell) => mdText(cell).trim()),
+      .map((row) => (toMdNode(row)?.children ?? []).map(toMdNode));
+
+    /** A cell is "plain" when every child is plain text — such tables are
+     *  lifted into the Table component. Any inline markup (code, bold,
+     *  links…), spans or a missing header forces the generic render below,
+     *  which draws every cell through the components map so the markup keeps
+     *  its styling instead of being flattened to text. */
+    const isPlain = (cells: (MdNode | null)[]): boolean =>
+      cells.length > 0 &&
+      cells.every((cell) =>
+        (cell?.children ?? []).every(
+          (child) => child.type === "text" || child.type === "raw",
+        ),
       );
-    const columns: TableColumn<string[]>[] = headers.map((header, index) => ({
-      key: `md-col-${index}`,
-      header,
-      headerDir: getDir(header),
-      render: (row) => {
-        const cell = row[index] ?? "";
-        return (
-          <span dir={getDir(cell)} style={getDir(cell) === "rtl" ? { textAlign: "right" } : undefined}>
-            {cell}
-          </span>
-        );
-      },
-    }));
-    if (columns.length === 0) return <table>{children}</table>;
-    return <Table columns={columns} rows={rows} />;
+
+    if (headerCells.length > 0 && isPlain(headerCells) && rowCells.every(isPlain)) {
+      const headers = headerCells.map((cell) => mdText(cell).trim());
+      const rows = rowCells.map((cells) => cells.map((cell) => mdText(cell).trim()));
+      const columns: TableColumn<string[]>[] = headers.map((header, index) => ({
+        key: `md-col-${index}`,
+        header,
+        headerDir: getDir(header),
+        render: (row) => {
+          const cell = row[index] ?? "";
+          return (
+            <span dir={getDir(cell)} style={getDir(cell) === "rtl" ? { textAlign: "right" } : undefined}>
+              {cell}
+            </span>
+          );
+        },
+      }));
+      return <Table columns={columns} rows={rows} />;
+    }
+
+    return (
+      <div className={tableStyles.wrap}>
+        <table className={tableStyles.table} {...dirProps(children)}>
+          {children}
+        </table>
+      </div>
+    );
   },
 };
 
@@ -420,7 +453,7 @@ export function Markdown({
   className = "",
   toolbar = false,
   rawHtml = true,
-  settingsKey,
+  settingsBookId,
   onAskAi,
 }: MarkdownProps) {
   const {
@@ -432,7 +465,7 @@ export function Markdown({
     setCustomBg,
     customText,
     setCustomText,
-  } = useReaderSettings(settingsKey);
+  } = useReaderSettings(settingsBookId, "markdown");
   const [menuOpen, setMenuOpen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [spacerHeight, setSpacerHeight] = useState(0);

@@ -11,6 +11,7 @@ import type { BookSourceType } from "../../infrastructure/db/entities/types";
 import { TranslationSettingsPanel, TranslationToggle } from "./translation/TranslationPanel";
 import { useTranslation } from "./translation/useTranslation";
 import { epubUnitKey, methodFor, pdfUnitKey } from "./translation/types";
+import { useCloseFlush } from "../../shared/closeFlush";
 import styles from "./ReadingPage.module.css";
 
 interface ReadingPageProps {
@@ -31,6 +32,8 @@ type PageState =
 
 export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
   const [state, setState] = useState<PageState>({ status: "loading" });
+  const [savedPage, setSavedPage] = useState(1);
+  const [savedChapter, setSavedChapter] = useState<string | null>(null);
   const [aiContext, setAiContext] = useState<string | null>(null);
   const [pdfAskImages, setPdfAskImages] = useState<string[] | null>(null);
   const [chatError, setChatError] = useState<string | null>(null);
@@ -38,6 +41,9 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
   const askPdfRef = useRef(false);
   const pdfRef = useRef<PdfViewerHandle | null>(null);
   const epubRef = useRef<EpubViewerHandle | null>(null);
+  /** Last position write still in flight, so closing waits for the worker to
+   *  finish it before the app quits. */
+  const lastPositionWriteRef = useRef<Promise<unknown> | null>(null);
 
   const readyBook = state.status === "ready" ? state.book : null;
   const translation = useTranslation({
@@ -52,12 +58,14 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
     let cancelled = false;
     const db = window.readlynx?.db;
     if (!db) return;
-    void db.getBook(bookId).then((result) => {
+    void Promise.all([db.getBook(bookId), db.getReadingState(bookId)]).then(([result, reading]) => {
       if (cancelled) return;
       if (!result?.source) {
         setState({ status: "error", message: "This book has no source file to display." });
         return;
       }
+      setSavedPage(reading?.currentPage ?? 1);
+      setSavedChapter(reading?.currentChapter || null);
       setState({
         status: "ready",
         book: {
@@ -66,6 +74,9 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
           filePath: result.source.filePath,
         },
       });
+      // Records "last read" so the book can be offered as a continue-reading
+      // entry, and creates the state row when this is the first open.
+      void db.markReadingStateOpened(bookId);
     });
     return () => {
       cancelled = true;
@@ -75,16 +86,26 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
   const handlePageChange = useCallback(
     (page: number) => {
       setTranslationUnit(pdfUnitKey(page));
+      lastPositionWriteRef.current =
+        window.readlynx?.db.updateReadingState(bookId, { currentPage: page }) ?? null;
     },
-    [setTranslationUnit],
+    [bookId, setTranslationUnit],
   );
 
   const handleChapterChange = useCallback(
     (chapterKey: string) => {
       setTranslationUnit(epubUnitKey(chapterKey));
+      lastPositionWriteRef.current =
+        window.readlynx?.db.updateReadingState(bookId, { currentChapter: chapterKey }) ?? null;
     },
-    [setTranslationUnit],
+    [bookId, setTranslationUnit],
   );
+
+  /** Closing the app waits for the last position write, the same save the
+   *  back button's page-turn handlers perform. */
+  useCloseFlush(async () => {
+    await lastPositionWriteRef.current;
+  });
 
   /** PDF click-to-ask: follows the translate panel's top setting — OCR the
    *  whole current page locally and seed the chat with the recognized text
@@ -167,6 +188,7 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
             onPdfMethodChange={translation.setPdfMethod}
             settings={translation.settings}
             onSettingsChange={translation.updateSettings}
+            onInstructionEdited={translation.refreshCustomPrompt}
             busy={translation.busy}
             status={translation.status}
             error={translation.error}
@@ -204,6 +226,8 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
                   toolbar
                   fitWidth
                   className={styles.viewer}
+                  themeBookId={bookId}
+                  initialPage={savedPage}
                   onPageChange={handlePageChange}
                   onAskAi={handleAskPdfRegion}
                 />
@@ -214,7 +238,8 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
                   fill
                   toolbar
                   showExtract={false}
-settingsKey={`${bookId}:epub`}
+                  settingsBookId={bookId}
+                  initialChapter={savedChapter}
                   className={styles.viewer}
                   onChapterChange={handleChapterChange}
                   onAskAi={setAiContext}
@@ -225,7 +250,7 @@ settingsKey={`${bookId}:epub`}
             {showTranslation && (
               <div className={styles.translationStage}>
                 {translation.markdown ? (
-                  <Markdown content={translation.markdown} toolbar rawHtml={false} settingsKey={`${bookId}:markdown`} className={styles.translationBody} onAskAi={setAiContext} />
+                  <Markdown content={translation.markdown} toolbar rawHtml={false} settingsBookId={bookId} className={styles.translationBody} onAskAi={setAiContext} />
                 ) : translation.busy ? (
                   <div className={styles.state} aria-label="Translating">
                     <Loader2 size={24} strokeWidth={2} className={styles.spinner} />

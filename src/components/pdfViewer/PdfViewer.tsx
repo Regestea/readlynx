@@ -58,14 +58,17 @@ interface PdfViewerProps {
    *  clicking the bubble hands a PNG of the current page to the host, which
    *  decides between OCR and AI vision. */
   onAskAi?: (payload: { image: string }) => void;
-  /** localStorage key for the reading theme. Defaults to a shared global key;
-   *  pass a per-book key (e.g. `<bookId>:pdf`) to persist themes per document. */
-  themeKey?: string;
+  /** Book id whose `ReaderSettings` row ("pdf" viewer) holds the reading
+   *  theme. Omit in previews to keep the global localStorage theme. */
+  themeBookId?: string;
+  /** Page to display once the document loads — used to resume reading where
+   *  the user left off. */
+  initialPage?: number;
 }
 
 export function PdfViewer(props: PdfViewerProps & { ref?: Ref<PdfViewerHandle> }) {
   return (
-    <PdfThemeProvider storageKey={props.themeKey}>
+    <PdfThemeProvider bookId={props.themeBookId}>
       <PdfViewerInner {...props} />
     </PdfThemeProvider>
   );
@@ -85,6 +88,7 @@ function PdfViewerInner({
   ocrEnabled = false,
   onOcrText,
   onAskAi,
+  initialPage,
   ref,
 }: PdfViewerProps & { ref?: Ref<PdfViewerHandle> }) {
   const [doc, setDoc] = useState<PDFDocumentProxy | null>(null);
@@ -365,6 +369,10 @@ function PdfViewerInner({
 
         setDoc(nextDoc);
         setNumPages(nextDoc.numPages);
+        // Resume reading where the user left off: jump to the saved page.
+        if (initialPage !== undefined && initialPage > 1) {
+          setPageNumber(Math.min(Math.max(1, initialPage), nextDoc.numPages));
+        }
         if (fit || fitWidth) {
           const firstPage = await nextDoc.getPage(1);
           const viewport = firstPage.getViewport({ scale: 1 });
@@ -399,7 +407,7 @@ function PdfViewerInner({
       void loadTaskRef.current?.destroy();
       loadTaskRef.current = null;
     };
-  }, [filePath, fit, fitWidth]);
+  }, [filePath, fit, fitWidth, initialPage]);
 
   const renderPage = useCallback(async (pdf: PDFDocumentProxy, page: number, s: number) => {
     const canvas = canvasRef.current;

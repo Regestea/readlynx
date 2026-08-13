@@ -2,6 +2,12 @@ const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("readlynx", {
   exportPdf: (options) => ipcRenderer.invoke("export-pdf", options),
+  onPrepareClose: (callback) => {
+    const listener = () => callback();
+    ipcRenderer.on("app:prepare-close", listener);
+    return () => ipcRenderer.removeListener("app:prepare-close", listener);
+  },
+  notifyReadyToClose: () => ipcRenderer.send("app:ready-to-close"),
   readFileBytes: (filePath) => ipcRenderer.invoke("fs:read-bytes", filePath),
   readCoverDataUrl: (relativePath) => ipcRenderer.invoke("cover:read-data-url", relativePath),
   pickFile: (options) => ipcRenderer.invoke("fs:pick-file", options),
@@ -42,6 +48,11 @@ contextBridge.exposeInMainWorld("readlynx", {
     getReadingState: (bookId) => ipcRenderer.invoke("db:reading-state-get", bookId),
     updateReadingState: (bookId, state) =>
       ipcRenderer.invoke("db:reading-state-update", { bookId, ...state }),
+    markReadingStateOpened: (bookId) => ipcRenderer.invoke("db:reading-state-mark-opened", bookId),
+    getReaderSettings: (bookId, viewer) =>
+      ipcRenderer.invoke("db:reader-settings-get", { bookId, viewer }),
+    updateReaderSettings: (bookId, viewer, settings) =>
+      ipcRenderer.invoke("db:reader-settings-update", { bookId, viewer, ...settings }),
     getTranslations: (options) => ipcRenderer.invoke("db:translation-get", options),
     putTranslation: (translation) => ipcRenderer.invoke("db:translation-put", translation),
     deleteTranslations: (options) => ipcRenderer.invoke("db:translation-delete", options),

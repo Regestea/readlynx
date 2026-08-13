@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ThemeProvider } from "./providers/theme/ThemeProvider";
 import { Header } from "./layout/Header/Header";
 import { Sidebar } from "./layout/Sidebar/Sidebar";
@@ -11,6 +11,7 @@ import { ReadingPage } from "../features/reading/ReadingPage";
 import { Quote } from "../features/home/widgets/Quote/Quote";
 import { ReadingProgress } from "../features/home/widgets/ReadingProgress/ReadingProgress";
 import { WeeklyStats } from "../features/home/widgets/WeeklyStats/WeeklyStats";
+import { getCloseFlush } from "../shared/closeFlush";
 import styles from "./App.module.css";
 
 export default function App() {
@@ -21,6 +22,21 @@ export default function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const isHome = activeId === "home";
   const isFullWidth = !isHome;
+
+  /** When the window is closing, run the active page's save flush first (the
+   *  same work its top-bar back button would do), then let the window close. */
+  useEffect(() => {
+    const unsubscribe = window.readlynx?.onPrepareClose(() => {
+      const finish = () => window.readlynx?.notifyReadyToClose();
+      const flush = getCloseFlush();
+      if (!flush) {
+        finish();
+        return;
+      }
+      void flush().then(finish, finish);
+    });
+    return () => unsubscribe?.();
+  }, []);
 
   const handleNavigate = (id: string) => {
     if (id !== "create-book") {

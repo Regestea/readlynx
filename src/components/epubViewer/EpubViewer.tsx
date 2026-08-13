@@ -228,9 +228,13 @@ interface EpubViewerProps {
   /** Hide the "Extract" button (used in the read-only reading mode, where
    *  there is no editor to extract into). */
   showExtract?: boolean;
-  /** Per-book key for persisting reader settings (zoom, font, colors) in
-   *  localStorage; the Markdown viewer uses the same key per book. */
-  settingsKey?: string;
+  /** Book id for persisting reader settings (zoom, font, colors) in the
+   *  `ReaderSettings` table; the Markdown viewer uses the same book id with
+   *  its own viewer key. Omit in previews to keep settings in memory. */
+  settingsBookId?: string;
+  /** Chapter (spine index as a string) to jump to once the book is laid
+   *  out — used to resume reading where the user left off. */
+  initialChapter?: string | null;
   /** Page/background colour override (png. themes), applied unless the user
    *  picked a custom colour inside the reader. */
   backgroundColorOverride?: string;
@@ -281,7 +285,8 @@ export function EpubViewer({
   toolbar = true,
   showNav = false,
   showExtract = true,
-  settingsKey,
+  settingsBookId,
+  initialChapter,
   backgroundColorOverride,
   textColorOverride,
   onReady,
@@ -301,7 +306,7 @@ export function EpubViewer({
     setCustomBg,
     customText,
     setCustomText,
-  } = useReaderSettings(settingsKey);
+  } = useReaderSettings(settingsBookId, "epub");
   const [book, setBook] = useState<Book | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pageNumber, setPageNumber] = useState(0);
@@ -511,6 +516,15 @@ export function EpubViewer({
         rendition.hooks.content.register(injectFontStyle);
         rendition.hooks.content.register(highlightCodeBlocks);
         await rendition.display();
+        // Resume reading where the user left off: jump to the saved chapter
+        // (spine index). The relocated handler fires and reports the restored
+        // chapter to the host.
+        const restoreIndex = initialChapter === undefined || initialChapter === null
+          ? null
+          : Number(initialChapter);
+        if (restoreIndex !== null && Number.isFinite(restoreIndex)) {
+          await rendition.display(restoreIndex);
+        }
         onReadyRef.current?.();
 
         setBook(nextBook);
@@ -607,7 +621,7 @@ export function EpubViewer({
       bookRef.current?.destroy();
       bookRef.current = null;
     };
-  }, [filePath, srcData, injectFontStyle, highlightCodeBlocks]);
+  }, [filePath, srcData, injectFontStyle, highlightCodeBlocks, initialChapter]);
 
   useEffect(() => {
     const host = hostRef.current;

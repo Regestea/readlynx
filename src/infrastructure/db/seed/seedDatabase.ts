@@ -55,18 +55,20 @@ const SEED_CONTENT_JSON = JSON.stringify({
   },
 });
 
-/** Inserts a demo book the first time the database is created. */
+/** Inserts a demo book the first time the database is created. Timestamps
+ *  come from the SQLite `datetime('now')` defaults (UTC), so every row in
+ *  the database uses the same UTC format and string ordering. */
 export function seedDatabase(db: Database.Database): void {
   const { count } = db.prepare("SELECT COUNT(*) AS count FROM Books").get() as {
     count: number;
   };
   if (count > 0) return;
 
-  const now = new Date().toISOString();
   db.transaction(() => {
-    db.prepare(
-      "INSERT INTO Books (id, title, coverImage, createdAt, updatedAt) VALUES (?, ?, NULL, ?, ?)",
-    ).run(SEED_BOOK_ID, "The Mountain Keep", now, now);
+    db.prepare("INSERT INTO Books (id, title, coverImage) VALUES (?, ?, NULL)").run(
+      SEED_BOOK_ID,
+      "The Mountain Keep",
+    );
     db.prepare("INSERT INTO Documents (id, bookId, contentJson) VALUES (?, ?, ?)").run(
       SEED_DOCUMENT_ID,
       SEED_BOOK_ID,

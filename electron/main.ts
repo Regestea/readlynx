@@ -1,4 +1,4 @@
-import { app, BrowserWindow, protocol, session } from "electron";
+import { app, BrowserWindow, ipcMain, protocol, session } from "electron";
 import path from "node:path";
 import { DbWorkerClient } from "./db/client.ts";
 import { registerAiIpc } from "./ipc/ai.ts";
@@ -33,6 +33,27 @@ function createWindow() {
 
   win.once("ready-to-show", () => {
     win.show();
+  });
+
+  /** Closing hands the renderer a chance to finish pending saves first (the
+   *  same flush the top-bar back button performs). If the renderer does not
+   *  confirm within a few seconds — e.g. it crashed — the window still
+   *  closes so the app never hangs on quit. */
+  let closeConfirmed = false;
+  let closeWaitTimer: ReturnType<typeof setTimeout> | null = null;
+  win.on("close", (event) => {
+    if (closeConfirmed) return;
+    event.preventDefault();
+    if (closeWaitTimer !== null) return;
+    const onReady = () => {
+      closeConfirmed = true;
+      closeWaitTimer = null;
+      ipcMain.removeListener("app:ready-to-close", onReady);
+      win.close();
+    };
+    closeWaitTimer = setTimeout(onReady, 3000);
+    ipcMain.on("app:ready-to-close", onReady);
+    win.webContents.send("app:prepare-close");
   });
 
   if (!app.isPackaged) {

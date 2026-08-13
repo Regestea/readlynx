@@ -6,7 +6,8 @@ import type {
   TranslationMethod,
 } from "../../src/infrastructure/db/entities/index.ts";
 import type { ReadingStateEntity } from "../../src/infrastructure/db/entities/ReadingState.ts";
-import type { ReadingStateInput } from "../../src/infrastructure/db/repositories/ReadingStateRepository.ts";
+import type { ReaderSettingsEntity, ReaderViewer } from "../../src/infrastructure/db/entities/ReaderSettings.ts";
+import type { ReadingStateInput, ReaderSettingsInput } from "../../src/infrastructure/db/repositories/index.ts";
 import type {
   BookListItem,
   CreateBookResult,
@@ -132,6 +133,22 @@ export class DbWorkerClient {
 
   updateReadingState(bookId: string, state: ReadingStateInput): Promise<ReadingStateEntity | null> {
     return this.exec("reading-state-update", { bookId, ...state });
+  }
+
+  markReadingStateOpened(bookId: string): Promise<boolean> {
+    return this.exec("reading-state-mark-opened", bookId);
+  }
+
+  getReaderSettings(bookId: string, viewer: ReaderViewer): Promise<ReaderSettingsEntity | null> {
+    return this.exec("reader-settings-get", { bookId, viewer });
+  }
+
+  updateReaderSettings(
+    bookId: string,
+    viewer: ReaderViewer,
+    settings: ReaderSettingsInput,
+  ): Promise<boolean> {
+    return this.exec("reader-settings-update", { bookId, viewer, ...settings });
   }
 
   getTranslations(options: {

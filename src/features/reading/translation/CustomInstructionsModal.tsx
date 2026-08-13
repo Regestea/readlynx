@@ -16,6 +16,9 @@ interface CustomInstructionsModalProps {
   /** Propagates edits/deletions of the selected instruction back to the
    *  reading settings (content updates, or reset when it is deleted). */
   onSettingsChange: (patch: Partial<TranslationSettings>) => void;
+  /** Re-resolves the selected instruction's text after it is edited (the id
+   *  does not change, so the caller's id-keyed effect would not re-run). */
+  onInstructionEdited: () => void;
 }
 
 interface Draft {
@@ -31,6 +34,7 @@ export function CustomInstructionsModal({
   onClose,
   selectedId,
   onSettingsChange,
+  onInstructionEdited,
 }: CustomInstructionsModalProps) {
   const [instructions, setInstructions] = useState<CustomInstructionEntity[]>([]);
   const [loading, setLoading] = useState(false);
@@ -94,7 +98,7 @@ export function CustomInstructionsModal({
       const rows = await db?.listCustomInstructions();
       setInstructions(rows ?? []);
       if (draft.id && draft.id === selectedId) {
-        onSettingsChange({ customPrompt: content });
+        onInstructionEdited();
       }
       if (ok) setDraft(null);
     } catch (err) {
@@ -112,7 +116,7 @@ export function CustomInstructionsModal({
       const rows = await window.readlynx?.db.listCustomInstructions();
       setInstructions(rows ?? []);
       if (instruction.id === selectedId) {
-        onSettingsChange({ customPromptId: "", customPrompt: "" });
+        onSettingsChange({ customPromptId: "" });
       }
       if (draft?.id === instruction.id) setDraft(null);
     } catch (err) {

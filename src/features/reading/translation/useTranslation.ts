@@ -72,7 +72,17 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef }: UseTrans
   const downloadingRef = useRef<string | null>(null);
   const autoTriedRef = useRef<string | null>(null);
   const savedRef = useRef(false);
-  const positionRef = useRef({ currentPage: 1, scrollPosition: 0 });
+  const customPromptRef = useRef("");
+  /** Text of the currently chosen instruction, resolved from the
+   *  `CustomInstructions` table and paired with the id it was fetched for so
+   *  the effective prompt is derived synchronously during render (empty while
+   *  the id is new or the fetch is pending). */
+  const [resolvedPrompt, setResolvedPrompt] = useState<{ id: string; content: string }>({
+    id: "",
+    content: "",
+  });
+  const customPrompt =
+    settings.customPromptId === resolvedPrompt.id ? resolvedPrompt.content : "";
 
   useEffect(() => {
     settingsRef.current = settings;
@@ -89,6 +99,10 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef }: UseTrans
   useEffect(() => {
     pdfMethodRef.current = pdfMethod;
   }, [pdfMethod]);
+
+  useEffect(() => {
+    customPromptRef.current = customPrompt;
+  }, [customPrompt]);
 
   useEffect(() => {
     hasTranslationRef.current = hasTranslation;
@@ -112,11 +126,9 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef }: UseTrans
         if (cancelled) return;
         setModels(modelRows);
         if (state) {
-          positionRef.current = { currentPage: state.currentPage, scrollPosition: state.scrollPosition };
           setSettings({
             ocrLangs: state.ocrLangs.length ? state.ocrLangs : DEFAULT_TRANSLATION_SETTINGS.ocrLangs,
             targetLang: state.targetLang || DEFAULT_TRANSLATION_SETTINGS.targetLang,
-            customPrompt: state.customPrompt ?? "",
             modelId: state.modelId ?? "",
             customPromptId: state.customPromptId ?? "",
           });
@@ -138,13 +150,54 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef }: UseTrans
     };
   }, [bookId]);
 
-  /** Persists settings changes back into the book's `ReadingState` row. */
+  /** Resolves the chosen instruction's text from the `CustomInstructions`
+   *  table (the source of truth — the prompt is no longer stored on the
+   *  book's reading state). */
+  useEffect(() => {
+    if (!settings.customPromptId) return;
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const rows = await window.readlynx?.db.listCustomInstructions();
+        if (cancelled) return;
+        const found = rows?.find((row) => row.id === settings.customPromptId);
+        setResolvedPrompt({ id: settings.customPromptId, content: found?.content ?? "" });
+      } catch {
+        // keep the previous prompt
+      }
+    };
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [settings.customPromptId]);
+
+  /** Re-resolves the instruction text after the instruction manager edits
+   *  the currently selected instruction (its id does not change, so the
+   *  effect above would not re-run). */
+  const refreshCustomPrompt = useCallback(() => {
+    const id = settingsRef.current.customPromptId;
+    if (!id) return;
+    void window.readlynx?.db
+      .listCustomInstructions()
+      .then((rows) => {
+        const found = rows?.find((row) => row.id === id);
+        setResolvedPrompt({ id, content: found?.content ?? "" });
+      })
+      .catch(() => {
+        // keep the previous prompt
+      });
+  }, []);
+
+  /** Persists settings changes back into the book's `ReadingState` row.
+   *  Position changes (page / chapter) are written by the reading page
+   *  itself; the partial upsert leaves them untouched. */
   useEffect(() => {
     if (!savedRef.current) {
       savedRef.current = true;
       return;
     }
-    void window.readlynx?.db.updateReadingState(bookId, { ...positionRef.current, ...settings });
+    void window.readlynx?.db.updateReadingState(bookId, settings);
   }, [bookId, settings]);
 
   /** Resets per-unit state whenever the unit changes. Done during render
@@ -302,7 +355,7 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef }: UseTrans
         chunkKey: translation.chunkKey,
         sourceLang: "",
         targetLang: current.targetLang,
-        customPrompt: current.customPrompt,
+        customPrompt: customPromptRef.current,
         markdown: translation.markdown,
         updatedAt: "",
       });
@@ -348,7 +401,7 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef }: UseTrans
       docType,
       ocrLangs: currentSettings.ocrLangs,
       targetLang: currentSettings.targetLang,
-      customPrompt: currentSettings.customPrompt,
+      customPrompt: customPromptRef.current,
     };
     const systemPrompt = buildTranslationSystemPrompt(promptContext);
 
@@ -497,6 +550,7 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef }: UseTrans
     downloadModel,
     deleteModel,
     refreshModels,
+    refreshCustomPrompt,
     translate,
     regenerate,
   };

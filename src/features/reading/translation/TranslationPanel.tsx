@@ -27,6 +27,9 @@ interface TranslationSettingsPanelProps {
   onPdfMethodChange: (method: TranslationMethod) => void;
   settings: TranslationSettings;
   onSettingsChange: (patch: Partial<TranslationSettings>) => void;
+  /** Re-resolves the selected instruction's text after it is edited in the
+   *  instruction manager (the id itself does not change). */
+  onInstructionEdited: () => void;
   busy: boolean;
   status: string | null;
   error: string | null;
@@ -54,6 +57,7 @@ export function TranslationSettingsPanel({
   onPdfMethodChange,
   settings,
   onSettingsChange,
+  onInstructionEdited,
   busy,
   status,
   error,
@@ -124,11 +128,11 @@ export function TranslationSettingsPanel({
       return;
     }
     if (value === "") {
-      onSettingsChange({ customPromptId: "", customPrompt: "" });
+      onSettingsChange({ customPromptId: "" });
       return;
     }
     const found = instructions.find((instruction) => instruction.id === value);
-    if (found) onSettingsChange({ customPromptId: found.id, customPrompt: found.content });
+    if (found) onSettingsChange({ customPromptId: found.id });
   };
 
   return (
@@ -270,6 +274,7 @@ export function TranslationSettingsPanel({
         onClose={() => setManageOpen(false)}
         selectedId={settings.customPromptId}
         onSettingsChange={onSettingsChange}
+        onInstructionEdited={onInstructionEdited}
       />
     </div>
   );

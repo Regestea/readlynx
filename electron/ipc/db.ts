@@ -55,6 +55,18 @@ export function registerDbIpc(db: DbWorkerClient) {
     },
   );
 
+  ipcMain.handle("db:reading-state-mark-opened", (_event, bookId: string) =>
+    db.markReadingStateOpened(bookId),
+  );
+
+  ipcMain.handle("db:reader-settings-get", (_event, payload) =>
+    db.getReaderSettings(payload.bookId, payload.viewer),
+  );
+
+  ipcMain.handle("db:reader-settings-update", (_event, payload) =>
+    db.updateReaderSettings(payload.bookId, payload.viewer, payload),
+  );
+
   ipcMain.handle("db:translation-get", (_event, options) => db.getTranslations(options));
 
   ipcMain.handle("db:translation-put", (_event, translation) => db.putTranslation(translation));

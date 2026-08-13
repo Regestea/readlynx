@@ -6,5 +6,6 @@ export * from "./BookSource.ts";
 export * from "./CustomInstruction.ts";
 export * from "./DocumentSettings.ts";
 export * from "./ReadingState.ts";
+export * from "./ReaderSettings.ts";
 export * from "./Translation.ts";
 export * from "./types.ts";

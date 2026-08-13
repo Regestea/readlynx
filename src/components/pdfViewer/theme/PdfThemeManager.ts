@@ -1,8 +1,9 @@
 /** Pure, framework-free service that owns the PDF reader background theme:
- *  an eye-friendly palette, localStorage persistence, and the DOM
- *  application (CSS custom properties). The React pieces (PdfThemeProvider,
- *  PdfThemeSettings, PdfViewer) build on top of it, so theming works without
- *  React too.
+ *  an eye-friendly palette, localStorage persistence (fallback only — reading
+ *  books persist per-book in the `ReaderSettings` DB table via
+ *  `PdfThemeProvider`), and the DOM application (CSS custom properties). The
+ *  React pieces (PdfThemeProvider, PdfThemeSettings, PdfViewer) build on top
+ *  of it, so theming works without React too.
  *
  *  Themes are presentation-only: the PDF binary is never read for styling
  *  and never written. Everything happens through CSS variables on the

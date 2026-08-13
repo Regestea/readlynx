@@ -11,7 +11,9 @@ import type {
 import type { AiModel } from "./infrastructure/db/entities/AiModel.ts";
 import type { CustomInstructionEntity } from "./infrastructure/db/entities/CustomInstruction.ts";
 import type { ReadingStateEntity } from "./infrastructure/db/entities/ReadingState.ts";
+import type { ReaderSettingsEntity, ReaderViewer } from "./infrastructure/db/entities/ReaderSettings.ts";
 import type { ReadingStateInput } from "./infrastructure/db/repositories/ReadingStateRepository.ts";
+import type { ReaderSettingsInput } from "./infrastructure/db/repositories/ReaderSettingsRepository.ts";
 import type { TranslationEntity, TranslationMethod } from "./infrastructure/db/entities/Translation.ts";
 
 export {};
@@ -23,6 +25,8 @@ declare global {
         defaultPath: string;
         html: string;
       }): Promise<string | null>;
+      onPrepareClose(callback: () => void): () => void;
+      notifyReadyToClose(): void;
       readFileBytes(filePath: string): Promise<ArrayBuffer | null>;
       readCoverDataUrl(relativePath: string): Promise<string | null>;
       pickFile(options?: {
@@ -77,6 +81,16 @@ declare global {
           bookId: string,
           state: ReadingStateInput,
         ): Promise<ReadingStateEntity | null>;
+        markReadingStateOpened(bookId: string): Promise<boolean>;
+        getReaderSettings(
+          bookId: string,
+          viewer: ReaderViewer,
+        ): Promise<ReaderSettingsEntity | null>;
+        updateReaderSettings(
+          bookId: string,
+          viewer: ReaderViewer,
+          settings: ReaderSettingsInput,
+        ): Promise<boolean>;
         getTranslations(options: {
           bookId: string;
           method?: TranslationMethod;

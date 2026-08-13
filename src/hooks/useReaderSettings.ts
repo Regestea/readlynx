@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import type { ReaderViewer } from "../infrastructure/db/entities/ReaderSettings.ts";
 
 export interface ReaderSettings {
   zoomPct: number;
@@ -7,66 +8,78 @@ export interface ReaderSettings {
   customText: string | null;
 }
 
-const STORAGE_PREFIX = "readlynx:reader:";
+/** Defaults used when the book has no saved row yet. */
+const DEFAULT_SETTINGS: ReaderSettings = {
+  zoomPct: 100,
+  fontFamily: "",
+  customBg: null,
+  customText: null,
+};
 
-/** Reads the stored settings for a key; tolerant of missing/corrupt data. */
-function readStored(settingsKey: string | undefined): Partial<ReaderSettings> {
-  if (!settingsKey) return {};
-  try {
-    const raw = localStorage.getItem(STORAGE_PREFIX + settingsKey);
-    if (!raw) return {};
-    const parsed = JSON.parse(raw) as Partial<ReaderSettings>;
-    const out: Partial<ReaderSettings> = {};
-    if (typeof parsed.zoomPct === "number" && Number.isFinite(parsed.zoomPct)) {
-      out.zoomPct = parsed.zoomPct;
-    }
-    if (typeof parsed.fontFamily === "string") {
-      out.fontFamily = parsed.fontFamily;
-    }
-    if (typeof parsed.customBg === "string" || parsed.customBg === null) {
-      out.customBg = parsed.customBg ?? null;
-    }
-    if (typeof parsed.customText === "string" || parsed.customText === null) {
-      out.customText = parsed.customText ?? null;
-    }
-    return out;
-  } catch {
-    return {};
-  }
-}
+/** Per-book, per-viewer reader settings persisted in the `ReaderSettings`
+ *  table (replacing the old localStorage storage). Pass the book id and the
+ *  viewer — e.g. `useReaderSettings(bookId, "epub")` for the EPUB viewer and
+ *  `useReaderSettings(bookId, "markdown")` for the translation Markdown view —
+ *  so zoom, font family and text/background colors are stored separately for
+ *  each viewer of each book and survive reloads. Without a book id the hook
+ *  stays in-memory (used by previews with no backing book). */
+export function useReaderSettings(bookId: string | undefined, viewer: ReaderViewer) {
+  const [loaded, setLoaded] = useState(false);
+  const [zoomPct, setZoomPct] = useState<number>(DEFAULT_SETTINGS.zoomPct);
+  const [fontFamily, setFontFamily] = useState(DEFAULT_SETTINGS.fontFamily);
+  const [customBg, setCustomBg] = useState<string | null>(DEFAULT_SETTINGS.customBg);
+  const [customText, setCustomText] = useState<string | null>(DEFAULT_SETTINGS.customText);
 
-/** Per-file, per-viewer reader settings persisted in localStorage. Callers
- *  pass a distinct key per (file, viewer) pair — e.g. `<bookId>:epub` and
- *  `<bookId>:markdown` — so zoom, font family and text/background colors are
- *  stored separately for the EPUB viewer and the Markdown viewer of each
- *  file, and survive reloads. */
-export function useReaderSettings(settingsKey?: string) {
-  const stored = useMemo(() => readStored(settingsKey), [settingsKey]);
-  const [zoomPct, setZoomPct] = useState<number>(stored.zoomPct ?? 100);
-  const [fontFamily, setFontFamily] = useState(stored.fontFamily ?? "");
-  const [customBg, setCustomBg] = useState<string | null>(stored.customBg ?? null);
-  const [customText, setCustomText] = useState<string | null>(stored.customText ?? null);
-
+  /** Loads the saved settings once per (book, viewer) pair. */
   useEffect(() => {
-    if (!settingsKey) return;
-    try {
-      localStorage.setItem(
-        STORAGE_PREFIX + settingsKey,
-        JSON.stringify({ zoomPct, fontFamily, customBg, customText } satisfies ReaderSettings),
-      );
-    } catch {
-      // Storage unavailable or full — persist nothing, keep working.
-    }
-  }, [zoomPct, fontFamily, customBg, customText, settingsKey]);
+    if (!bookId) return;
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const row = await window.readlynx?.db.getReaderSettings(bookId, viewer);
+        if (cancelled || !row) return;
+        if (typeof row.zoomPct === "number" && Number.isFinite(row.zoomPct)) {
+          setZoomPct(row.zoomPct);
+        }
+        if (typeof row.fontFamily === "string") setFontFamily(row.fontFamily);
+        setCustomBg(row.customBg ?? null);
+        setCustomText(row.customText ?? null);
+      } catch {
+        // keep defaults
+      } finally {
+        if (!cancelled) setLoaded(true);
+      }
+    };
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [bookId, viewer]);
 
-  return {
-    zoomPct,
-    setZoomPct,
-    fontFamily,
-    setFontFamily,
-    customBg,
-    setCustomBg,
-    customText,
-    setCustomText,
-  };
+  /** Persists changes back into the book's `ReaderSettings` row. The save
+   *  waits for the initial load so a default value is never written over the
+   *  saved one before it is read. */
+  useEffect(() => {
+    if (!bookId || !loaded) return;
+    void window.readlynx?.db.updateReaderSettings(bookId, viewer, {
+      zoomPct,
+      fontFamily,
+      customBg,
+      customText,
+    });
+  }, [bookId, viewer, loaded, zoomPct, fontFamily, customBg, customText]);
+
+  return useMemo(
+    () => ({
+      zoomPct,
+      setZoomPct,
+      fontFamily,
+      setFontFamily,
+      customBg,
+      setCustomBg,
+      customText,
+      setCustomText,
+    }),
+    [zoomPct, fontFamily, customBg, customText],
+  );
 }
