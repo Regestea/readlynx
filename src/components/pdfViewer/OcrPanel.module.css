@@ -54,6 +54,47 @@
   padding: 1px 4px;
 }
 
+.modeSwitch {
+  display: flex;
+  gap: 2px;
+  margin: var(--space-3) var(--space-3) 0;
+  padding: 2px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-input);
+  background: var(--color-bg-secondary);
+}
+
+.modeButton {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: 26px;
+  border: none;
+  border-radius: calc(var(--radius-input) - 3px);
+  background: transparent;
+  color: var(--color-text-muted);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  transition:
+    background var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.modeButton:hover {
+  color: var(--color-text);
+}
+
+.modeButtonActive,
+.modeButtonActive:hover {
+  background: var(--color-bg);
+  color: var(--color-text);
+  box-shadow: var(--shadow-sm);
+}
+
 .searchBox {
   display: flex;
   align-items: center;
@@ -94,6 +135,38 @@
 .searchInput::placeholder {
   color: var(--color-text-muted);
   opacity: 1;
+}
+
+.instructionBox {
+  margin: 0 var(--space-3) var(--space-2);
+  padding: var(--space-2);
+  min-height: 62px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-input);
+  background: var(--color-bg-secondary);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-xs);
+  line-height: 1.45;
+  resize: vertical;
+  outline: none !important;
+  transition:
+    border-color var(--transition-base) ease,
+    box-shadow var(--transition-base) ease;
+}
+
+.instructionBox:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-glow);
+}
+
+.instructionBox::placeholder {
+  color: var(--color-text-muted);
+  opacity: 1;
+}
+
+.instructionBox:disabled {
+  opacity: 0.6;
 }
 
 .noResults {

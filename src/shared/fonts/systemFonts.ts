@@ -2,9 +2,13 @@
  * Enumerate fonts installed on the system.
  *
  * Strategy:
- * 1. `window.queryLocalFonts()` (Chromium/Electron) — best-effort; may prompt
+ * 1. `window.readlynx.systemFonts.list()` — the Electron main process queries
+ *    the OS directly (registry / system_profiler / fc-list), so every
+ *    installed font is found, including user-installed families. Preferred:
+ *    no permission prompt, no user gesture needed.
+ * 2. `window.queryLocalFonts()` (Chromium/Electron) — best-effort; may prompt
  *    for permission or be unavailable, in which case we fall back.
- * 2. Width-measurement heuristic — render a probe string in each candidate
+ * 3. Width-measurement heuristic — render a probe string in each candidate
  *    family and compare the measured width against a generic fallback. A font
  *    is considered installed when its width differs from the fallback's.
  *
@@ -363,8 +367,24 @@ async function detectViaLocalFonts(): Promise<string[] | null> {
   }
 }
 
+async function detectViaMainProcess(): Promise<string[] | null> {
+  try {
+    const fonts = await window.readlynx?.systemFonts.list();
+    if (!fonts || fonts.length === 0) return null;
+    return fonts;
+  } catch {
+    // Bridge unavailable or enumeration failed — fall through.
+    return null;
+  }
+}
+
 export async function getInstalledFonts(): Promise<string[]> {
   if (cachedFonts) return cachedFonts;
+  const fromMain = await detectViaMainProcess();
+  if (fromMain) {
+    cachedFonts = fromMain;
+    return fromMain;
+  }
   const fromLocal = await detectViaLocalFonts();
   if (fromLocal && fromLocal.length > 0) {
     cachedFonts = fromLocal;

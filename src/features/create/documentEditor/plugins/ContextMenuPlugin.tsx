@@ -24,7 +24,7 @@ import {
   type RangeSelection,
   type TextFormatType,
 } from "lexical";
-import { $generateNodesFromMarkdownString } from "@lexical/markdown";
+import { $generateNodesFromMarkdownString, $convertSelectionToMarkdownString } from "@lexical/markdown";
 import { $patchStyleText, $setBlocksType } from "@lexical/selection";
 import { $createHeadingNode, $createQuoteNode, type HeadingTagType } from "@lexical/rich-text";
 import { $createCodeNode } from "@lexical/code";
@@ -95,9 +95,11 @@ function emptySnapshot(): MenuSnapshot {
 
 /* ---------- AI prompting ---------- */
 
-/** The reply becomes the replacement for the selected text: no preamble, no
- *  commentary afterwards. */
-const AI_TRANSFORM_SYSTEM = `You are a document assistant. The user supplies the text they selected plus their request for it (rewrite, shorten, translate, rephrase, fix, make it more formal, …).\
+/** The selection arrives as Markdown, so the model sees its real structure
+ *  (headings, lists, tables, …); the reply must be Markdown too, preserving
+ *  that structure, and becomes the replacement for the selected text. */
+const AI_TRANSFORM_SYSTEM = `You are a document assistant. The user supplies the text they selected as Markdown — its structure (headings, lists, tables, quotes, emphasis) reflects the document — plus their request for it (rewrite, shorten, translate, rephrase, fix, make it more formal, …).\
+Return your answer as Markdown and preserve the structure of the selection (headings, lists, tables, formatting) unless the request explicitly asks to change it. \
 Produce ONLY the replacement content for the selection. Do not add a single sentence, comment or explanation outside of that replacement. Keep the same language and format of the selection unless asked otherwise.`;
 
 /** Plain answer appended to the end of the document when there is no selection. */
@@ -576,13 +578,19 @@ function ContextMenuPanel({
     run(() => editor.dispatchCommand(TOGGLE_LINK_COMMAND, url));
   };
 
-  /* Captures the current selection (kept live so the menu stays usable while
-     the user writes a prompt) and switches the panel to the AI sub-view. */
+  /* Captures the current selection as Markdown (kept live so the menu stays
+     usable while the user writes a prompt) and switches the panel to the AI
+     sub-view. Converting the selection to Markdown keeps its structure —
+     headings, lists, tables — so the AI knows exactly what it is working
+     with. */
   const openAiMode = () => {
     const captured = editor.getEditorState().read(() => {
       const selection = $getSelection();
       if ($isRangeSelection(selection) && !selection.isCollapsed()) {
-        return { selection: selection.clone(), text: selection.getTextContent() };
+        return {
+          selection: selection.clone(),
+          text: $convertSelectionToMarkdownString(mdTransformers, selection),
+        };
       }
       return { selection: null, text: "" };
     });
@@ -635,7 +643,7 @@ function ContextMenuPanel({
               { role: "system", content: AI_TRANSFORM_SYSTEM },
               {
                 role: "user",
-                content: `Selected text:\n"""\n${selectionText}\n"""\n\nMy request: ${prompt}`,
+                content: `Selected text (Markdown):\n"""\n${selectionText}\n"""\n\nMy request: ${prompt}`,
               },
             ]
           : [

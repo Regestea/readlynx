@@ -4,11 +4,11 @@ import { Header } from "./layout/Header/Header";
 import { Sidebar } from "./layout/Sidebar/Sidebar";
 import { HomePage } from "../features/home/HomePage";
 import { SettingsPage } from "../features/settings/SettingsPage";
+import { BackupPage } from "../features/backup/BackupPage";
 import { CreateBookPage } from "../features/create/CreateBookPage";
 import type { CreateBookDetails } from "../features/home/components/CreateBookDialog";
 import { ReadingPage } from "../features/reading/ReadingPage";
 import type { BookListItem } from "../infrastructure/db/entities/types";
-import { Quote } from "../features/home/widgets/Quote/Quote";
 import { ReadingProgress } from "../features/home/widgets/ReadingProgress/ReadingProgress";
 import { WeeklyStats } from "../features/home/widgets/WeeklyStats/WeeklyStats";
 import { getCloseFlush } from "../shared/closeFlush";
@@ -145,13 +145,13 @@ export default function App() {
               }}
             />
           )}
+          {activeId === "backup" && <BackupPage />}
           {activeId === "settings" && <SettingsPage />}
         </div>
 
         {isHome && (
           <aside className={styles.panel} aria-label="Reading overview">
             <ReadingProgress />
-            <Quote />
             <WeeklyStats />
           </aside>
         )}

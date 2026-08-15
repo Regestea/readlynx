@@ -285,22 +285,30 @@ const handlers: Record<string, (payload: unknown) => unknown> = {
     customInstructions.remove(payload as string);
     return true;
   },
+  /** Writes a consistent snapshot of the live database (WAL included) to a
+   *  new file — safe to run while the connection is open. */
+  "backup-db": async (payload) => {
+    await db.backup(payload as string);
+    return true;
+  },
 };
 
 port.on("message", (request: DbRequest) => {
   const respond = (response: DbResponse) => port.postMessage(response);
-  try {
-    const handler = handlers[request.op];
-    if (!handler) {
-      respond({ id: request.id, ok: false, error: `Unknown db operation: ${request.op}` });
-      return;
-    }
-    respond({ id: request.id, ok: true, result: handler(request.payload) });
-  } catch (error) {
-    respond({
-      id: request.id,
-      ok: false,
-      error: error instanceof Error ? (error.stack ?? error.message) : String(error),
+  Promise.resolve()
+    .then(() => {
+      const handler = handlers[request.op];
+      if (!handler) {
+        throw new Error(`Unknown db operation: ${request.op}`);
+      }
+      return handler(request.payload);
+    })
+    .then((result) => respond({ id: request.id, ok: true, result }))
+    .catch((error) => {
+      respond({
+        id: request.id,
+        ok: false,
+        error: error instanceof Error ? (error.stack ?? error.message) : String(error),
+      });
     });
-  }
 });

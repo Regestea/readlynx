@@ -62,6 +62,12 @@ interface PdfViewerProps {
   ocrEnabled?: boolean;
   /** Called with the text recognized from the current page. */
   onOcrText?: (text: string) => void;
+  /** When provided, the extract panel offers an "AI vision" mode: the page
+   *  image is handed to the host, which sends it to the AI and returns the
+   *  extracted Markdown (already inserted into the editor). No language
+   *  selection is offered in this mode — the model detects the language.
+   *  The payload carries the user's optional extraction instructions. */
+  onAiVision?: (payload: { image: string; instruction: string }) => Promise<string>;
   /** When provided, clicking the page shows an "Ask AI" bubble at the cursor;
    *  clicking the bubble hands a PNG of the current page to the host, which
    *  decides between OCR and AI vision. */
@@ -95,6 +101,7 @@ function PdfViewerInner({
   onPageSnapshot,
   ocrEnabled = false,
   onOcrText,
+  onAiVision,
   onAskAi,
   initialPage,
   ref,
@@ -114,12 +121,16 @@ function PdfViewerInner({
   const renderGenerationRef = useRef(0);
   const onReadyRef = useRef(onReady);
   const onOcrTextRef = useRef(onOcrText);
+  const onAiVisionRef = useRef(onAiVision);
   const onPageSnapshotRef = useRef(onPageSnapshot);
   const onPageChangeRef = useRef(onPageChange);
   const readyRef = useRef(false);
   const snapshottedRef = useRef(false);
 
   const [ocrOpen, setOcrOpen] = useState(false);
+  const [extractMode, setExtractMode] = useState<"ocr" | "vision">("ocr");
+  const [visionInstruction, setVisionInstruction] = useState("");
+  const visionInstructionRef = useRef(visionInstruction);
   const [selectedLangs, setSelectedLangs] = useState<string[]>(["eng"]);
   const [installed, setInstalled] = useState<string[]>([]);
   const [downloading, setDownloading] = useState<string | null>(null);
@@ -139,7 +150,7 @@ function PdfViewerInner({
   const annotationLayerTaskRef = useRef<AnnotationLayer | null>(null);
   const themeWrapRef = useRef<HTMLSpanElement>(null);
 
-  const showOcr = ocrEnabled || Boolean(onOcrText);
+  const showOcr = ocrEnabled || Boolean(onOcrText) || Boolean(onAiVision);
   const { state: pdfTheme } = usePdfTheme();
 
   /** The subset of pdf.js's PDFLinkService the annotation layer touches. This
@@ -202,6 +213,14 @@ function PdfViewerInner({
   useEffect(() => {
     onOcrTextRef.current = onOcrText;
   }, [onOcrText]);
+
+  useEffect(() => {
+    onAiVisionRef.current = onAiVision;
+  }, [onAiVision]);
+
+  useEffect(() => {
+    visionInstructionRef.current = visionInstruction;
+  }, [visionInstruction]);
 
   useEffect(() => {
     onPageChangeRef.current = onPageChange;
@@ -326,6 +345,44 @@ function PdfViewerInner({
       setExtracting(false);
     }
   }, [selectedLangs]);
+
+  /** AI vision extraction: hands the rendered page to the host's AI call
+   *  and reports the outcome. The host inserts the returned Markdown into
+   *  the editor itself; this handler only drives the panel's busy state,
+   *  status line and closing. */
+  const handleVisionExtract = useCallback(async () => {
+    const canvas = canvasRef.current;
+    if (!canvas) {
+      setOcrStatus("The page is still loading.");
+      return;
+    }
+    const onAiVision = onAiVisionRef.current;
+    if (!onAiVision) return;
+    extractingRef.current = true;
+    setExtracting(true);
+    setOcrStatus("Sending the page to AI vision…");
+    try {
+      const dataUrl = canvas.toDataURL("image/png");
+      const markdown = await onAiVision({
+        image: dataUrl,
+        instruction: visionInstructionRef.current,
+      });
+      const trimmed = (markdown ?? "").trim();
+      if (!trimmed) {
+        setOcrStatus("The AI returned no text for this page.");
+      } else {
+        setOcrStatus(
+          `${trimmed.length.toLocaleString()} characters extracted and added to the editor.`,
+        );
+        setOcrOpen(false);
+      }
+    } catch (err) {
+      setOcrStatus(err instanceof Error ? err.message : String(err));
+    } finally {
+      extractingRef.current = false;
+      setExtracting(false);
+    }
+  }, []);
 
   const handleOcrToggle = useCallback(() => {
     setOcrOpen((open) => !open);
@@ -699,9 +756,13 @@ const task = pageProxy.render({ canvas, viewport, transform });
             downloadProgress={downloadProgress}
             onDownload={handleDownload}
             onDelete={handleDelete}
-            onExtract={handleExtract}
+            onExtract={extractMode === "vision" ? handleVisionExtract : handleExtract}
             extracting={extracting}
             status={ocrStatus}
+            mode={extractMode}
+            onModeChange={onAiVision ? setExtractMode : undefined}
+            instruction={visionInstruction}
+            onInstructionChange={onAiVision ? setVisionInstruction : undefined}
             onClose={() => setOcrOpen(false)}
           />
         )}

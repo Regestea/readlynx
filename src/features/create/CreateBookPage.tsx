@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AlignJustify, ArrowLeft, BookOpen, ChevronDown, ChevronUp, Columns2, FileText, GripVertical, PanelLeft, PanelRight, Search, X, ZoomIn, ZoomOut } from "lucide-react";
+import { AlignJustify, ArrowLeft, BookOpen, ChevronDown, ChevronUp, Columns2, FileText, GripVertical, PanelLeft, PanelRight, Save, Search, X, ZoomIn, ZoomOut } from "lucide-react";
 import { DocumentEditor } from "./documentEditor";
 import { PdfViewer } from "../../components/pdfViewer/PdfViewer";
 import { EpubViewer } from "../../components/epubViewer/EpubViewer";
 import { ocrTextToMarkdown } from "../../infrastructure/ocr/ocrToMarkdown";
+import { useDefaultAiModel } from "../../infrastructure/ai/useDefaultAiModel";
+import { resolveProviderBaseUrl } from "../../infrastructure/ai/modelResolver";
 import { Button } from "../../components/ui/Button/Button";
 import { Select } from "../../components/ui/Select/Select";
 import type { EditorAPI } from "./documentEditor/types";
@@ -13,6 +15,32 @@ import type { PageFormat, PageMargins } from "../../shared/document/pageGeometry
 import type { BookSourceType, SaveDocumentPayload } from "../../infrastructure/db/entities/types";
 import { useCloseFlush } from "../../shared/closeFlush";
 import styles from "./CreateBookPage.module.css";
+
+/** Auto-save cadence: while the toggle is on, the document is saved every
+ *  five minutes — but only when the editor actually changed since the last
+ *  save, so idle sessions never trigger pointless writes. */
+const AUTOSAVE_INTERVAL_MS = 5 * 60 * 1000;
+
+/** Vision-mode extraction prompt: the page image goes to the model, which
+ *  detects the language itself and returns the content as Markdown with its
+ *  structure preserved (headings, lists, tables, …). */
+const VISION_EXTRACT_SYSTEM_PROMPT = [
+  "You are the extraction engine of a document editor.",
+  "A screenshot of one page from a book is provided as an image.",
+  "Read and understand all visible text and visual structure on the image.",
+  "Transcribe the page faithfully and completely — do not translate the text, keep the original language.",
+  "Detect the language of the page yourself; the user will not tell you which language it is.",
+  "Return the content as Markdown whose structure mirrors the image as closely as possible: use headings for the titles, tables for tabular content, lists for bulleted items, block quotes for quoted passages, and so on — whatever the image shows, represent it with the matching Markdown element.",
+  "Match heading levels to the visual hierarchy of the page: the biggest title is the top heading, smaller titles become subheadings.",
+  "Keep the order and grouping of the page exactly as they appear on the image.",
+  "Ignore layout line wrapping: lines that break only because the text does not fit the column width are NOT separate paragraphs — join them into flowing paragraphs. Only break a paragraph where the page itself shows a real break (an indent, an extra gap, a new paragraph, a list item, a heading).",
+  "Do not insert line breaks at the end of every visual line; paragraphs should read naturally, as if typed in a document editor.",
+  "Do not invent text that is not visible on the page.",
+  "Output rules:",
+  "- Return Markdown only.",
+  "- Do not wrap the whole response in a single code fence.",
+  "- Do not add any commentary outside the extracted content.",
+].join("\n");
 
 interface CreateBookPageProps {
   onBack?: () => void;
@@ -47,6 +75,8 @@ export function CreateBookPage({
   onSplitChange,
 }: CreateBookPageProps) {
   const apiRef = useRef<EditorAPI | null>(null);
+  const { model: defaultAiModel } = useDefaultAiModel();
+  const defaultAiModelRef = useRef(defaultAiModel);
   const [title, setTitle] = useState(initialTitle);
   const [coverImage, setCoverImage] = useState<string | null>(initialCover);
   const [initialState, setInitialState] = useState<string | undefined>(undefined);
@@ -65,6 +95,10 @@ export function CreateBookPage({
   const [sourceRatio, setSourceRatio] = useState(0.4);
   const [dragging, setDragging] = useState(false);
   const splitRef = useRef<HTMLDivElement>(null);
+  const [autoSave, setAutoSave] = useState(true);
+  /** True while the editor holds changes not yet written by the periodic
+   *  auto-save tick (set by the editor's `onChange`). */
+  const dirtyRef = useRef(false);
 
   const idsRef = useRef<{ bookId: string; documentId: string } | null>(null);
   const savedKeyRef = useRef("");
@@ -76,6 +110,10 @@ export function CreateBookPage({
    *  that already has content (the settings-sync effect can race the
    *  initial-content load microtask on open). */
   const contentLoadedRef = useRef(initialBookId == null);
+
+  useEffect(() => {
+    defaultAiModelRef.current = defaultAiModel;
+  }, [defaultAiModel]);
 
   useEffect(() => {
     onSplitChange?.(source != null && sourceMode === "split");
@@ -148,6 +186,12 @@ export function CreateBookPage({
     contentLoadedRef.current = true;
   }, []);
 
+  /** Any editor change (typing, formatting, insertions) flags the document as
+   *  dirty, so the next auto-save tick actually writes it. */
+  const handleEditorChange = useCallback(() => {
+    dirtyRef.current = true;
+  }, []);
+
   const buildPayload = useCallback(
     (json: string): Omit<SaveDocumentPayload, "bookId"> => ({
       title,
@@ -217,6 +261,20 @@ export function CreateBookPage({
     }
   };
 
+  /** Periodic save while auto-save is on. Ticks only write when the editor
+   *  was changed since the last save (the dirty flag) — a user who walked
+   *  away never causes a pointless save. */
+  useEffect(() => {
+    if (!autoSave) return;
+    const timer = window.setInterval(() => {
+      if (!dirtyRef.current) return;
+      void saveNow().then(() => {
+        dirtyRef.current = false;
+      });
+    }, AUTOSAVE_INTERVAL_MS);
+    return () => window.clearInterval(timer);
+  }, [autoSave, saveNow]);
+
   /** The app closing flushes the same pending save the back button would. */
   useCloseFlush(async () => {
     await saveNow();
@@ -229,6 +287,52 @@ export function CreateBookPage({
       if (!markdown) return;
       apiRef.current?.appendMarkdown(markdown);
       void saveNow();
+    },
+    [saveNow],
+  );
+
+  /** AI vision extraction: sends the current page image to the default AI
+   *  model, which transcribes the page (detecting the language itself) and
+   *  returns Markdown that keeps the layout structure — following the user's
+   *  optional instructions (structure preferences, notes, anything). The
+   *  returned text is appended to the editor and saved — the PDF viewer then
+   *  reports the outcome in the extract panel. */
+  const handleAiVision = useCallback(
+    async ({ image, instruction }: { image: string; instruction: string }): Promise<string> => {
+      const model = defaultAiModelRef.current;
+      if (!model) {
+        throw new Error("No AI model configured. Add one in Settings → AI Models.");
+      }
+      if (!model.APIKey || !model.ModelName) {
+        throw new Error(
+          "The default AI model is missing an API key or model name. Fix it in Settings → AI Models.",
+        );
+      }
+      const ai = window.readlynx?.ai;
+      if (!ai) throw new Error("The AI bridge is not available.");
+      const trimmedInstruction = instruction.trim();
+      const response = await ai.chat({
+        input: {
+          url: resolveProviderBaseUrl(model),
+          apiKey: model.APIKey,
+          modelName: model.ModelName,
+        },
+        messages: [
+          { role: "system", content: VISION_EXTRACT_SYSTEM_PROMPT },
+          {
+            role: "user",
+            content: trimmedInstruction
+              ? `Extract the text of the page in the image as Markdown, preserving its structure. Follow the user's instruction:\n\n${trimmedInstruction}`
+              : "Extract the text of the page in the image as Markdown, preserving its structure.",
+          },
+        ],
+        images: [image],
+      });
+      const markdown = (response ?? "").trim();
+      if (!markdown) throw new Error("The AI returned no text for this page.");
+      apiRef.current?.appendMarkdown(markdown);
+      void saveNow();
+      return markdown;
     },
     [saveNow],
   );
@@ -353,6 +457,21 @@ export function CreateBookPage({
           )}
         </div>
 
+        <button
+          type="button"
+          className={`${styles.autoSave} ${autoSave ? styles.autoSaveActive : ""}`}
+          aria-pressed={autoSave}
+          onClick={() => setAutoSave((value) => !value)}
+          title={
+            autoSave
+              ? "Auto-save is on — the document is saved every 5 minutes after changes"
+              : "Auto-save is off"
+          }
+        >
+          <Save size={15} strokeWidth={1.8} aria-hidden="true" />
+          Auto save {autoSave ? "On" : "Off"}
+        </button>
+
         <div className={styles.stats} aria-label="Book statistics">
           {layout === "paged" && (
             <span className={styles.stat}>
@@ -465,7 +584,13 @@ export function CreateBookPage({
               style={sourceMode === "split" ? { flex: `0 0 ${sourceRatio * 100}%` } : undefined}
             >
               {source.sourceType === "pdf" ? (
-                <PdfViewer filePath={source.filePath} fill fitWidth onOcrText={handleOcrText} />
+                <PdfViewer
+                  filePath={source.filePath}
+                  fill
+                  fitWidth
+                  onOcrText={handleOcrText}
+                  onAiVision={handleAiVision}
+                />
               ) : (
                 <EpubViewer filePath={source.filePath} fill onExtractPage={handleExtractEpubPage} />
               )}
@@ -499,6 +624,7 @@ export function CreateBookPage({
               initialState={initialState}
               defaultFontFamily={fontFamily}
               onDefaultFontFamilyChange={setFontFamily}
+              onChange={handleEditorChange}
               onSave={() => {
                 void saveNow();
               }}

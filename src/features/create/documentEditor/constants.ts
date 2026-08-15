@@ -43,7 +43,11 @@ export const HEADING_OPTIONS = [
 
 export const PLACEHOLDER_TEXT = "Start writing…";
 
-export const ZOOM_OPTIONS = [0.5, 0.75, 1, 1.25, 1.5] as const;
+/** Editor zoom steps: 5% increments from 50% to 150%. */
+export const ZOOM_OPTIONS: readonly number[] = Array.from(
+  { length: 21 },
+  (_, index) => 0.5 + index * 0.05,
+);
 
 /* ---------- Paged document (shared with export pipeline and create page) ---------- */
 

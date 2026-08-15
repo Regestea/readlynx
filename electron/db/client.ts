@@ -57,6 +57,12 @@ export class DbWorkerClient {
       for (const entry of this.pending.values()) entry.reject(error);
       this.pending.clear();
     });
+    this.worker.on("exit", () => {
+      for (const entry of this.pending.values()) {
+        entry.reject(new Error("The database worker stopped."));
+      }
+      this.pending.clear();
+    });
   }
 
   private exec<T>(op: string, payload?: unknown): Promise<T> {
@@ -214,6 +220,12 @@ export class DbWorkerClient {
 
   deleteCustomInstruction(id: string): Promise<boolean> {
     return this.exec("custom-instruction-delete", id);
+  }
+
+  /** Writes a consistent snapshot of the live database to `destinationPath`
+   *  (SQLite backup API — safe with an open WAL connection). */
+  createBackup(destinationPath: string): Promise<boolean> {
+    return this.exec("backup-db", destinationPath);
   }
 
   close(): void {

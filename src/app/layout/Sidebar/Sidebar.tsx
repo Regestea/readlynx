@@ -1,26 +1,17 @@
 import {
   BookOpen,
-  FolderOpen,
-  Heart,
+  DatabaseBackup,
   Home,
-  Library,
   Moon,
-  NotebookPen,
   Settings,
   Sun,
-  Users,
 } from "lucide-react";
 import { useTheme } from "../../providers/theme/ThemeContext";
 import styles from "./Sidebar.module.css";
 
 const NAV_ITEMS = [
   { id: "home", label: "Home", Icon: Home },
-  { id: "library", label: "Library", Icon: Library },
-  { id: "currently-reading", label: "Currently Reading", Icon: BookOpen },
-  { id: "favorites", label: "Favorites", Icon: Heart },
-  { id: "collections", label: "Collections", Icon: FolderOpen },
-  { id: "notes", label: "Notes", Icon: NotebookPen },
-  { id: "authors", label: "Authors", Icon: Users },
+  { id: "backup", label: "Backup & Restore", Icon: DatabaseBackup },
   { id: "settings", label: "Settings", Icon: Settings },
 ] as const;
 

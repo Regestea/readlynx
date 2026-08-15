@@ -18,6 +18,10 @@ contextBridge.exposeInMainWorld("readlynx", {
   pickFile: (options) => ipcRenderer.invoke("fs:pick-file", options),
   importSource: (options) => ipcRenderer.invoke("fs:import-source", options),
   captureRect: (rect) => ipcRenderer.invoke("fs:capture-rect", rect),
+  backup: {
+    create: () => ipcRenderer.invoke("backup:create"),
+    restore: () => ipcRenderer.invoke("backup:restore"),
+  },
   ocr: {
     getInfo: () => ipcRenderer.invoke("ocr:get-info"),
     downloadModel: (lang) => ipcRenderer.invoke("ocr:download-model", lang),
@@ -81,5 +85,8 @@ contextBridge.exposeInMainWorld("readlynx", {
     listGeminiModels: (apiKey) => ipcRenderer.invoke("ai:list-gemini-models", apiKey),
     chat: (payload) => ipcRenderer.invoke("ai:chat", payload),
     structured: (payload) => ipcRenderer.invoke("ai:structured", payload),
+  },
+  systemFonts: {
+    list: () => ipcRenderer.invoke("fonts:list"),
   },
 });

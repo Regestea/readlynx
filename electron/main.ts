@@ -2,11 +2,13 @@ import { app, BrowserWindow, ipcMain, protocol, session } from "electron";
 import path from "node:path";
 import { DbWorkerClient } from "./db/client.ts";
 import { registerAiIpc } from "./ipc/ai.ts";
+import { registerBackupIpc } from "./ipc/backup.ts";
 import { registerCoverProtocol, registerCoversIpc } from "./ipc/covers.ts";
 import { registerDbIpc } from "./ipc/db.ts";
 import { registerFsIpc } from "./ipc/fs.ts";
 import { registerOcrIpc, terminateOcrWorker } from "./ipc/ocr.ts";
 import { registerPdfExportIpc } from "./ipc/pdfExport.ts";
+import { registerSystemFontsIpc } from "./ipc/systemFonts.ts";
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -64,6 +66,21 @@ function createWindow() {
 }
 
 let dbClient: DbWorkerClient | null = null;
+let dbPath = "";
+
+/** Starts (or restarts, after a restore swapped the database file) the DB
+ *  worker and its IPC handlers. */
+function openDb() {
+  dbClient = new DbWorkerClient(dbPath);
+  registerDbIpc(dbClient);
+}
+
+/** Stops the DB worker and unregisters its IPC handlers, so the database
+ *  file can be replaced safely. */
+function closeDb() {
+  dbClient?.close();
+  dbClient = null;
+}
 
 app.whenReady().then(() => {
   registerCoverProtocol();
@@ -73,14 +90,20 @@ app.whenReady().then(() => {
   session.defaultSession.setPermissionCheckHandler((_webContents, permission) => {
     return (permission as string) === "font-access";
   });
-  const dbPath = path.join(app.getPath("userData"), "readlynx.db");
-  dbClient = new DbWorkerClient(dbPath);
-  registerDbIpc(dbClient);
+  dbPath = path.join(app.getPath("userData"), "readlynx.db");
+  openDb();
   registerFsIpc();
   registerOcrIpc();
   registerAiIpc();
+  registerSystemFontsIpc();
   registerPdfExportIpc();
   registerCoversIpc();
+  registerBackupIpc({
+    dbPath: () => dbPath,
+    getClient: () => dbClient,
+    closeDb,
+    openDb,
+  });
   createWindow();
 });
 

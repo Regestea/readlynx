@@ -49,6 +49,10 @@ declare global {
         width: number;
         height: number;
       }): Promise<string | null>;
+      backup: {
+        create(): Promise<{ ok: boolean; path?: string; error?: string } | null>;
+        restore(): Promise<{ ok: boolean; path?: string; error?: string } | null>;
+      };
       ocr: {
         getInfo(): Promise<{ dir: string; installed: string[] }>;
         downloadModel(lang: string): Promise<{
@@ -150,6 +154,11 @@ declare global {
             jsonSchema: Record<string, unknown>;
           };
         }): Promise<unknown>;
+      };
+      systemFonts: {
+        /** All font families installed on the OS (queried from the main
+         *  process — includes user-installed fonts). */
+        list(): Promise<string[]>;
       };
     };
   }
