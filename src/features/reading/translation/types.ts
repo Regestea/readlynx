@@ -17,19 +17,25 @@ export interface TranslationSettings {
   ocrLangs: string[];
   /** Target language code (shared by OCR and AI vision pipelines). */
   targetLang: string;
-  /** Id of the chosen AI model ("" = the app default model). */
-  modelId: string;
   /** Id of the chosen saved instruction ("" = no instruction). The prompt
    *  text itself lives in the `CustomInstructions` table and is resolved by
    *  id when a translation runs. */
   customPromptId: string;
+  /** Ordered AI model ids used for translation, in failover order: when a
+   *  request fails with the current model, the next one in the list retries
+   *  it. Empty = the app default model. */
+  modelIds: string[];
+  /** PDF pipeline ("ocr" = tesseract + AI, "vision" = AI reads the page
+   *  image directly); EPUB books always use `chapter`. */
+  pdfMethod: TranslationMethod;
 }
 
 export const DEFAULT_TRANSLATION_SETTINGS: TranslationSettings = {
   ocrLangs: ["eng"],
   targetLang: "en",
-  modelId: "",
+  modelIds: [],
   customPromptId: "",
+  pdfMethod: "ocr",
 };
 
 /** Identifies the unit of content currently on screen: `pdf:<page>` or

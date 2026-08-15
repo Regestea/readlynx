@@ -28,6 +28,11 @@ const ZOOM_MAX = 3;
 export interface PdfViewerHandle {
   /** PNG data URL of the currently rendered page, or null while unavailable. */
   getCurrentPageImage(): string | null;
+  /** PNG data URL of an arbitrary page rendered offscreen at a fixed
+   *  resolution, or null when the document or page is unavailable. */
+  getPageImage(page: number): Promise<string | null>;
+  /** Jumps to a page (clamped to the document bounds). */
+  goToPage(page: number): void;
   /** Total page count of the loaded document (0 before it loads). */
   getPageCount(): number;
 }
@@ -44,7 +49,8 @@ interface PdfViewerProps {
   fit?: boolean;
   /** Scale the first page to fit the container width (source-pane reading). */
   fitWidth?: boolean;
-  /** Called once the first page has been painted. */
+  /** Called once the first page has been painted (the page the document
+   *  resumes at when `initialPage` is set). */
   onReady?: () => void;
   /** Called whenever the displayed page changes (after load and on turn). */
   onPageChange?: (page: number) => void;
@@ -103,6 +109,7 @@ function PdfViewerInner({
   const scrollRef = useRef<HTMLDivElement>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);
   const loadTaskRef = useRef<PDFDocumentLoadingTask | null>(null);
+  const docRef = useRef<PDFDocumentProxy | null>(null);
   const renderTaskRef = useRef<RenderTask | null>(null);
   const renderGenerationRef = useRef(0);
   const onReadyRef = useRef(onReady);
@@ -158,7 +165,33 @@ function PdfViewerInner({
 
   useImperativeHandle(ref, () => ({
     getCurrentPageImage: () => canvasRef.current?.toDataURL("image/png") ?? null,
+    getPageImage: async (page: number) => {
+      const pdf = docRef.current;
+      if (!pdf) return null;
+      try {
+        const pageProxy = await pdf.getPage(page);
+        const base = pageProxy.getViewport({ scale: 1 });
+        // Fixed quality target (≈ the cover snapshot resolution), so range
+        // translation reads well even when the on-screen page is tiny.
+        const snapshotScale = 1240 / base.width;
+        const viewport = pageProxy.getViewport({ scale: snapshotScale });
+        const snap = document.createElement("canvas");
+        snap.width = Math.floor(viewport.width);
+        snap.height = Math.floor(viewport.height);
+        const snapCtx = snap.getContext("2d");
+        if (!snapCtx) return null;
+        await pageProxy.render({ canvas: snap, viewport }).promise;
+        return snap.toDataURL("image/png");
+      } catch {
+        return null;
+      }
+    },
     getPageCount: () => numPages,
+    goToPage: (page: number) => {
+      const pdf = docRef.current;
+      if (!pdf) return;
+      setPageNumber(Math.min(Math.max(1, page), pdf.numPages));
+    },
   }));
 
   const refreshModels = useCallback(async () => {
@@ -351,11 +384,13 @@ function PdfViewerInner({
     const load = async () => {
       try {
         setDoc(null);
+        docRef.current = null;
         setError(null);
         setPageNumber(1);
         setNumPages(0);
         setRendering(true);
         snapshottedRef.current = false;
+        readyRef.current = false;
 
         const data = await window.readlynx?.readFileBytes(filePath);
         if (!data) {
@@ -372,6 +407,7 @@ function PdfViewerInner({
         }
 
         setDoc(nextDoc);
+        docRef.current = nextDoc;
         setNumPages(nextDoc.numPages);
         // Resume reading where the user left off: jump to the saved page.
         if (initialPage !== undefined && initialPage > 1) {
@@ -405,6 +441,7 @@ function PdfViewerInner({
 
     return () => {
       cancelled = true;
+      docRef.current = null;
       renderTaskRef.current?.cancel();
       textLayerTaskRef.current?.cancel();
       annotationLayerTaskRef.current?.destroy();
@@ -446,7 +483,7 @@ function PdfViewerInner({
 const task = pageProxy.render({ canvas, viewport, transform });
         renderTaskRef.current = task;
         await task.promise;
-        if (page === 1 && !readyRef.current) {
+        if (!readyRef.current) {
           readyRef.current = true;
           onReadyRef.current?.();
         }

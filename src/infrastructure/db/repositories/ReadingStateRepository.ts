@@ -1,6 +1,7 @@
 import type Database from "better-sqlite3";
 import type { ReadingStateEntity } from "../entities/index.ts";
 import type { ReadingDayBucket, ReadingProgressRow, ReadingWeekSummary } from "../entities/types.ts";
+import type { TranslationMethod } from "../entities/Translation.ts";
 
 const DEFAULT_OCR_LANGS = ["eng"];
 const DEFAULT_GOAL_MINUTES = 30;
@@ -32,6 +33,11 @@ export interface ReadingStateInput {
   modelId?: string;
   /** Chosen saved instruction id ("" = no instruction). */
   customPromptId?: string;
+  /** PDF translation pipeline ("ocr" / "vision"); EPUB books keep "ocr". */
+  pdfMethod?: TranslationMethod;
+  /** Ordered AI model ids for translation, in failover order (empty = app
+   *  default). */
+  modelIds?: string[];
   /** Total pages of the source PDF — set once the document loads. */
   totalPages?: number;
   /** Total chapters of the source EPUB — set once the book loads. */
@@ -52,6 +58,19 @@ function parseOcrLangs(value: string): string[] {
   return DEFAULT_OCR_LANGS;
 }
 
+function parseModelIds(value: string | null | undefined): string[] {
+  if (!value) return [];
+  try {
+    const parsed: unknown = JSON.parse(value);
+    if (Array.isArray(parsed) && parsed.every((entry) => typeof entry === "string")) {
+      return parsed as string[];
+    }
+  } catch {
+    // fall through to empty
+  }
+  return [];
+}
+
 /** Row store for the `ReadingState` table (one per book). */
 export class ReadingStateRepository {
   private readonly db: Database.Database;
@@ -64,10 +83,13 @@ export class ReadingStateRepository {
     const row = this.db
       .prepare("SELECT * FROM ReadingState WHERE bookId = ?")
       .get(bookId) as
-      | (Omit<ReadingStateEntity, "ocrLangs"> & { ocrLangs: string })
+      | (Omit<ReadingStateEntity, "ocrLangs" | "modelIds"> & {
+          ocrLangs: string;
+          modelIds: string;
+        })
       | undefined;
     if (!row) return undefined;
-    return { ...row, ocrLangs: parseOcrLangs(row.ocrLangs) };
+    return { ...row, ocrLangs: parseOcrLangs(row.ocrLangs), modelIds: parseModelIds(row.modelIds) };
   }
 
   /** Inserts a row (with defaults) or updates only the provided columns,
@@ -77,7 +99,7 @@ export class ReadingStateRepository {
       .prepare(
         `INSERT INTO ReadingState (
            bookId, currentPage, currentChapter, ocrLangs, sourceLang,
-           targetLang, modelId, customPromptId, totalPages, totalChapters,
+           targetLang, modelId, customPromptId, pdfMethod, modelIds, totalPages, totalChapters,
            progressPercent, updatedAt
          ) VALUES (
            @bookId,
@@ -88,6 +110,8 @@ export class ReadingStateRepository {
            COALESCE(@targetLang, 'English'),
            COALESCE(@modelId, ''),
            COALESCE(@customPromptId, ''),
+           COALESCE(@pdfMethod, 'ocr'),
+           COALESCE(@modelIds, '[]'),
            COALESCE(@totalPages, 0),
            COALESCE(@totalChapters, 0),
            COALESCE(@progressPercent, 0),
@@ -101,6 +125,8 @@ export class ReadingStateRepository {
            targetLang     = COALESCE(@targetLang,     ReadingState.targetLang),
            modelId        = COALESCE(@modelId,        ReadingState.modelId),
            customPromptId = COALESCE(@customPromptId, ReadingState.customPromptId),
+           pdfMethod      = COALESCE(@pdfMethod,      ReadingState.pdfMethod),
+           modelIds       = COALESCE(@modelIds,       ReadingState.modelIds),
            totalPages     = COALESCE(@totalPages,     ReadingState.totalPages),
            totalChapters  = COALESCE(@totalChapters,  ReadingState.totalChapters),
            progressPercent = COALESCE(@progressPercent, ReadingState.progressPercent),
@@ -115,6 +141,8 @@ export class ReadingStateRepository {
         targetLang: state.targetLang ?? null,
         modelId: state.modelId ?? null,
         customPromptId: state.customPromptId ?? null,
+        pdfMethod: state.pdfMethod ?? null,
+        modelIds: state.modelIds !== undefined ? JSON.stringify(state.modelIds) : null,
         totalPages: state.totalPages ?? null,
         totalChapters: state.totalChapters ?? null,
         progressPercent: state.progressPercent ?? null,

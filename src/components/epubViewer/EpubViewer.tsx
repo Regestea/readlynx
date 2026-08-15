@@ -279,6 +279,8 @@ export interface EpubViewerHandle {
   getCurrentChapterExtraction(): EpubExtraction | null;
   /** Total spine chapters of the loaded book (0 before it loads). */
   getChapterCount(): number;
+  /** Jumps to a spine chapter by index (clamped to the book bounds). */
+  goToChapter(index: number): void;
 }
 
 export function EpubViewer({
@@ -400,6 +402,13 @@ export function EpubViewer({
     // `spineItems` exists at runtime but is missing from epubjs's typings.
     getChapterCount: () =>
       (bookRef.current?.spine as { spineItems?: unknown[] } | undefined)?.spineItems?.length ?? 0,
+    goToChapter: (index: number) => {
+      const rendition = renditionRef.current;
+      const count = (bookRef.current?.spine as { spineItems?: unknown[] } | undefined)?.spineItems
+        ?.length;
+      if (!rendition || !count) return;
+      void rendition.display(Math.min(Math.max(0, index), count - 1));
+    },
   }));
 
   /** Exits the in-page fullscreen overlay with Escape. */

@@ -145,6 +145,9 @@ interface MarkdownProps {
   /** When provided, a floating "Ask AI" bubble appears next to text
    *  selections and hands the selected text to the host. */
   onAskAi?: (text: string) => void;
+  /** Extra controls rendered at the start of the reader toolbar — e.g. the
+   *  reading view's page/chapter indicator and prev/next navigation. */
+  toolbarExtra?: ReactNode;
 }
 
 /* ---------- RTL helpers ---------- */
@@ -455,6 +458,7 @@ export function Markdown({
   rawHtml = true,
   settingsBookId,
   onAskAi,
+  toolbarExtra,
 }: MarkdownProps) {
   const {
     zoomPct,
@@ -657,6 +661,8 @@ export function Markdown({
       <div ref={hostRef} className={classes} style={hostStyle} aria-label="Markdown document">
         {toolbar && (
           <div className={styles.toolbar} role="toolbar" aria-label="Markdown reader controls">
+            {toolbarExtra}
+            {toolbarExtra && <span className={styles.divider} aria-hidden="true" />}
             <button
               type="button"
               className={styles.toolButton}

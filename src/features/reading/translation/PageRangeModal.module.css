@@ -1,0 +1,114 @@
+.hint {
+  margin: 0 0 var(--space-3);
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
+  color: var(--color-text-secondary);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.fieldHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.fieldLabel {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-muted);
+}
+
+.value {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.sliderArea {
+  position: relative;
+  height: 20px;
+}
+
+.track {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 4px;
+  transform: translateY(-50%);
+  border-radius: var(--radius-full);
+  background: var(--color-border);
+}
+
+.trackHighlight {
+  position: absolute;
+  top: 50%;
+  height: 4px;
+  transform: translateY(-50%);
+  border-radius: var(--radius-full);
+  background: var(--color-primary);
+}
+
+.slider {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  pointer-events: none;
+}
+
+.slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  pointer-events: auto;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid var(--color-bg-secondary, #ffffff);
+  background: var(--color-primary);
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+}
+
+.slider:disabled::-webkit-slider-thumb {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.pageCount {
+  margin: var(--space-2) 0 0;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.footerButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 var(--space-4);
+  font-size: var(--font-size-sm);
+  white-space: nowrap;
+}
+
+.spinner {
+  animation: page-range-spin 0.9s linear infinite;
+}
+
+@keyframes page-range-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

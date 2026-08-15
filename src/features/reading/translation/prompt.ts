@@ -1,5 +1,5 @@
 import type { TranslationDocType } from "./types.ts";
-import { languageLabel } from "./languages.ts";
+import { NO_LANGUAGE, languageLabel } from "./languages.ts";
 
 export interface TranslationPromptContext {
   docType: TranslationDocType;
@@ -24,15 +24,27 @@ export function buildTranslationSystemPrompt(
     context: TranslationPromptContext,
 ): string {
   const target = languageLabel(context.targetLang);
+  const noTarget = context.targetLang === NO_LANGUAGE;
 
   const lines = [
     "You are the translation engine of a reading app.",
-    `Translate the source content into ${target}.`,
+    noTarget
+      ? "Process the source content in its original language. Do not translate it into another language."
+      : `Translate the source content into ${target}.`,
     "Detect the source language automatically from the actual content. Do not assume a source language in advance.",
     "Translate faithfully and naturally while preserving the meaning, context, terminology, and important details of the source.",
     "Do not invent information that is not present in the source.",
     "Do not summarize, shorten, or omit content unless the user's instruction explicitly asks you to do so.",
+  ];
 
+  if (!noTarget) {
+    lines.push(
+        `The ENTIRE output must be written in ${target}: every word, including headings, paragraphs, lists, table cells, captions, notes, and alt text. Do not leave any part of the source untranslated, and do not mix in words or phrases from the source language. Returning the source text unchanged, or a partially translated mixture, is a failure.`,
+        `Before finishing, re-read your output and verify that every sentence is written in ${target}; fix any leftover source-language text.`,
+    );
+  }
+
+  lines.push(
     "Output rules:",
     "- Return Markdown only.",
     "- Do not wrap the whole response in a single code fence.",
@@ -72,7 +84,7 @@ export function buildTranslationSystemPrompt(
     '    "B" : 35',
     '    "C" : 25',
     "```",
-  ];
+  );
 
   if (context.docType === "PDF image") {
     lines.push(
@@ -96,7 +108,9 @@ export function buildTranslationSystemPrompt(
   }
 
   lines.push(
-      "The user may provide an additional instruction describing how they want the content processed, such as summarization, simplification, explanation, restructuring, tone, or level of detail. Follow that instruction as part of the requested transformation while still using the application-provided target language and preserving valid Markdown output.",
+      noTarget
+        ? "The user may provide an additional instruction describing how they want the content processed, such as summarization, simplification, explanation, restructuring, tone, or level of detail. Follow that instruction as part of the requested transformation while keeping the content in its original language and preserving valid Markdown output."
+        : "The user may provide an additional instruction describing how they want the content processed, such as summarization, simplification, explanation, restructuring, tone, or level of detail. Follow that instruction as part of the requested transformation while still using the application-provided target language and preserving valid Markdown output.",
   );
 
   return lines.join("\n");

@@ -64,6 +64,97 @@
   white-space: nowrap;
 }
 
+.modelPanel {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 30;
+  width: 320px;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-medium);
+  background: var(--color-bg);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+
+.modelPanelHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-bg-secondary);
+}
+
+.modelPanelTitle {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+}
+
+.modelClose {
+  width: 26px;
+  height: 26px;
+}
+
+.modelHint {
+  margin: 0;
+  padding: var(--space-3) var(--space-3) var(--space-2);
+  font-size: var(--font-size-xs);
+  line-height: 1.45;
+  color: var(--color-text-secondary);
+}
+
+.modelList {
+  margin: 0;
+  padding: 0 0 var(--space-2);
+  list-style: none;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.modelRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px var(--space-3);
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.modelRow:hover {
+  background: var(--color-hover);
+}
+
+.modelBadge {
+  display: inline-grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  border-radius: var(--radius-full);
+  background: var(--color-primary);
+  color: var(--color-bg);
+  font-size: 11px;
+  font-weight: var(--font-weight-semibold);
+}
+
+.modelName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.modelTag {
+  margin-left: auto;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
 .statusText {
   max-width: 220px;
   overflow: hidden;
@@ -71,6 +162,42 @@
   white-space: nowrap;
   font-size: var(--font-size-xs);
   color: var(--color-text-muted);
+}
+
+.busyWrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.busyText {
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+.progressText {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-size-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-secondary);
+}
+
+.cancelButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 30px;
+  padding: 0 var(--space-2);
+  font-size: var(--font-size-xs);
+  white-space: nowrap;
 }
 
 .errorText {

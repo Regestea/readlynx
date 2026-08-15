@@ -18,6 +18,13 @@ export interface ReadingStateEntity {
   modelId: string;
   /** Chosen saved instruction id ("" = no instruction). */
   customPromptId: string;
+  /** PDF translation pipeline ("ocr" = tesseract + AI, "vision" = AI
+   *  reads the page image directly). Irrelevant for EPUB books. */
+  pdfMethod: "ocr" | "vision";
+  /** Ordered AI model ids used for translation, in failover order (the next
+   *  one takes over when the previous fails; empty = app default). The
+   *  legacy single-choice `modelId` column still exists for old readers. */
+  modelIds: string[];
   /** Total pages of the source PDF (0 until the document is opened). */
   totalPages: number;
   /** Total chapters of the source EPUB (0 until the book is opened). */

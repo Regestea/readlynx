@@ -47,6 +47,8 @@ CREATE TABLE IF NOT EXISTS ReadingState (
   targetLang     TEXT NOT NULL DEFAULT 'English',
   modelId        TEXT NOT NULL DEFAULT '',
   customPromptId TEXT NOT NULL DEFAULT '',
+  pdfMethod      TEXT NOT NULL DEFAULT 'ocr',
+  modelIds       TEXT NOT NULL DEFAULT '[]',
   totalPages     INTEGER NOT NULL DEFAULT 0,
   totalChapters  INTEGER NOT NULL DEFAULT 0,
   progressPercent REAL NOT NULL DEFAULT 0,
@@ -154,6 +156,8 @@ export function applySchema(db: Database.Database): void {
     // The settings columns must exist before `ensureCascadeForeignKeys`
     // rebuilds `ReadingState` (its data copy selects them).
     ensureReadingStateSettingsColumns(db);
+    ensureReadingStatePdfMethodColumn(db);
+    ensureReadingStateModelIdsColumn(db);
     ensureCascadeForeignKeys(db);
     ensureReadingStateV2(db);
     ensureReadingStateStatsColumns(db);
@@ -218,6 +222,8 @@ function ensureCascadeForeignKeys(db: Database.Database): void {
         targetLang     TEXT NOT NULL DEFAULT 'English',
         modelId        TEXT NOT NULL DEFAULT '',
         customPromptId TEXT NOT NULL DEFAULT '',
+        pdfMethod      TEXT NOT NULL DEFAULT 'ocr',
+        modelIds       TEXT NOT NULL DEFAULT '[]',
         totalPages     INTEGER NOT NULL DEFAULT 0,
         totalChapters  INTEGER NOT NULL DEFAULT 0,
         progressPercent REAL NOT NULL DEFAULT 0,
@@ -227,10 +233,10 @@ function ensureCascadeForeignKeys(db: Database.Database): void {
       );
       INSERT INTO ReadingState_new (
         bookId, currentPage, ocrLangs, sourceLang, targetLang,
-        modelId, customPromptId, updatedAt
+        modelId, customPromptId, pdfMethod, modelIds, updatedAt
       )
         SELECT bookId, currentPage, ocrLangs, sourceLang, targetLang,
-               modelId, customPromptId, updatedAt
+               modelId, customPromptId, pdfMethod, modelIds, updatedAt
         FROM ReadingState;
       DROP TABLE ReadingState;
       ALTER TABLE ReadingState_new RENAME TO ReadingState;
@@ -303,6 +309,26 @@ function ensureReadingStateSettingsColumns(db: Database.Database): void {
   addColumn("customPromptId", "TEXT NOT NULL DEFAULT ''");
 }
 
+/** Databases created before the PDF pipeline choice existed lack the
+ *  `pdfMethod` column on `ReadingState`. Adds it with the default; existing
+ *  rows keep their saved settings. Runs before the `ReadingState` rebuilds
+ *  so their data copy carries the column over. */
+function ensureReadingStatePdfMethodColumn(db: Database.Database): void {
+  const columns = db.pragma("table_info(ReadingState)") as Array<{ name: string }>;
+  if (columns.some((entry) => entry.name === "pdfMethod")) return;
+  db.exec("ALTER TABLE ReadingState ADD COLUMN pdfMethod TEXT NOT NULL DEFAULT 'ocr'");
+}
+
+/** Databases created before the ordered multi-model fallback existed lack
+ *  the `modelIds` column on `ReadingState` (JSON array of model ids, in
+ *  failover order; empty = app default). Adds it with the default; the
+ *  legacy `modelId` column keeps the single choice for old readers. */
+function ensureReadingStateModelIdsColumn(db: Database.Database): void {
+  const columns = db.pragma("table_info(ReadingState)") as Array<{ name: string }>;
+  if (columns.some((entry) => entry.name === "modelIds")) return;
+  db.exec("ALTER TABLE ReadingState ADD COLUMN modelIds TEXT NOT NULL DEFAULT '[]'");
+}
+
 /** Databases created before the v2 `ReadingState` schema carry the removed
  *  `scrollPosition` / `customPrompt` columns and lack `currentChapter` /
  *  `lastOpenedAt`. Rebuilds the table to the final shape; the position and
@@ -324,6 +350,8 @@ function ensureReadingStateV2(db: Database.Database): void {
         targetLang     TEXT NOT NULL DEFAULT 'English',
         modelId        TEXT NOT NULL DEFAULT '',
         customPromptId TEXT NOT NULL DEFAULT '',
+        pdfMethod      TEXT NOT NULL DEFAULT 'ocr',
+        modelIds       TEXT NOT NULL DEFAULT '[]',
         totalPages     INTEGER NOT NULL DEFAULT 0,
         totalChapters  INTEGER NOT NULL DEFAULT 0,
         progressPercent REAL NOT NULL DEFAULT 0,
@@ -333,10 +361,10 @@ function ensureReadingStateV2(db: Database.Database): void {
       );
       INSERT INTO ReadingState_new (
         bookId, currentPage, ocrLangs, sourceLang, targetLang,
-        modelId, customPromptId, updatedAt
+        modelId, customPromptId, pdfMethod, modelIds, updatedAt
       )
         SELECT bookId, currentPage, ocrLangs, sourceLang, targetLang,
-               modelId, customPromptId, updatedAt
+               modelId, customPromptId, pdfMethod, modelIds, updatedAt
         FROM ReadingState;
       DROP TABLE ReadingState;
       ALTER TABLE ReadingState_new RENAME TO ReadingState;

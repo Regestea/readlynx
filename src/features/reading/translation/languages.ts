@@ -9,6 +9,11 @@ export interface TranslationLanguage {
 /** Source-language value that tells the model to detect the language itself. */
 export const AUTO_LANGUAGE = "auto";
 
+/** Target-language value meaning "no translation": the content is processed
+ *  in its original language (used together with custom instructions such as
+ *  summarization). */
+export const NO_LANGUAGE = "none";
+
 /** Languages the AI can translate from/to (human-readable names are sent to
  *  the model; the codes are only used to remember the user's choice). */
 export const TRANSLATION_LANGUAGES: TranslationLanguage[] = [
@@ -93,6 +98,7 @@ export const TRANSLATION_LANGUAGES: TranslationLanguage[] = [
 
 /** Human-readable name for an AI language code. */
 export function languageLabel(code: string): string {
+  if (code === NO_LANGUAGE) return "None";
   return TRANSLATION_LANGUAGES.find((lang) => lang.value === code)?.label ?? code;
 }
 

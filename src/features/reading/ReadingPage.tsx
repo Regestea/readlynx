@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowLeft, BookOpen, FileWarning, Languages, Loader2 } from "lucide-react";
+import { ArrowLeft, BookOpen, ChevronLeft, ChevronRight, FileWarning, Languages, Loader2 } from "lucide-react";
 import { Button } from "../../components/ui/Button/Button";
 import { PdfViewer } from "../../components/pdfViewer/PdfViewer";
 import type { PdfViewerHandle } from "../../components/pdfViewer/PdfViewer";
@@ -10,7 +10,7 @@ import { AiChatPanel } from "../../components/aiChat/AiChatPanel";
 import type { BookSourceType } from "../../infrastructure/db/entities/types";
 import { TranslationSettingsPanel, TranslationToggle } from "./translation/TranslationPanel";
 import { useTranslation } from "./translation/useTranslation";
-import { epubUnitKey, methodFor, pdfUnitKey } from "./translation/types";
+import { epubUnitKey, methodFor, pdfUnitKey, unitToChapter, unitToPage } from "./translation/types";
 import { useCloseFlush } from "../../shared/closeFlush";
 import styles from "./ReadingPage.module.css";
 
@@ -34,6 +34,10 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
   const [state, setState] = useState<PageState>({ status: "loading" });
   const [savedPage, setSavedPage] = useState(1);
   const [savedChapter, setSavedChapter] = useState<string | null>(null);
+  /** Total pages of the loaded PDF (0 until the viewer reports it). */
+  const [pageCount, setPageCount] = useState(0);
+  /** Total chapters of the loaded EPUB (0 until the viewer reports it). */
+  const [chapterCount, setChapterCount] = useState(0);
   const [aiContext, setAiContext] = useState<string | null>(null);
   const [pdfAskImages, setPdfAskImages] = useState<string[] | null>(null);
   const [chatError, setChatError] = useState<string | null>(null);
@@ -136,10 +140,12 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
     if (!db) return;
     const pageCount = pdfRef.current?.getPageCount();
     if (pageCount && pageCount > 0) {
+      setPageCount(pageCount);
       void db.updateReadingState(bookId, { totalPages: pageCount });
     }
     const chapterCount = epubRef.current?.getChapterCount();
     if (chapterCount && chapterCount > 0) {
+      setChapterCount(chapterCount);
       void db.updateReadingState(bookId, { totalChapters: chapterCount });
     }
     const progress = epubProgressRef.current;
@@ -210,6 +216,60 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
   const book = state.status === "ready" ? state.book : null;
   const showTranslation = translation.viewMode === "translation";
 
+  /** Reader-mode navigation: which unit the translation view is showing and
+   *  prev/next movement through the document (PDF pages / EPUB chapters).
+   *  Only shown inside the Markdown viewer's toolbar — the Markdown component
+   *  itself stays source-agnostic via its `toolbarExtra` slot. */
+  const currentPdfPage =
+    book?.sourceType === "pdf" ? unitToPage(translation.unitKey ?? pdfUnitKey(1)) : null;
+  const currentChapter =
+    book?.sourceType === "epub"
+      ? Number(unitToChapter(translation.unitKey ?? epubUnitKey("0")))
+      : null;
+  const canPrev = book?.sourceType === "pdf" ? (currentPdfPage ?? 1) > 1 : (currentChapter ?? 0) > 0;
+  const canNext =
+    book?.sourceType === "pdf"
+      ? (currentPdfPage ?? 1) < pageCount
+      : (currentChapter ?? 0) + 1 < chapterCount;
+  const goUnit = (delta: number) => {
+    if (!book) return;
+    if (book.sourceType === "pdf") {
+      pdfRef.current?.goToPage((currentPdfPage ?? 1) + delta);
+    } else {
+      epubRef.current?.goToChapter((currentChapter ?? 0) + delta);
+    }
+  };
+  const toolbarExtra =
+    showTranslation && book ? (
+      <div className={styles.navExtra}>
+        <Button
+          variant="ghost"
+          className={styles.navButton}
+          onClick={() => goUnit(-1)}
+          disabled={!canPrev}
+          aria-label="Previous page or chapter"
+          title="Previous page/chapter"
+        >
+          <ChevronLeft size={16} strokeWidth={2} aria-hidden="true" />
+        </Button>
+        <span className={styles.navLabel}>
+          {book.sourceType === "pdf"
+            ? `Page ${currentPdfPage ?? 1} / ${pageCount || "…"}`
+            : `Chapter ${(currentChapter ?? 0) + 1} / ${chapterCount || "…"}`}
+        </span>
+        <Button
+          variant="ghost"
+          className={styles.navButton}
+          onClick={() => goUnit(1)}
+          disabled={!canNext}
+          aria-label="Next page or chapter"
+          title="Next page/chapter"
+        >
+          <ChevronRight size={16} strokeWidth={2} aria-hidden="true" />
+        </Button>
+      </div>
+    ) : undefined;
+
   return (
     <main className={styles.page} aria-label="Reading book">
       <header className={`${styles.topBar} animate-fade-up`}>
@@ -232,9 +292,6 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
                 <BookOpen size={13} strokeWidth={2} />
               </span>
               <h1 className={styles.title}>{book.title}</h1>
-              <span className={styles.fileBadge}>
-                {book.sourceType === "pdf" ? "PDF document" : "EPUB book"}
-              </span>
               {showTranslation && (
                 <span className={styles.translationBadge}>
                   <Languages size={12} strokeWidth={2} aria-hidden="true" />
@@ -252,8 +309,8 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
             sourceType={book.sourceType}
             models={translation.models}
             modelsError={translation.modelsError}
-            modelId={translation.settings.modelId}
-            onModelChange={translation.selectModel}
+            modelIds={translation.settings.modelIds}
+            onModelIdsChange={(ids) => translation.updateSettings({ modelIds: ids })}
             pdfMethod={translation.pdfMethod}
             onPdfMethodChange={translation.setPdfMethod}
             settings={translation.settings}
@@ -268,8 +325,12 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
             downloadProgress={translation.downloadProgress}
             onDownload={translation.downloadModel}
             onDelete={translation.deleteModel}
+            pageCount={pageCount}
+            progress={translation.rangeProgress}
             onTranslate={() => void translation.translate(false)}
             onRegenerate={translation.regenerate}
+            onTranslateRange={translation.translateRange}
+            onCancel={translation.cancelTranslation}
           />
         )}
       </header>
@@ -325,7 +386,7 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
             {showTranslation && (
               <div className={styles.translationStage}>
                 {translation.markdown ? (
-                  <Markdown content={translation.markdown} toolbar rawHtml={false} settingsBookId={bookId} className={styles.translationBody} onAskAi={setAiContext} />
+                  <Markdown content={translation.markdown} toolbar rawHtml={false} settingsBookId={bookId} className={styles.translationBody} onAskAi={setAiContext} toolbarExtra={toolbarExtra} />
                 ) : translation.busy ? (
                   <div className={styles.state} aria-label="Translating">
                     <Loader2 size={24} strokeWidth={2} className={styles.spinner} />

@@ -35,6 +35,10 @@ function chunkKeyFor(chapterKey: string, index: number): string {
   return `${chapterKey}#${String(index).padStart(4, "0")}`;
 }
 
+/** Thrown inside the pipeline when the user cancels a running translation;
+ *  caught by the callers and surfaced as a status message, not an error. */
+class TranslationCancelledError extends Error {}
+
 /**
  * Orchestrates reading-mode translation: cached per-page / per-chapter
  * results, OCR + AI pipelines, settings persistence and the view toggle.
@@ -43,7 +47,6 @@ function chunkKeyFor(chapterKey: string, index: number): string {
  */
 export function useTranslation({ bookId, sourceType, pdfRef, epubRef }: UseTranslationOptions) {
   const [viewMode, setViewModeState] = useState<TranslationViewMode>("original");
-  const [pdfMethod, setPdfMethod] = useState<TranslationMethod>("ocr");
   const [settings, setSettings] = useState<TranslationSettings>(DEFAULT_TRANSLATION_SETTINGS);
   const [unitKey, setUnitKey] = useState<TranslationUnitKey | null>(null);
 
@@ -53,8 +56,12 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef }: UseTrans
   const [error, setError] = useState<string | null>(null);
   const [hasTranslation, setHasTranslation] = useState(false);
   const [cacheReady, setCacheReady] = useState(false);
+  /** Bumped after a range translation finishes so the on-screen unit
+   *  re-reads its (possibly newly written) cached rows. */
+  const [refreshTick, setRefreshTick] = useState(0);
+  /** Progress of a running page-range translation (null while idle). */
+  const [rangeProgress, setRangeProgress] = useState<{ done: number; total: number } | null>(null);
 
-  const [model, setModel] = useState<AiModel | null>(null);
   const [models, setModels] = useState<AiModel[]>([]);
   const [modelsError, setModelsError] = useState<string | null>(null);
 
@@ -63,12 +70,13 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef }: UseTrans
   const [downloadProgress, setDownloadProgress] = useState<number | null>(null);
 
   const busyRef = useRef(false);
+  /** Set by the toolbar's Cancel button; checked at every pipeline
+   *  checkpoint so a running translation stops at the next safe point. */
+  const cancelRequestedRef = useRef(false);
   const hasTranslationRef = useRef(false);
   const unitKeyRef = useRef<TranslationUnitKey | null>(null);
   const settingsRef = useRef(settings);
-  const modelRef = useRef(model);
   const modelsRef = useRef(models);
-  const pdfMethodRef = useRef(pdfMethod);
   const downloadingRef = useRef<string | null>(null);
   const autoTriedRef = useRef<string | null>(null);
   const savedRef = useRef(false);
@@ -89,16 +97,8 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef }: UseTrans
   }, [settings]);
 
   useEffect(() => {
-    modelRef.current = model;
-  }, [model]);
-
-  useEffect(() => {
     modelsRef.current = models;
   }, [models]);
-
-  useEffect(() => {
-    pdfMethodRef.current = pdfMethod;
-  }, [pdfMethod]);
 
   useEffect(() => {
     customPromptRef.current = customPrompt;
@@ -126,15 +126,25 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef }: UseTrans
         if (cancelled) return;
         setModels(modelRows);
         if (state) {
+          // Ordered model list: prefer `modelIds` (failover order), fall
+          // back to the legacy single-choice `modelId` column. Ids whose
+          // model was deleted are dropped here — and the cleanup is
+          // persisted through the settings effect — so the book never
+          // keeps dangling references.
+          const rawIds = state.modelIds?.length
+            ? state.modelIds
+            : state.modelId
+              ? [state.modelId]
+              : [];
+          const validIds = rawIds.filter((id) => modelRows.some((row) => row.Id === id));
           setSettings({
             ocrLangs: state.ocrLangs.length ? state.ocrLangs : DEFAULT_TRANSLATION_SETTINGS.ocrLangs,
             targetLang: state.targetLang || DEFAULT_TRANSLATION_SETTINGS.targetLang,
-            modelId: state.modelId ?? "",
+            modelIds: validIds,
             customPromptId: state.customPromptId ?? "",
+            pdfMethod: state.pdfMethod === "vision" ? "vision" : "ocr",
           });
         }
-        const savedModel = state?.modelId ? modelRows.find((row) => row.Id === state.modelId) : undefined;
-        setModel(savedModel ?? getDefaultAiModel(modelRows));
         if (modelRows.length === 0) {
           setModelsError("No AI model configured. Add one in Settings → AI Models.");
         }
@@ -264,7 +274,7 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef }: UseTrans
     return () => {
       cancelled = true;
     };
-  }, [unitKey, bookId, sourceType, epubRef]);
+  }, [unitKey, bookId, sourceType, epubRef, refreshTick]);
 
   const setViewMode = useCallback((mode: TranslationViewMode) => {
     setViewModeState(mode);
@@ -274,13 +284,76 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef }: UseTrans
     setSettings((current) => ({ ...current, ...patch }));
   }, []);
 
-  /** Picks the AI model used for translation and remembers it per book.
-   *  An id that is not in the list falls back to the app default. */
-  const selectModel = useCallback((id: string) => {
-    const chosen = modelsRef.current.find((row) => row.Id === id) ?? null;
-    setModel(chosen);
-    setSettings((current) => ({ ...current, modelId: chosen ? id : "" }));
+  /** The ordered list of models a translation request runs against, read at
+   *  call time: the user's pick first, then the app default as the only
+   *  fallback when nothing is selected. */
+  const orderedModelCandidates = useCallback((): AiModel[] => {
+    const rows = modelsRef.current;
+    const picked: AiModel[] = [];
+    for (const id of settingsRef.current.modelIds) {
+      const found = rows.find((row) => row.Id === id);
+      if (found && !picked.includes(found)) picked.push(found);
+    }
+    if (picked.length > 0) return picked;
+    const fallback = getDefaultAiModel(rows);
+    return fallback ? [fallback] : [];
   }, []);
+
+  /** Runs one AI chat request through the ordered model list: a failed
+   *  request (network, provider, empty output, invalid config) is retried
+   *  with the next model until one succeeds or every model has failed. */
+  const chatWithFailover = useCallback(
+    async (params: {
+      messages: { role: "system" | "user" | "assistant"; content: string }[];
+      images?: string[];
+    }): Promise<string> => {
+      const ai = window.readlynx?.ai;
+      const candidates = orderedModelCandidates();
+      if (!ai) throw new Error("The AI bridge is not available.");
+      if (candidates.length === 0) {
+        throw new Error("No AI model configured. Add one in Settings → AI Models.");
+      }
+      const failures: string[] = [];
+      for (let index = 0; index < candidates.length; index += 1) {
+        const candidate = candidates[index];
+        const label = candidate.DisplayName ?? candidate.ModelName ?? candidate.Id;
+        if (!candidate.APIKey || !candidate.ModelName) {
+          failures.push(`${label}: missing API key or model name`);
+          continue;
+        }
+        let input: { url: string; apiKey: string; modelName: string };
+        try {
+          input = {
+            url: resolveProviderBaseUrl(candidate),
+            apiKey: candidate.APIKey,
+            modelName: candidate.ModelName,
+          };
+        } catch (err) {
+          failures.push(`${label}: ${err instanceof Error ? err.message : String(err)}`);
+          continue;
+        }
+        try {
+          const response = await ai.chat({ input, messages: params.messages, images: params.images });
+          const text = response.trim();
+          if (!text) {
+            failures.push(`${label}: returned an empty translation`);
+            continue;
+          }
+          return text;
+        } catch (err) {
+          failures.push(`${label}: ${err instanceof Error ? err.message : String(err)}`);
+        }
+        const next = candidates[index + 1];
+        if (next) {
+          setStatus(`"${label}" failed — retrying with "${next.DisplayName ?? next.ModelName ?? next.Id}"…`);
+        }
+      }
+      throw new Error(
+        `All ${candidates.length} model${candidates.length === 1 ? "" : "s"} failed — ${failures.join("; ")}`,
+      );
+    },
+    [orderedModelCandidates],
+  );
 
   /** Loads cached rows for a unit and exposes them (used by the panel). */
   const refreshModels = useCallback(async () => {
@@ -318,13 +391,13 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef }: UseTrans
 
   /** Live OCR progress while a page is being recognized. */
   useEffect(() => {
-    if (!(busy && sourceType === "pdf" && pdfMethod === "ocr")) return;
+    if (!(busy && sourceType === "pdf" && settings.pdfMethod === "ocr")) return;
     const unsubscribe =
       window.readlynx?.ocr.onRecognizeProgress(({ progress }) => {
         setStatus(`Recognizing page… ${Math.round(progress * 100)}%`);
       });
     return () => unsubscribe?.();
-  }, [busy, sourceType, pdfMethod]);
+  }, [busy, sourceType, settings.pdfMethod]);
 
   /** Download progress while an OCR model is being fetched. */
   useEffect(() => {
@@ -363,15 +436,148 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef }: UseTrans
     [bookId, sourceType],
   );
 
+  /** Runs the full PDF pipeline for one page — capture → OCR or AI vision →
+   *  model — and persists the result row. Shared by the single-page action
+   *  and the page-range translation. Reads the toolbar settings at call
+   *  time, so every page of a range is processed with the same choices. */
+  const translatePdfPage = useCallback(
+    async (page: number, force: boolean): Promise<string> => {
+      const db = window.readlynx?.db;
+      if (!db) throw new Error("The AI bridge is not available.");
+      const currentSettings = settingsRef.current;
+      const method = methodFor("pdf", currentSettings.pdfMethod);
+      const docType = docTypeFor("pdf", currentSettings.pdfMethod);
+      const promptContext = {
+        docType,
+        ocrLangs: currentSettings.ocrLangs,
+        targetLang: currentSettings.targetLang,
+        customPrompt: customPromptRef.current,
+      };
+      const systemPrompt = buildTranslationSystemPrompt(promptContext);
+
+      const image = await pdfRef.current?.getPageImage(page);
+      if (!image) {
+        throw new Error(`The image of page ${page} is not available yet.`);
+      }
+      // Cancel checkpoint: never delete cached rows of a page that will not
+      // be regenerated.
+      if (cancelRequestedRef.current) {
+        throw new TranslationCancelledError("Translation cancelled.");
+      }
+      // Regenerate replaces the whole page translation: remove every row of
+      // this page (whatever pipeline produced it, so OCR and AI vision can
+      // never leave duplicates) before the fresh result is saved.
+      if (force) {
+        await db.deleteTranslations({ bookId, pageNumber: page });
+      }
+      let result: string;
+      if (method === "ocr") {
+        const ocrResult = await window.readlynx?.ocr.recognize({
+          dataUrl: image,
+          langs: currentSettings.ocrLangs,
+        });
+        if (!ocrResult) throw new Error("OCR is unavailable.");
+        if (ocrResult.error) throw new Error(ocrResult.error);
+        const text = (ocrResult.text ?? "").trim();
+        if (!text) throw new Error(`No text detected on page ${page}.`);
+        // Cancel checkpoint: skip the (slow) model call when the user bailed.
+        if (cancelRequestedRef.current) {
+          throw new TranslationCancelledError("Translation cancelled.");
+        }
+        result = await chatWithFailover({
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: buildTranslationUserPrompt(promptContext, text) },
+          ],
+        });
+      } else {
+        if (cancelRequestedRef.current) {
+          throw new TranslationCancelledError("Translation cancelled.");
+        }
+        result = await chatWithFailover({
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: buildTranslationUserPrompt(promptContext, "") },
+          ],
+          images: [image],
+        });
+      }
+      await saveRow({ method, pageNumber: page, chunkKey: "", markdown: result });
+      return result;
+    },
+    [bookId, pdfRef, saveRow, chatWithFailover],
+  );
+
+  /** Translates a contiguous range of PDF pages in ascending order, applying
+   *  the toolbar settings (method, model, languages, instruction) to every
+   *  page. Pages already cached are regenerated. */
+  const translateRange = useCallback(
+    async (from: number, to: number) => {
+      if (sourceType !== "pdf") return;
+      if (busyRef.current) return;
+      const count = to - from + 1;
+      if (!Number.isInteger(from) || !Number.isInteger(to) || count <= 0) {
+        setError("Pick a valid page range (from ≤ to).");
+        return;
+      }
+      if (orderedModelCandidates().length === 0) {
+        setError("No AI model configured. Add one in Settings → AI Models.");
+        return;
+      }
+
+      busyRef.current = true;
+      setBusy(true);
+      setError(null);
+      setStatus(null);
+      cancelRequestedRef.current = false;
+      let done = 0;
+      setRangeProgress({ done: 0, total: count });
+      try {
+        for (let page = from; page <= to; page += 1) {
+          // Cancel checkpoint: stop at the page boundary — every finished
+          // page keeps its fresh row, the rest are left untouched.
+          if (cancelRequestedRef.current) break;
+          setStatus(`Page ${page} of ${to}…`);
+          await translatePdfPage(page, false);
+          done += 1;
+          setRangeProgress({ done, total: count });
+        }
+        setStatus(
+          cancelRequestedRef.current
+            ? `Cancelled — ${done} of ${count} page${count === 1 ? "" : "s"} translated.`
+            : `Translated ${count} page${count === 1 ? "" : "s"} (${from}–${to}).`,
+        );
+        setRangeProgress(null);
+        // The on-screen unit may fall inside the range: re-read its rows.
+        setRefreshTick((tick) => tick + 1);
+      } catch (err) {
+        // Pages finished before the failure keep their rows; the rest are
+        // untouched.
+        setRangeProgress(null);
+        if (err instanceof TranslationCancelledError) {
+          setStatus(`Cancelled — ${done} of ${count} page${count === 1 ? "" : "s"} translated.`);
+        } else {
+          setError(err instanceof Error ? err.message : String(err));
+          setStatus(null);
+        }
+      } finally {
+        busyRef.current = false;
+        setBusy(false);
+      }
+    },
+    [sourceType, translatePdfPage, orderedModelCandidates],
+  );
+
+  /** Asks the running translation to stop at the next checkpoint. The
+   *  toolbar shows this as the Cancel action while a range is in flight. */
+  const cancelTranslation = useCallback(() => {
+    cancelRequestedRef.current = true;
+    setStatus("Cancelling…");
+  }, []);
+
   /** Translates the current unit. With `force`, regeneration bypasses the
    *  cache and overwrites the stored rows. */
   const translate = useCallback(async (force = false) => {
-    const db = window.readlynx?.db;
-    const ai = window.readlynx?.ai;
-    if (!db || !ai) {
-      setError("The AI bridge is not available.");
-      return;
-    }
     if (busyRef.current) return;
     const key = unitKeyRef.current;
     if (!key) {
@@ -380,23 +586,14 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef }: UseTrans
     }
     if (!force && hasTranslationRef.current) return;
 
-    const currentModel = modelRef.current;
-    if (!currentModel?.APIKey || !currentModel.ModelName) {
+    if (orderedModelCandidates().length === 0) {
       setError("No AI model configured. Add one in Settings → AI Models.");
-      return;
-    }
-    let url: string;
-    try {
-      url = resolveProviderBaseUrl(currentModel);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "The model has no URL configured.");
       return;
     }
 
     const currentSettings = settingsRef.current;
-    const method = methodFor(sourceType, pdfMethodRef.current);
-    const docType = docTypeFor(sourceType, pdfMethodRef.current);
-    const input = { url, apiKey: currentModel.APIKey, modelName: currentModel.ModelName };
+    const method = methodFor(sourceType, currentSettings.pdfMethod);
+    const docType = docTypeFor(sourceType, currentSettings.pdfMethod);
     const promptContext = {
       docType,
       ocrLangs: currentSettings.ocrLangs,
@@ -409,6 +606,7 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef }: UseTrans
     setBusy(true);
     setError(null);
     setStatus(null);
+    cancelRequestedRef.current = false;
 
     try {
       let result: string;
@@ -426,73 +624,34 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef }: UseTrans
         // this chapter (incl. stale chunks from earlier, differently-chunked
         // generations) before the fresh chunks are written.
         if (force) {
-          await db.deleteTranslations({ bookId, chunkKeyPrefix: chapterKey });
+          await window.readlynx?.db.deleteTranslations({ bookId, chunkKeyPrefix: chapterKey });
         }
         const results: string[] = [];
         for (let index = 0; index < chunks.length; index += 1) {
+          // Cancel checkpoint: stop at the chunk boundary — finished chunks
+          // keep their rows, the rest are left untouched.
+          if (cancelRequestedRef.current) {
+            throw new TranslationCancelledError("Translation cancelled.");
+          }
           setStatus(
             chunks.length === 1
               ? "Translating chapter…"
               : `Translating chunk ${index + 1} of ${chunks.length}…`,
           );
-          const response = await ai.chat({
-            input,
+          const chunk = await chatWithFailover({
             messages: [
               { role: "system", content: systemPrompt },
               { role: "user", content: buildTranslationUserPrompt(promptContext, chunks[index]) },
             ],
           });
-          const chunk = response.trim();
-          if (!chunk) throw new Error("The AI returned an empty translation.");
           await saveRow({ method, pageNumber: null, chunkKey: chunkKeyFor(chapterKey, index), markdown: chunk });
           results.push(chunk);
         }
         result = replaceImageTokens(results.join("\n\n"), extraction.images);
       } else {
-        const image = pdfRef.current?.getCurrentPageImage();
-        if (!image) {
-          throw new Error("The page image is not ready yet.");
-        }
         const page = unitToPage(key) ?? 1;
-        // Regenerate replaces the whole page translation: remove every row
-        // of this page (whatever pipeline produced it, so OCR and AI vision
-        // can never leave duplicates) before the fresh result is saved.
-        if (force) {
-          await db.deleteTranslations({ bookId, pageNumber: page });
-        }
-        if (method === "ocr") {
-          setStatus("Recognizing page…");
-          const ocrResult = await window.readlynx?.ocr.recognize({
-            dataUrl: image,
-            langs: currentSettings.ocrLangs,
-          });
-          if (!ocrResult) throw new Error("OCR is unavailable.");
-          if (ocrResult.error) throw new Error(ocrResult.error);
-          const text = (ocrResult.text ?? "").trim();
-          if (!text) throw new Error("No text detected on this page.");
-          setStatus("Translating page…");
-          const response = await ai.chat({
-            input,
-            messages: [
-              { role: "system", content: systemPrompt },
-              { role: "user", content: buildTranslationUserPrompt(promptContext, text) },
-            ],
-          });
-          result = response.trim();
-        } else {
-          setStatus("Translating page with AI vision…");
-          const response = await ai.chat({
-            input,
-            messages: [
-              { role: "system", content: systemPrompt },
-              { role: "user", content: buildTranslationUserPrompt(promptContext, "") },
-            ],
-            images: [image],
-          });
-          result = response.trim();
-        }
-        if (!result) throw new Error("The AI returned an empty translation.");
-        await saveRow({ method, pageNumber: page, chunkKey: "", markdown: result });
+        setStatus(method === "ocr" ? "Recognizing page…" : "Translating page with AI vision…");
+        result = await translatePdfPage(page, force);
       }
       setMarkdown(result);
       setHasTranslation(true);
@@ -503,13 +662,17 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef }: UseTrans
     } catch (err) {
       // Previous translations are kept untouched — rows are only written
       // after a successful generation.
-      setError(err instanceof Error ? err.message : String(err));
-      setStatus(null);
+      if (err instanceof TranslationCancelledError) {
+        setStatus("Translation cancelled.");
+      } else {
+        setError(err instanceof Error ? err.message : String(err));
+        setStatus(null);
+      }
     } finally {
       busyRef.current = false;
       setBusy(false);
     }
-  }, [epubRef, pdfRef, saveRow, sourceType, bookId]);
+  }, [epubRef, saveRow, translatePdfPage, sourceType, bookId, chatWithFailover, orderedModelCandidates]);
 
   const regenerate = useCallback(() => {
     void translate(true);
@@ -530,20 +693,19 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef }: UseTrans
   return {
     viewMode,
     setViewMode,
-    pdfMethod,
-    setPdfMethod,
+    pdfMethod: settings.pdfMethod,
+    setPdfMethod: (method: TranslationMethod) => updateSettings({ pdfMethod: method }),
     settings,
     updateSettings,
     setUnit: setUnitKey,
+    unitKey,
     markdown,
     busy,
     status,
     error,
     hasTranslation,
-    model,
     models,
     modelsError,
-    selectModel,
     installed,
     downloading,
     downloadProgress,
@@ -552,6 +714,9 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef }: UseTrans
     refreshModels,
     refreshCustomPrompt,
     translate,
+    translateRange,
+    cancelTranslation,
+    rangeProgress,
     regenerate,
   };
 }
