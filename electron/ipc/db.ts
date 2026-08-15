@@ -60,13 +60,19 @@ export function registerDbIpc(db: DbWorkerClient) {
     db.markReadingStateOpened(bookId),
   );
 
-  ipcMain.handle("db:reading-state-add-time", (_event, payload: { bookId: string; seconds: number }) =>
-    db.addReadingTime(payload.bookId, payload.seconds),
+  ipcMain.handle("db:reading-state-finalize", (_event, bookId: string) =>
+    db.finalizeReadingState(bookId),
+  );
+
+  ipcMain.handle(
+    "db:reading-state-add-time",
+    (_event, payload: { bookId: string; startedAt: number; endedAt: number }) =>
+      db.appendReadingEvent(payload.bookId, payload.startedAt, payload.endedAt),
   );
 
   ipcMain.handle("db:reading-progress-list", () => db.listReadingProgress());
 
-  ipcMain.handle("db:reading-sessions-week", () => db.getWeekReadingSessions());
+  ipcMain.handle("db:reading-events-week", () => db.getWeekReadingEvents());
 
   ipcMain.handle("db:reading-goal-get", () => db.getDailyGoal());
 

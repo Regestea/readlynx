@@ -8,6 +8,7 @@ import { SettingsPage } from "../features/settings/SettingsPage";
 import { CreateBookPage } from "../features/create/CreateBookPage";
 import type { CreateBookDetails } from "../features/home/components/CreateBookDialog";
 import { ReadingPage } from "../features/reading/ReadingPage";
+import type { BookListItem } from "../infrastructure/db/entities/types";
 import { Quote } from "../features/home/widgets/Quote/Quote";
 import { ReadingProgress } from "../features/home/widgets/ReadingProgress/ReadingProgress";
 import { WeeklyStats } from "../features/home/widgets/WeeklyStats/WeeklyStats";
@@ -60,6 +61,24 @@ export default function App() {
     setActiveId(id);
   };
 
+  /** Opens a book from the header search suggestions — same routing as the
+   *  home shelf: reading books go to the read-only reader, the rest to the
+   *  editor. */
+  const handleOpenBookFromSearch = (book: BookListItem) => {
+    if (book.kind === "reading") {
+      setCreateDetails(null);
+      setOpenBookId(null);
+      setReadingBookId(book.id);
+      setSidebarCollapsed(true);
+      setActiveId("reading");
+    } else {
+      setCreateDetails(null);
+      setOpenBookId(book.id);
+      setReadingBookId(null);
+      setActiveId("create-book");
+    }
+  };
+
   return (
     <ThemeProvider>
       <div className="app-background" aria-hidden="true">
@@ -80,7 +99,7 @@ export default function App() {
         </div>
 
         <div className={styles.main}>
-          {isHome && <Header />}
+          {isHome && <Header onSelectBook={handleOpenBookFromSearch} />}
           {isHome && (
             <HomePage
               onCreateBook={(details) => {

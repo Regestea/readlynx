@@ -5,6 +5,10 @@ import type { TranslationMethod } from "../entities/Translation.ts";
 
 const DEFAULT_OCR_LANGS = ["eng"];
 const DEFAULT_GOAL_MINUTES = 30;
+/** Books closed at or above this progress count as finished — content
+ *  usually ends before the file's tail (back matter), so an exact 100% is
+ *  too strict. */
+export const COMPLETION_THRESHOLD = 0.95;
 
 /** Local calendar date as "YYYY-MM-DD" — the key used by the daily reading
  *  buckets. Computed in local time so a day rolls over at midnight for the
@@ -13,6 +17,34 @@ export function localDayKey(date: Date = new Date()): string {
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${date.getFullYear()}-${month}-${day}`;
+}
+
+/** Splits an epoch-millis window into per-local-day second buckets. A session
+ *  that crosses local midnight is attributed to both days, each getting the
+ *  seconds it actually covered. */
+export function splitReadingSeconds(
+  startedAt: number,
+  endedAt: number,
+): Array<{ day: string; seconds: number }> {
+  if (endedAt <= startedAt) return [];
+  const buckets = new Map<string, number>();
+  let cursor = startedAt;
+  while (cursor < endedAt) {
+    const cursorDate = new Date(cursor);
+    const nextMidnight = new Date(
+      cursorDate.getFullYear(),
+      cursorDate.getMonth(),
+      cursorDate.getDate() + 1,
+    );
+    const segmentEnd = Math.min(endedAt, nextMidnight.getTime());
+    const day = localDayKey(cursorDate);
+    buckets.set(day, (buckets.get(day) ?? 0) + (segmentEnd - cursor));
+    cursor = segmentEnd;
+  }
+  return [...buckets.entries()].map(([day, millis]) => ({
+    day,
+    seconds: Math.max(1, Math.round(millis / 1000)),
+  }));
 }
 
 /** Settings a book keeps between reading sessions. Every field is optional:
@@ -93,14 +125,17 @@ export class ReadingStateRepository {
   }
 
   /** Inserts a row (with defaults) or updates only the provided columns,
-   *  bumping `updatedAt`. Missing fields keep their stored values. */
+   *  bumping `updatedAt`. Missing fields keep their stored values. Every
+   *  position write also advances `maxProgress` to the highest position
+   *  reached — progress never goes down when the user re-reads an earlier
+   *  section. */
   upsert(bookId: string, state: ReadingStateInput): void {
     this.db
       .prepare(
         `INSERT INTO ReadingState (
            bookId, currentPage, currentChapter, ocrLangs, sourceLang,
            targetLang, modelId, customPromptId, pdfMethod, modelIds, totalPages, totalChapters,
-           progressPercent, updatedAt
+           progressPercent, maxProgress, updatedAt
          ) VALUES (
            @bookId,
            COALESCE(@currentPage, 1),
@@ -115,6 +150,10 @@ export class ReadingStateRepository {
            COALESCE(@totalPages, 0),
            COALESCE(@totalChapters, 0),
            COALESCE(@progressPercent, 0),
+           CASE WHEN COALESCE(@totalPages, 0) > 0
+             THEN CAST(COALESCE(@currentPage, 1) AS REAL) / COALESCE(@totalPages, 0)
+             ELSE COALESCE(@progressPercent, 0)
+           END,
            datetime('now')
          )
          ON CONFLICT(bookId) DO UPDATE SET
@@ -130,6 +169,12 @@ export class ReadingStateRepository {
            totalPages     = COALESCE(@totalPages,     ReadingState.totalPages),
            totalChapters  = COALESCE(@totalChapters,  ReadingState.totalChapters),
            progressPercent = COALESCE(@progressPercent, ReadingState.progressPercent),
+           maxProgress    = MAX(ReadingState.maxProgress, CASE
+             WHEN COALESCE(@totalPages, ReadingState.totalPages) > 0
+               THEN CAST(COALESCE(@currentPage, ReadingState.currentPage) AS REAL)
+                    / COALESCE(@totalPages, ReadingState.totalPages)
+               ELSE COALESCE(@progressPercent, ReadingState.progressPercent)
+             END),
            updatedAt      = datetime('now')`,
       )
       .run({
@@ -150,40 +195,48 @@ export class ReadingStateRepository {
   }
 
   /** Records that the book was opened, stamping `lastOpenedAt` (used to
-   *  order "continue reading"). Creates the row when none exists yet. */
+   *  order "continue reading"). Creates the row when none exists yet.
+   *  Reopening a finished book brings it back to the reading-progress
+   *  list (the finish state is only set when the book is closed again). */
   markOpened(bookId: string): void {
     this.db
       .prepare(
-        `INSERT INTO ReadingState (bookId, lastOpenedAt)
-         VALUES (?, datetime('now'))
-         ON CONFLICT(bookId) DO UPDATE SET lastOpenedAt = excluded.lastOpenedAt`,
+        `INSERT INTO ReadingState (bookId, lastOpenedAt, finished)
+         VALUES (?, datetime('now'), 0)
+         ON CONFLICT(bookId) DO UPDATE SET
+           lastOpenedAt = excluded.lastOpenedAt,
+           finished     = 0`,
       )
       .run(bookId);
   }
 
-  /** Adds elapsed reading seconds to the book's cumulative total (a reading
-   *  session is counted from open to close) and to its daily bucket for the
-   *  local day the session closed on. Creates rows when none exist yet. */
-  addReadingTime(bookId: string, seconds: number): void {
-    const day = localDayKey();
-    this.db.transaction(() => {
-      this.db
-        .prepare(
-          `INSERT INTO ReadingState (bookId, readingSeconds)
-           VALUES (?, ?)
-           ON CONFLICT(bookId) DO UPDATE SET
-             readingSeconds = ReadingState.readingSeconds + excluded.readingSeconds`,
-        )
-        .run(bookId, seconds);
-      this.db
-        .prepare(
-          `INSERT INTO ReadingSessions (bookId, day, seconds)
-           VALUES (?, ?, ?)
-           ON CONFLICT(bookId, day) DO UPDATE SET
-             seconds = ReadingSessions.seconds + excluded.seconds`,
-        )
-        .run(bookId, day, seconds);
-    })();
+  /** Marks the book finished when it was closed at or above
+   *  `COMPLETION_THRESHOLD` (its content has effectively ended — the tail
+   *  of the file is usually back matter nobody reads). Runs on session
+   *  close; `markOpened` clears the flag again. */
+  finalizeReadingState(bookId: string): void {
+    this.db
+      .prepare(
+        `UPDATE ReadingState SET
+           finished  = CASE WHEN maxProgress >= ? THEN 1 ELSE 0 END,
+           updatedAt = datetime('now')
+         WHERE bookId = ?`,
+      )
+      .run(COMPLETION_THRESHOLD, bookId);
+  }
+
+  /** Appends one actually-counted reading segment to the event ledger — the
+   *  single source of truth for reading time. Daily totals are computed from
+   *  these rows on read (`sessionsWeek`), so nothing else is written here. */
+  appendReadingEvent(bookId: string, startedAt: number, endedAt: number): void {
+    if (endedAt <= startedAt) return;
+    const totalSeconds = Math.max(1, Math.round((endedAt - startedAt) / 1000));
+    this.db
+      .prepare(
+        `INSERT INTO ReadingEvents (bookId, startedAt, endedAt, seconds)
+         VALUES (?, ?, ?, ?)`,
+      )
+      .run(bookId, startedAt, endedAt, totalSeconds);
   }
 
   /** The saved daily reading goal in minutes (the single `ReadingGoals`
@@ -212,7 +265,9 @@ export class ReadingStateRepository {
   }
 
   /** Reading time for the last 7 local days (oldest first, zero-filled) plus
-   *  today's and the week's totals in seconds. */
+   *  today's and the week's totals in seconds — computed by splitting every
+   *  ledger segment that ends inside the window across the local days it
+   *  covers (a segment crossing local midnight is attributed to both days). */
   sessionsWeek(): ReadingWeekSummary {
     const now = new Date();
     const days: ReadingDayBucket[] = [];
@@ -220,16 +275,19 @@ export class ReadingStateRepository {
       const date = new Date(now.getFullYear(), now.getMonth(), now.getDate() - offset);
       days.push({ day: localDayKey(date), seconds: 0 });
     }
+    const windowStartMs = new Date(`${days[0].day}T00:00:00`).getTime();
     const rows = this.db
       .prepare(
-        `SELECT day, seconds FROM ReadingSessions
-         WHERE day >= ? AND day <= ?
-         ORDER BY day`,
+        `SELECT startedAt, endedAt FROM ReadingEvents
+         WHERE endedAt >= ?
+         ORDER BY startedAt`,
       )
-      .all(days[0].day, days[days.length - 1].day) as Array<{ day: string; seconds: number }>;
+      .all(windowStartMs) as Array<{ startedAt: number; endedAt: number }>;
     const byDay = new Map<string, number>();
     for (const row of rows) {
-      byDay.set(row.day, (byDay.get(row.day) ?? 0) + row.seconds);
+      for (const bucket of splitReadingSeconds(row.startedAt, row.endedAt)) {
+        byDay.set(bucket.day, (byDay.get(bucket.day) ?? 0) + bucket.seconds);
+      }
     }
     let weekSeconds = 0;
     for (const bucket of days) {
@@ -239,20 +297,22 @@ export class ReadingStateRepository {
     return { days, todaySeconds: days[days.length - 1].seconds, weekSeconds };
   }
 
-  /** Reading-kind books with position data, most recently opened first — the
-   *  source for the home "Reading Progress" widget. Books without totals
-   *  (never opened, or not reopened since the totals feature landed) are
-   *  excluded until their source is read once. */
+  /** Reading-kind books still in progress (finished ones drop out), most
+   *  recently opened first — the source for the home "Reading Progress"
+   *  widget, which shows the four most recently studied books. Books
+   *  without totals (never opened, or not reopened since the totals feature
+   *  landed) are excluded until their source is read once. */
   listReadingProgress(): ReadingProgressRow[] {
     return this.db
       .prepare(
         `SELECT b.id AS bookId, b.title, rs.currentPage, rs.totalPages,
                 rs.currentChapter, rs.totalChapters, rs.progressPercent,
-                rs.readingSeconds, rs.lastOpenedAt
+                rs.maxProgress, rs.lastOpenedAt
          FROM Books b
          JOIN ReadingState rs ON rs.bookId = b.id
          WHERE b.kind = 'reading'
            AND (rs.totalPages > 0 OR rs.totalChapters > 0)
+           AND rs.finished = 0
          ORDER BY rs.lastOpenedAt DESC`,
       )
       .all() as ReadingProgressRow[];

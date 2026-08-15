@@ -216,12 +216,20 @@ const handlers: Record<string, (payload: unknown) => unknown> = {
     readingState.markOpened(payload as string);
     return true;
   },
-  "reading-state-add-time": (payload) => {
-    const { bookId, seconds } = payload as { bookId: string; seconds: number };
-    readingState.addReadingTime(bookId, seconds);
+  "reading-state-finalize": (payload) => {
+    readingState.finalizeReadingState(payload as string);
     return true;
   },
-  "reading-sessions-week": () => readingState.sessionsWeek(),
+  "reading-state-add-time": (payload) => {
+    const { bookId, startedAt, endedAt } = payload as {
+      bookId: string;
+      startedAt: number;
+      endedAt: number;
+    };
+    readingState.appendReadingEvent(bookId, startedAt, endedAt);
+    return true;
+  },
+  "reading-events-week": () => readingState.sessionsWeek(),
   "reading-goal-get": () => ({ goalMinutes: readingState.getDailyGoal() }),
   "reading-goal-set": (payload) => {
     const { minutes } = payload as { minutes: number };

@@ -76,8 +76,8 @@ export interface BookListItem {
   updatedAt: string;
 }
 
-/** One day of reading time in the `ReadingSessions` buckets. `day` is the
- *  local calendar date "YYYY-MM-DD". */
+/** One day of reading time derived from the `ReadingEvents` ledger. `day`
+ *  is the local calendar date "YYYY-MM-DD". */
 export interface ReadingDayBucket {
   day: string;
   /** Reading seconds accumulated that day (across all books). */
@@ -105,7 +105,7 @@ export interface ReadingProgressRow {
   currentChapter: string;
   totalChapters: number;
   progressPercent: number;
-  /** Cumulative reading time in seconds. */
-  readingSeconds: number;
+  /** Highest position reached (0..1, monotonic). */
+  maxProgress: number;
   lastOpenedAt: string;
 }

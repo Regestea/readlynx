@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { BookOpen, Target } from "lucide-react";
 import { Progress } from "../../../../components/ui/Progress/Progress";
 import { Card } from "../../../../components/ui/Card/Card";
 import { Button } from "../../../../components/ui/Button/Button";
 import { formatMinutes } from "../../../../shared/utils";
+import { useDailyRefresh } from "../../../../shared/useDailyRefresh";
 import type { ReadingProgressRow } from "../../../../infrastructure/db/entities/types";
 import { ReadingGoalModal } from "./ReadingGoalModal";
 import styles from "./ReadingProgress.module.css";
@@ -13,9 +14,11 @@ const MAX_ROWS = 4;
 interface ProgressEntry {
   id: string;
   title: string;
-  /** 0..1 — pages read / total pages (PDF) or real position (EPUB, epubjs
-   *  location percentage, proportional to content rather than chapter
-   *  count, so covers/TOC/back-matter don't skew it). */
+  /** 0..1 — highest position reached (`maxProgress`): pages read / total
+   *  pages (PDF) or real position (EPUB, epubjs location percentage,
+   *  proportional to content rather than chapter count, so
+   *  covers/TOC/back-matter don't skew it). Monotonic — never goes down
+   *  when an earlier section is re-read. */
   progress: number;
   /** Units consumed (pages or chapters), for the overall ring. EPUB books
    *  derive it from the real position × total chapters. */
@@ -25,22 +28,20 @@ interface ProgressEntry {
 }
 
 function toEntry(row: ReadingProgressRow): ProgressEntry | null {
+  const progress = Math.min(1, Math.max(0, row.maxProgress));
+  // Finished books (>= 95% closed, or truly 100%) drop out of the list.
+  if (progress >= 1) return null;
   if (row.totalPages > 0) {
-    const read = Math.min(Math.max(0, row.currentPage), row.totalPages);
-    // Finished books (100%) drop out of the list.
-    if (read >= row.totalPages) return null;
     return {
       id: row.bookId,
       title: row.title,
-      progress: read / row.totalPages,
-      read,
+      progress,
+      read: Math.round(progress * row.totalPages),
       total: row.totalPages,
       unitLabel: "pages",
     };
   }
   if (row.totalChapters > 0) {
-    const progress = Math.min(1, Math.max(0, row.progressPercent));
-    if (progress >= 1) return null;
     return {
       id: row.bookId,
       title: row.title,
@@ -58,25 +59,33 @@ export function ReadingProgress() {
   const [goalMinutes, setGoalMinutes] = useState<number | null>(null);
   const [todaySeconds, setTodaySeconds] = useState(0);
   const [goalOpen, setGoalOpen] = useState(false);
+  const mountedRef = useRef(false);
 
-  useEffect(() => {
+  const load = useCallback(async () => {
     const db = window.readlynx?.db;
     if (!db) return;
-    let cancelled = false;
-    void Promise.all([
+    const [rows, goal, week] = await Promise.all([
       db.listReadingProgress(),
       db.getDailyGoal(),
-      db.getWeekReadingSessions(),
-    ]).then(([rows, goal, week]) => {
-      if (cancelled) return;
-      setEntries(rows.map(toEntry).filter((entry): entry is ProgressEntry => entry !== null));
-      setGoalMinutes(goal.goalMinutes);
-      setTodaySeconds(week.todaySeconds);
-    });
-    return () => {
-      cancelled = true;
-    };
+      db.getWeekReadingEvents(),
+    ]);
+    if (!mountedRef.current) return;
+    setEntries(rows.map(toEntry).filter((entry): entry is ProgressEntry => entry !== null));
+    setGoalMinutes(goal.goalMinutes);
+    setTodaySeconds(week.todaySeconds);
   }, []);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    void load();
+    return () => {
+      mountedRef.current = false;
+    };
+  }, [load]);
+
+  /** Rolls the ring over to the new day at local midnight, even while the
+   *  app stays open. */
+  useDailyRefresh(load);
 
   if (entries === null || goalMinutes === null) return null;
 

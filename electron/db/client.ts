@@ -142,16 +142,20 @@ export class DbWorkerClient {
     return this.exec("reading-state-mark-opened", bookId);
   }
 
-  addReadingTime(bookId: string, seconds: number): Promise<boolean> {
-    return this.exec("reading-state-add-time", { bookId, seconds });
+  finalizeReadingState(bookId: string): Promise<boolean> {
+    return this.exec("reading-state-finalize", bookId);
+  }
+
+  appendReadingEvent(bookId: string, startedAt: number, endedAt: number): Promise<boolean> {
+    return this.exec("reading-state-add-time", { bookId, startedAt, endedAt });
   }
 
   listReadingProgress(): Promise<ReadingProgressRow[]> {
     return this.exec("reading-progress-list");
   }
 
-  getWeekReadingSessions(): Promise<ReadingWeekSummary> {
-    return this.exec("reading-sessions-week");
+  getWeekReadingEvents(): Promise<ReadingWeekSummary> {
+    return this.exec("reading-events-week");
   }
 
   getDailyGoal(): Promise<{ goalMinutes: number }> {

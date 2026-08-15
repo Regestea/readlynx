@@ -19,6 +19,15 @@ interface ReadingPageProps {
   onBack?: () => void;
 }
 
+/** Reading is counted while the user is on this page and interacting with
+ *  the app in any way (click, key, scroll — chat included). After 15
+ *  minutes without any interaction the session pauses, so nobody has to
+ *  worry about "proving" they are reading. */
+const ACTIVITY_IDLE_MS = 15 * 60 * 1000;
+/** Heartbeat interval: each beat persists the segment elapsed so far, so a
+ *  crash or kill loses at most one interval. */
+const HEARTBEAT_MS = 5 * 60 * 1000;
+
 interface ReadingBook {
   title: string;
   sourceType: BookSourceType;
@@ -48,12 +57,18 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
   /** Last position write still in flight, so closing waits for the worker to
    *  finish it before the app quits. */
   const lastPositionWriteRef = useRef<Promise<unknown> | null>(null);
-  /** When the current reading session started; null while no session is
-   *  active. The elapsed time is added to `readingSeconds` on close. */
-  const sessionStartedAtRef = useRef<number | null>(null);
   /** Guards against double-counting a session (back button + unmount +
    *  app-quit flush can all fire around the same close). */
   const timeFlushedRef = useRef(false);
+  /** Ledger-based reading tracker: a session runs while the book is open and
+   *  activity is detected; heartbeats persist counted segments every
+   *  HEARTBEAT_MS so a crash loses at most one interval. Idle or hidden
+   *  windows stop counting; the next interaction resumes. */
+  const sessionStartedRef = useRef(false);
+  const sessionActiveRef = useRef(false);
+  const segStartRef = useRef<number | null>(null);
+  const lastActivityRef = useRef(0);
+  const heartbeatRef = useRef<number | null>(null);
   /** Latest EPUB position 0..1 reported by the viewer, kept in a ref so
    *  closes can persist it after the viewer is gone. */
   const epubProgressRef = useRef(0);
@@ -66,6 +81,110 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
     epubRef,
   });
   const { setUnit: setTranslationUnit } = translation;
+
+  /** Persists the current segment up to `endAt` into the ledger. With
+   *  `keepActive` the session continues from `endAt` (crash checkpoint);
+   *  otherwise the session is closed (idle, hidden window). */
+  const pushSegment = useCallback(
+    (endAt: number, keepActive: boolean): Promise<unknown> | null => {
+      const start = segStartRef.current;
+      segStartRef.current = null;
+      if (start === null || endAt <= start) {
+        if (keepActive) segStartRef.current = endAt;
+        else sessionActiveRef.current = false;
+        return null;
+      }
+      const write = window.readlynx?.db.appendReadingEvent(bookId, start, endAt) ?? null;
+      if (keepActive) segStartRef.current = endAt;
+      else sessionActiveRef.current = false;
+      return write;
+    },
+    [bookId],
+  );
+
+  /** Marks any interaction with the app (while on this page) as reading
+   *  activity and resumes a paused session (idle or hidden). Interactions
+   *  before the book is ready are ignored. */
+  const onActivity = useCallback(() => {
+    lastActivityRef.current = Date.now();
+    if (!sessionStartedRef.current || sessionActiveRef.current || timeFlushedRef.current) return;
+    sessionActiveRef.current = true;
+    segStartRef.current = Date.now();
+  }, []);
+
+  /** Hidden windows stop counting (nobody is reading them); coming back
+   *  into view is treated like any other activity. */
+  const onVisibilityChange = useCallback(() => {
+    if (document.hidden) {
+      if (!sessionActiveRef.current) return;
+      lastActivityRef.current = Date.now();
+      pushSegment(Date.now(), false);
+    } else {
+      onActivity();
+    }
+  }, [pushSegment, onActivity]);
+
+  /** Heartbeat tick: persists the segment elapsed so far (so a crash loses
+   *  at most one interval) and stops counting once idle / hidden. */
+  const tickHeartbeat = useCallback(() => {
+    if (!sessionActiveRef.current || timeFlushedRef.current) return;
+    const now = Date.now();
+    if (now - lastActivityRef.current >= ACTIVITY_IDLE_MS || document.hidden) {
+      const start = segStartRef.current;
+      pushSegment(start !== null ? Math.max(lastActivityRef.current, start) : now, false);
+    } else {
+      pushSegment(now, true);
+    }
+  }, [pushSegment]);
+
+  /** Counts the session into the ledger and finalizes the book (marks it
+   *  finished when closed at >= 95%). Returns the in-flight writes so
+   *  closing the window can await them; a no-op once the session has been
+   *  counted. */
+  const flushSession = useCallback((): Promise<unknown> | null => {
+    if (timeFlushedRef.current) return null;
+    timeFlushedRef.current = true;
+    if (heartbeatRef.current !== null) {
+      window.clearInterval(heartbeatRef.current);
+      heartbeatRef.current = null;
+    }
+    sessionActiveRef.current = false;
+    const start = segStartRef.current;
+    segStartRef.current = null;
+    const writes: Array<Promise<unknown>> = [];
+    if (start !== null) {
+      const write = window.readlynx?.db.appendReadingEvent(bookId, start, Date.now());
+      if (write) writes.push(write);
+    }
+    const finish = window.readlynx?.db.finalizeReadingState(bookId);
+    if (finish) writes.push(finish);
+    return writes.length ? Promise.all(writes) : null;
+  }, [bookId]);
+
+  /** Every interaction with the app counts as reading activity while the
+   *  book is open — clicks, keys, wheel/touch and capture-phase scrolling
+   *  anywhere in the window (translation Markdown and the AI chat included).
+   *  Nothing here requires the user to keep scrolling a page. */
+  useEffect(() => {
+    const onScrollCapture = () => onActivity();
+    document.addEventListener("mousedown", onActivity);
+    document.addEventListener("wheel", onActivity);
+    document.addEventListener("touchstart", onActivity);
+    document.addEventListener("scroll", onScrollCapture, true);
+    document.addEventListener("keydown", onActivity);
+    return () => {
+      document.removeEventListener("mousedown", onActivity);
+      document.removeEventListener("wheel", onActivity);
+      document.removeEventListener("touchstart", onActivity);
+      document.removeEventListener("scroll", onScrollCapture, true);
+      document.removeEventListener("keydown", onActivity);
+    };
+  }, [onActivity]);
+
+  useEffect(() => {
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", onVisibilityChange);
+  }, [onVisibilityChange]);
 
   useEffect(() => {
     let cancelled = false;
@@ -90,14 +209,20 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
       // Records "last read" so the book can be offered as a continue-reading
       // entry, and creates the state row when this is the first open.
       void db.markReadingStateOpened(bookId);
-      // Starts the reading-time session (counted until the book is closed).
-      sessionStartedAtRef.current = Date.now();
+      // Starts the reading session: activity-based, checkpointed by the
+      // heartbeat (counted until the book is closed).
+      sessionStartedRef.current = true;
+      sessionActiveRef.current = true;
+      segStartRef.current = Date.now();
+      lastActivityRef.current = Date.now();
       timeFlushedRef.current = false;
+      if (heartbeatRef.current !== null) window.clearInterval(heartbeatRef.current);
+      heartbeatRef.current = window.setInterval(tickHeartbeat, HEARTBEAT_MS);
     });
     return () => {
       cancelled = true;
     };
-  }, [bookId]);
+  }, [bookId, tickHeartbeat]);
 
   const handlePageChange = useCallback(
     (page: number) => {
@@ -119,18 +244,6 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
     },
     [bookId, setTranslationUnit],
   );
-
-  /** Counts the reading session (open → close) into `readingSeconds`. Returns
-   *  the in-flight write so closing the window can await it; a no-op once the
-   *  session has been counted. */
-  const flushReadingTime = useCallback((): Promise<unknown> | null => {
-    if (timeFlushedRef.current || sessionStartedAtRef.current === null) return null;
-    const seconds = Math.round((Date.now() - sessionStartedAtRef.current) / 1000);
-    timeFlushedRef.current = true;
-    sessionStartedAtRef.current = null;
-    if (seconds <= 0) return null;
-    return window.readlynx?.db.addReadingTime(bookId, seconds) ?? null;
-  }, [bookId]);
 
   /** Persists the source's totals (`totalPages` for PDF, `totalChapters` for
    *  EPUB) plus the restored EPUB position once the viewer reports it is
@@ -154,18 +267,18 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
     }
   }, [bookId]);
 
-  /** Closing the app waits for the last position write and the reading-time
+  /** Closing the app waits for the last position write and the session
    *  flush, the same saves the back button's close performs. */
   useCloseFlush(async () => {
     await lastPositionWriteRef.current;
-    await flushReadingTime();
+    await flushSession();
   });
 
   /** Leaving the page (sidebar navigation, back) without going through the
    *  back button still counts the session and saves the last EPUB position. */
   useEffect(() => {
     return () => {
-      void flushReadingTime();
+      void flushSession();
       const progress = epubProgressRef.current;
       if (progress > 0) {
         void window.readlynx?.db.updateReadingState(bookId, {
@@ -173,7 +286,7 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
         });
       }
     };
-  }, [flushReadingTime, bookId]);
+  }, [flushSession, bookId]);
 
   /** PDF click-to-ask: follows the translate panel's top setting — OCR the
    *  whole current page locally and seed the chat with the recognized text
@@ -313,7 +426,7 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
           className={styles.backButton}
           aria-label="Back to home"
           onClick={() => {
-            void flushReadingTime();
+            void flushSession();
             onBack?.();
           }}
         >

@@ -33,8 +33,14 @@ export interface ReadingStateEntity {
    *  proportional to content). PDF books leave this at 0 — they progress by
    *  `currentPage / totalPages` instead. */
   progressPercent: number;
-  /** Cumulative reading time in seconds, counted from open to close. */
-  readingSeconds: number;
+  /** Highest position reached (0..1, monotonic — never goes down). For PDF
+   *  books it is `currentPage / totalPages` at its highest; for EPUB books
+   *  the highest `progressPercent`. */
+  maxProgress: number;
+  /** 1 when the book was closed at >= 95% (content typically ended before
+   *  the file's tail). Cleared when the book is opened again, so it can
+   *  return to the reading-progress list. */
+  finished: number;
   /** When the book was last opened (drives "continue reading" ordering). */
   lastOpenedAt: string;
   updatedAt: string;

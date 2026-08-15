@@ -92,9 +92,10 @@ declare global {
           state: ReadingStateInput,
         ): Promise<ReadingStateEntity | null>;
         markReadingStateOpened(bookId: string): Promise<boolean>;
-        addReadingTime(bookId: string, seconds: number): Promise<boolean>;
+        finalizeReadingState(bookId: string): Promise<boolean>;
+        appendReadingEvent(bookId: string, startedAt: number, endedAt: number): Promise<boolean>;
         listReadingProgress(): Promise<ReadingProgressRow[]>;
-        getWeekReadingSessions(): Promise<ReadingWeekSummary>;
+        getWeekReadingEvents(): Promise<ReadingWeekSummary>;
         getDailyGoal(): Promise<{ goalMinutes: number }>;
         setDailyGoal(minutes: number): Promise<{ goalMinutes: number }>;
         getReaderSettings(

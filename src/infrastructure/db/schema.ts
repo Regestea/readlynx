@@ -52,7 +52,8 @@ CREATE TABLE IF NOT EXISTS ReadingState (
   totalPages     INTEGER NOT NULL DEFAULT 0,
   totalChapters  INTEGER NOT NULL DEFAULT 0,
   progressPercent REAL NOT NULL DEFAULT 0,
-  readingSeconds INTEGER NOT NULL DEFAULT 0,
+  maxProgress    REAL NOT NULL DEFAULT 0,
+  finished       INTEGER NOT NULL DEFAULT 0,
   lastOpenedAt   TEXT NOT NULL DEFAULT (datetime('now')),
   updatedAt      TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -117,15 +118,22 @@ CREATE TABLE IF NOT EXISTS AiModels (
   IsDefault   INTEGER NOT NULL DEFAULT 0
 );
 
--- Per-book daily reading buckets (one row per book per local day, day is
--- "YYYY-MM-DD" computed in the worker). The source for the home daily-goal
--- ring and the weekly hours stats.
-CREATE TABLE IF NOT EXISTS ReadingSessions (
-  bookId  TEXT NOT NULL REFERENCES Books(id) ON DELETE CASCADE,
-  day     TEXT NOT NULL,
-  seconds INTEGER NOT NULL DEFAULT 0,
-  PRIMARY KEY (bookId, day)
+-- Ledger of actually-counted reading segments (epoch ms, wall-clock time).
+-- Written by heartbeats while the book is open and activity is detected.
+-- Daily totals (the home daily-goal ring and the weekly hours stats) are
+-- computed from these rows on read, so totals stay auditable and
+-- recomputable.
+CREATE TABLE IF NOT EXISTS ReadingEvents (
+  id        INTEGER PRIMARY KEY AUTOINCREMENT,
+  bookId    TEXT NOT NULL REFERENCES Books(id) ON DELETE CASCADE,
+  startedAt INTEGER NOT NULL,
+  endedAt   INTEGER NOT NULL,
+  seconds   INTEGER NOT NULL DEFAULT 0,
+  CHECK (endedAt > startedAt)
 );
+
+CREATE INDEX IF NOT EXISTS idx_reading_events_book
+  ON ReadingEvents (bookId, endedAt);
 
 -- The user's daily reading goal in minutes (single row).
 CREATE TABLE IF NOT EXISTS ReadingGoals (
@@ -159,9 +167,14 @@ export function applySchema(db: Database.Database): void {
     ensureReadingStateSettingsColumns(db);
     ensureReadingStatePdfMethodColumn(db);
     ensureReadingStateModelIdsColumn(db);
+    ensureReadingStateProgressColumns(db);
     ensureCascadeForeignKeys(db);
     ensureReadingStateV2(db);
     ensureReadingStateStatsColumns(db);
+    ensureReadingStateDropsReadingSeconds(db);
+    ensureReadingStateProgressBackfill(db);
+    ensureReadingEventsTable(db);
+    migrateReadingSessionsToEvents(db);
     ensureAiModelDefaultColumn(db);
     ensureTranslationLookupIndex(db);
     ensureAppSettingsChatZoomColumn(db);
@@ -207,6 +220,34 @@ function hasCascadeForeignKeys(db: Database.Database, table: string): boolean {
   return fks.length > 0 && fks.every((fk) => fk.on_delete === "CASCADE");
 }
 
+/** Databases created before the monotonic progress columns existed lack
+ *  `maxProgress` (highest position reached, 0..1) and `finished` (closed at
+ *  >= 95%). Adds them with defaults. Runs before the `ReadingState`
+ *  rebuilds so their data copy carries the columns over. */
+function ensureReadingStateProgressColumns(db: Database.Database): void {
+  const columns = db.pragma("table_info(ReadingState)") as Array<{ name: string }>;
+  const has = (name: string) => columns.some((entry) => entry.name === name);
+  if (has("maxProgress") && has("finished")) return;
+  db.transaction(() => {
+    if (!has("maxProgress")) db.exec("ALTER TABLE ReadingState ADD COLUMN maxProgress REAL NOT NULL DEFAULT 0");
+    if (!has("finished")) db.exec("ALTER TABLE ReadingState ADD COLUMN finished INTEGER NOT NULL DEFAULT 0");
+  })();
+}
+
+/** Backfills the monotonic progress from the stored position for books
+ *  tracked before the columns existed, and marks books already closed at
+ *  >= 95% as finished. Idempotent (never lowers an existing max). */
+function ensureReadingStateProgressBackfill(db: Database.Database): void {
+  db.exec(`
+    UPDATE ReadingState SET
+      maxProgress = MAX(maxProgress, MAX(
+        progressPercent,
+        CASE WHEN totalPages > 0 THEN CAST(currentPage AS REAL) / totalPages ELSE 0 END
+      )),
+      finished = CASE WHEN maxProgress >= 0.95 THEN 1 ELSE finished END;
+  `);
+}
+
 /** Databases created before cascade rules lack `ON DELETE CASCADE` on child
  *  tables, so deleting a book would leave orphaned rows. Rebuilds the child
  *  tables with the cascade constraint when missing. */
@@ -229,16 +270,19 @@ function ensureCascadeForeignKeys(db: Database.Database): void {
         totalPages     INTEGER NOT NULL DEFAULT 0,
         totalChapters  INTEGER NOT NULL DEFAULT 0,
         progressPercent REAL NOT NULL DEFAULT 0,
-        readingSeconds INTEGER NOT NULL DEFAULT 0,
+        maxProgress    REAL NOT NULL DEFAULT 0,
+        finished       INTEGER NOT NULL DEFAULT 0,
         lastOpenedAt   TEXT NOT NULL DEFAULT (datetime('now')),
         updatedAt      TEXT NOT NULL DEFAULT (datetime('now'))
       );
       INSERT INTO ReadingState_new (
         bookId, currentPage, ocrLangs, sourceLang, targetLang,
-        modelId, customPromptId, pdfMethod, modelIds, updatedAt
+        modelId, customPromptId, pdfMethod, modelIds, maxProgress,
+        finished, updatedAt
       )
         SELECT bookId, currentPage, ocrLangs, sourceLang, targetLang,
-               modelId, customPromptId, pdfMethod, modelIds, updatedAt
+               modelId, customPromptId, pdfMethod, modelIds, maxProgress,
+               finished, updatedAt
         FROM ReadingState;
       DROP TABLE ReadingState;
       ALTER TABLE ReadingState_new RENAME TO ReadingState;
@@ -357,16 +401,19 @@ function ensureReadingStateV2(db: Database.Database): void {
         totalPages     INTEGER NOT NULL DEFAULT 0,
         totalChapters  INTEGER NOT NULL DEFAULT 0,
         progressPercent REAL NOT NULL DEFAULT 0,
-        readingSeconds INTEGER NOT NULL DEFAULT 0,
+        maxProgress    REAL NOT NULL DEFAULT 0,
+        finished       INTEGER NOT NULL DEFAULT 0,
         lastOpenedAt   TEXT NOT NULL DEFAULT (datetime('now')),
         updatedAt      TEXT NOT NULL DEFAULT (datetime('now'))
       );
       INSERT INTO ReadingState_new (
         bookId, currentPage, ocrLangs, sourceLang, targetLang,
-        modelId, customPromptId, pdfMethod, modelIds, updatedAt
+        modelId, customPromptId, pdfMethod, modelIds, maxProgress,
+        finished, updatedAt
       )
         SELECT bookId, currentPage, ocrLangs, sourceLang, targetLang,
-               modelId, customPromptId, pdfMethod, modelIds, updatedAt
+               modelId, customPromptId, pdfMethod, modelIds, maxProgress,
+               finished, updatedAt
         FROM ReadingState;
       DROP TABLE ReadingState;
       ALTER TABLE ReadingState_new RENAME TO ReadingState;
@@ -375,17 +422,107 @@ function ensureReadingStateV2(db: Database.Database): void {
 }
 
 /** Databases created before the reading-stats columns existed (`totalPages`,
- *  `totalChapters`, `readingSeconds`, `progressPercent`) lack them. Adds the
- *  columns with defaults; existing rows start at zero. */
+ *  `totalChapters`, `progressPercent`) lack them. Adds the columns with
+ *  defaults; existing rows start at zero. (`readingSeconds` used to be
+ *  managed here too — the event-ledger migration removes it instead.) */
 function ensureReadingStateStatsColumns(db: Database.Database): void {
   const columns = db.pragma("table_info(ReadingState)") as Array<{ name: string }>;
   const has = (name: string) => columns.some((entry) => entry.name === name);
-  if (has("totalPages") && has("totalChapters") && has("readingSeconds") && has("progressPercent")) return;
+  if (has("totalPages") && has("totalChapters") && has("progressPercent")) return;
   db.transaction(() => {
     if (!has("totalPages")) db.exec("ALTER TABLE ReadingState ADD COLUMN totalPages INTEGER NOT NULL DEFAULT 0");
     if (!has("totalChapters")) db.exec("ALTER TABLE ReadingState ADD COLUMN totalChapters INTEGER NOT NULL DEFAULT 0");
     if (!has("progressPercent")) db.exec("ALTER TABLE ReadingState ADD COLUMN progressPercent REAL NOT NULL DEFAULT 0");
-    if (!has("readingSeconds")) db.exec("ALTER TABLE ReadingState ADD COLUMN readingSeconds INTEGER NOT NULL DEFAULT 0");
+  })();
+}
+
+/** The cumulative `readingSeconds` column is superseded by the
+ *  `ReadingEvents` ledger (which also feeds the daily totals). Drops the
+ *  column via a table rebuild; historical daily totals are preserved by
+ *  `migrateReadingSessionsToEvents`. Runs after
+ *  `ensureReadingStateStatsColumns` so freshly-added columns survive the
+ *  copy. */
+function ensureReadingStateDropsReadingSeconds(db: Database.Database): void {
+  const columns = db.pragma("table_info(ReadingState)") as Array<{ name: string }>;
+  if (!columns.some((entry) => entry.name === "readingSeconds")) return;
+  db.transaction(() => {
+    db.exec(`
+      CREATE TABLE ReadingState_new (
+        bookId         TEXT PRIMARY KEY REFERENCES Books(id) ON DELETE CASCADE,
+        currentPage    INTEGER NOT NULL DEFAULT 1,
+        currentChapter TEXT NOT NULL DEFAULT '',
+        ocrLangs       TEXT NOT NULL DEFAULT '["eng"]',
+        sourceLang     TEXT NOT NULL DEFAULT '',
+        targetLang     TEXT NOT NULL DEFAULT 'English',
+        modelId        TEXT NOT NULL DEFAULT '',
+        customPromptId TEXT NOT NULL DEFAULT '',
+        pdfMethod      TEXT NOT NULL DEFAULT 'ocr',
+        modelIds       TEXT NOT NULL DEFAULT '[]',
+        totalPages     INTEGER NOT NULL DEFAULT 0,
+        totalChapters  INTEGER NOT NULL DEFAULT 0,
+        progressPercent REAL NOT NULL DEFAULT 0,
+        maxProgress    REAL NOT NULL DEFAULT 0,
+        finished       INTEGER NOT NULL DEFAULT 0,
+        lastOpenedAt   TEXT NOT NULL DEFAULT (datetime('now')),
+        updatedAt      TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      INSERT INTO ReadingState_new (
+        bookId, currentPage, ocrLangs, sourceLang, targetLang,
+        modelId, customPromptId, pdfMethod, modelIds, totalPages,
+        totalChapters, progressPercent, maxProgress, finished,
+        lastOpenedAt, updatedAt
+      )
+        SELECT bookId, currentPage, ocrLangs, sourceLang, targetLang,
+               modelId, customPromptId, pdfMethod, modelIds, totalPages,
+               totalChapters, progressPercent, maxProgress, finished,
+               lastOpenedAt, updatedAt
+        FROM ReadingState;
+      DROP TABLE ReadingState;
+      ALTER TABLE ReadingState_new RENAME TO ReadingState;
+    `);
+  })();
+}
+
+/** Databases created before the event ledger existed lack the
+ *  `ReadingEvents` table and its lookup index. Creates them. */
+function ensureReadingEventsTable(db: Database.Database): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS ReadingEvents (
+      id        INTEGER PRIMARY KEY AUTOINCREMENT,
+      bookId    TEXT NOT NULL REFERENCES Books(id) ON DELETE CASCADE,
+      startedAt INTEGER NOT NULL,
+      endedAt   INTEGER NOT NULL,
+      seconds   INTEGER NOT NULL DEFAULT 0,
+      CHECK (endedAt > startedAt)
+    );
+    CREATE INDEX IF NOT EXISTS idx_reading_events_book
+      ON ReadingEvents (bookId, endedAt);
+  `);
+}
+
+/** The daily buckets used to be written eagerly into `ReadingSessions`. The
+ *  event ledger supersedes them: legacy bucket rows are backfilled as
+ *  synthetic events (one per bucket day, spanning from that day's local
+ *  midnight for the recorded seconds — daily totals survive), then the table
+ *  is dropped. Runs after `ensureReadingEventsTable`. */
+function migrateReadingSessionsToEvents(db: Database.Database): void {
+  const table = db
+    .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'ReadingSessions'")
+    .get();
+  if (!table) return;
+  db.transaction(() => {
+    const rows = db
+      .prepare("SELECT bookId, day, seconds FROM ReadingSessions")
+      .all() as Array<{ bookId: string; day: string; seconds: number }>;
+    const insert = db.prepare(
+      `INSERT INTO ReadingEvents (bookId, startedAt, endedAt, seconds) VALUES (?, ?, ?, ?)`,
+    );
+    for (const row of rows) {
+      if (row.seconds <= 0) continue;
+      const start = new Date(`${row.day}T00:00:00`).getTime();
+      insert.run(row.bookId, start, start + row.seconds * 1000, row.seconds);
+    }
+    db.exec("DROP TABLE ReadingSessions");
   })();
 }
 
