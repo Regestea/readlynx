@@ -3,7 +3,6 @@ import { ThemeProvider } from "./providers/theme/ThemeProvider";
 import { Header } from "./layout/Header/Header";
 import { Sidebar } from "./layout/Sidebar/Sidebar";
 import { HomePage } from "../features/home/HomePage";
-import { ShowcasePage } from "../features/showcase/ShowcasePage";
 import { SettingsPage } from "../features/settings/SettingsPage";
 import { CreateBookPage } from "../features/create/CreateBookPage";
 import type { CreateBookDetails } from "../features/home/components/CreateBookDialog";
@@ -147,9 +146,6 @@ export default function App() {
             />
           )}
           {activeId === "settings" && <SettingsPage />}
-          {!isHome && activeId !== "create-book" && activeId !== "reading" && activeId !== "settings" && (
-            <ShowcasePage />
-          )}
         </div>
 
         {isHome && (
