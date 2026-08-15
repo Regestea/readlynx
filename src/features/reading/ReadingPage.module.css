@@ -52,19 +52,6 @@
   text-overflow: ellipsis;
 }
 
-.translationBadge {
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 3px 10px;
-  border-radius: var(--radius-full);
-  background: var(--color-primary);
-  color: var(--color-on-primary);
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-medium);
-}
-
 .viewerArea {
   flex: 1;
   min-height: 0;
@@ -96,10 +83,24 @@
 }
 
 .translationStage {
+  position: relative;
   flex: 1;
   min-height: 0;
   overflow-y: auto;
   display: flex;
+}
+
+/* Loading veil over the still-mounted markdown while the next page's
+ * translation rows are read — keeps the viewer (and its fullscreen state)
+ * alive during navigation. */
+.markdownLoading {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  background: var(--color-glass);
+  pointer-events: none;
 }
 
 .translationBody {

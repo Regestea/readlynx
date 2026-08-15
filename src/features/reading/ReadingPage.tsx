@@ -231,14 +231,17 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
     book?.sourceType === "pdf"
       ? (currentPdfPage ?? 1) < pageCount
       : (currentChapter ?? 0) + 1 < chapterCount;
-  const goUnit = (delta: number) => {
-    if (!book) return;
-    if (book.sourceType === "pdf") {
-      pdfRef.current?.goToPage((currentPdfPage ?? 1) + delta);
-    } else {
-      epubRef.current?.goToChapter((currentChapter ?? 0) + delta);
-    }
-  };
+  const goUnit = useCallback(
+    (delta: number) => {
+      if (!book) return;
+      if (book.sourceType === "pdf") {
+        pdfRef.current?.goToPage((currentPdfPage ?? 1) + delta);
+      } else {
+        epubRef.current?.goToChapter((currentChapter ?? 0) + delta);
+      }
+    },
+    [book, currentPdfPage, currentChapter, pdfRef, epubRef],
+  );
   const toolbarExtra =
     showTranslation && book ? (
       <div className={styles.navExtra}>
@@ -270,6 +273,38 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
       </div>
     ) : undefined;
 
+  /** Arrow keys navigate prev/next page or chapter (same movement as the
+   *  toolbar nav strip), in both the original viewer and the translation
+   *  view. Ignored inside form controls, while a dialog is open, or with
+   *  modifier keys. */
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+      if (event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) return;
+      const target = event.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.tagName === "SELECT" ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+      if (document.querySelector('[role="dialog"]')) return;
+      if (!book) return;
+      if (event.key === "ArrowLeft" && canPrev) {
+        event.preventDefault();
+        goUnit(-1);
+      } else if (event.key === "ArrowRight" && canNext) {
+        event.preventDefault();
+        goUnit(1);
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [book, canPrev, canNext, goUnit]);
+
   return (
     <main className={styles.page} aria-label="Reading book">
       <header className={`${styles.topBar} animate-fade-up`}>
@@ -292,12 +327,6 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
                 <BookOpen size={13} strokeWidth={2} />
               </span>
               <h1 className={styles.title}>{book.title}</h1>
-              {showTranslation && (
-                <span className={styles.translationBadge}>
-                  <Languages size={12} strokeWidth={2} aria-hidden="true" />
-                  Translation
-                </span>
-              )}
             </>
           ) : (
             <h1 className={styles.title}>Reading book</h1>
@@ -386,7 +415,14 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
             {showTranslation && (
               <div className={styles.translationStage}>
                 {translation.markdown ? (
-                  <Markdown content={translation.markdown} toolbar rawHtml={false} settingsBookId={bookId} className={styles.translationBody} onAskAi={setAiContext} toolbarExtra={toolbarExtra} />
+                  <>
+                    <Markdown content={translation.markdown} toolbar rawHtml={false} settingsBookId={bookId} className={styles.translationBody} onAskAi={setAiContext} toolbarExtra={toolbarExtra} />
+                    {translation.markdownLoading && (
+                      <div className={styles.markdownLoading} role="status" aria-label="Loading translation">
+                        <Loader2 size={20} strokeWidth={2} className={styles.spinner} />
+                      </div>
+                    )}
+                  </>
                 ) : translation.busy ? (
                   <div className={styles.state} aria-label="Translating">
                     <Loader2 size={24} strokeWidth={2} className={styles.spinner} />

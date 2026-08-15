@@ -51,6 +51,10 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef }: UseTrans
   const [unitKey, setUnitKey] = useState<TranslationUnitKey | null>(null);
 
   const [markdown, setMarkdown] = useState<string | null>(null);
+  /** Which unit the currently displayed `markdown` belongs to (null while
+   *  the content shown is stale — the previous unit's text kept on screen
+   *  during a switch so the viewer never unmounts and fullscreen survives). */
+  const [markdownUnitKey, setMarkdownUnitKey] = useState<TranslationUnitKey | null>(null);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -219,7 +223,10 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef }: UseTrans
   const pipeline = `${bookId}|${unitKey ?? ""}|${sourceType}`;
   if (pipelineKey !== pipeline) {
     setPipelineKey(pipeline);
-    setMarkdown(null);
+    // The previous unit's markdown is deliberately kept on screen (only
+    // marked stale) so the Markdown component never unmounts mid-switch —
+    // remounting would flash the whole view and drop its fullscreen state.
+    setMarkdownUnitKey(null);
     setHasTranslation(false);
     setCacheReady(false);
     setError(null);
@@ -246,6 +253,7 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef }: UseTrans
         if (cancelled) return;
         if (rows.length === 0) {
           setMarkdown(null);
+          setMarkdownUnitKey(unitKey);
           setHasTranslation(false);
         } else {
           const raw =
@@ -260,6 +268,7 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef }: UseTrans
                 )
               : raw;
           setMarkdown(text);
+          setMarkdownUnitKey(unitKey);
           setHasTranslation(true);
         }
         setCacheReady(true);
@@ -654,6 +663,7 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef }: UseTrans
         result = await translatePdfPage(page, force);
       }
       setMarkdown(result);
+      setMarkdownUnitKey(key);
       setHasTranslation(true);
       setStatus(null);
       // The user asked for the translation — take them to it once it's done
@@ -699,7 +709,10 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef }: UseTrans
     updateSettings,
     setUnit: setUnitKey,
     unitKey,
-    markdown,
+markdown,
+    /** True while the shown markdown belongs to the previous unit (the new
+     *  unit's rows are being read) — the viewer stays mounted underneath. */
+    markdownLoading: markdown !== null && markdownUnitKey !== unitKey,
     busy,
     status,
     error,

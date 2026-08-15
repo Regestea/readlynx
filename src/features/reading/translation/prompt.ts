@@ -39,8 +39,7 @@ export function buildTranslationSystemPrompt(
 
   if (!noTarget) {
     lines.push(
-        `The ENTIRE output must be written in ${target}: every word, including headings, paragraphs, lists, table cells, captions, notes, and alt text. Do not leave any part of the source untranslated, and do not mix in words or phrases from the source language. Returning the source text unchanged, or a partially translated mixture, is a failure.`,
-        `Before finishing, re-read your output and verify that every sentence is written in ${target}; fix any leftover source-language text.`,
+        `The output must be written entirely in ${target}: headings, paragraphs, lists, table cells, captions, and notes. Do not leave any part of the source untranslated and do not mix in words from the source language. If the source is already in ${target}, return it in ${target} as-is.`,
     );
   }
 
