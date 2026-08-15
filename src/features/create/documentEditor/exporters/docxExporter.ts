@@ -121,7 +121,9 @@ function parseColor(value: string | undefined): string | undefined {
   return undefined;
 }
 
-/** Converts a CSS font-size (px/pt/rem/em) to Word half-points. */
+/** Converts a CSS font-size (px/pt/rem/em) to Word half-points.
+ *  Pixels map 1:1 to points so the number picked in the editor (14px) is the
+ *  number Word shows (14pt). */
 function fontSizeHalfPoints(value: string | undefined): number | undefined {
   if (!value) return undefined;
   const match = /^([\d.]+)\s*(px|pt|rem|em)?$/.exec(value.trim());
@@ -129,7 +131,7 @@ function fontSizeHalfPoints(value: string | undefined): number | undefined {
   const size = Number(match[1]);
   const unit = match[2] ?? "px";
   const points =
-    unit === "px" ? size * 0.75 : unit === "pt" ? size : (unit === "rem" || unit === "em" ? size * 12 : size);
+    unit === "px" || unit === "pt" ? size : (unit === "rem" || unit === "em" ? size * 12 : size);
   return Math.round(points * 2);
 }
 
@@ -178,7 +180,7 @@ function inlineEquationRun(equation: string): TextRun {
   });
 }
 
-function runFromTextNode(node: TextNode): TextRun {
+function runFromTextNode(node: TextNode, rtl?: boolean): TextRun {
   const format = node.getFormat();
   const style = parseInlineStyle(node.getStyle());
   const isCode = Boolean(format & IS_CODE);
@@ -194,6 +196,10 @@ function runFromTextNode(node: TextNode): TextRun {
     subScript: Boolean(format & IS_SUBSCRIPT),
     highlight: format & IS_HIGHLIGHT ? "yellow" : undefined,
     font: isCode ? MONO_FONT : fontFamily && !generic.includes(fontFamily) ? fontFamily : undefined,
+    // Runs of an RTL block are marked `w:rtl` so trailing neutral
+    // characters (a final period, for example) resolve as RTL and stay on
+    // the same line instead of wrapping to the next one.
+    rightToLeft: rtl,
     size: (() => {
       const halfPoints = fontSizeHalfPoints(style.fontSize);
       return halfPoints !== undefined ? Math.round(halfPoints * activeFontFactor) : undefined;
@@ -209,20 +215,20 @@ function runFromTextNode(node: TextNode): TextRun {
   });
 }
 
-function buildRuns(node: LexicalNode): (TextRun | ExternalHyperlink)[] {
-  if ($isTextNode(node)) return [runFromTextNode(node)];
+function buildRuns(node: LexicalNode, rtl?: boolean): (TextRun | ExternalHyperlink)[] {
+  if ($isTextNode(node)) return [runFromTextNode(node, rtl)];
   if ($isLinkNode(node)) {
     return [
       new ExternalHyperlink({
         link: node.getURL(),
-        children: node.getChildren().flatMap((child) => buildRuns(child)) as TextRun[],
+        children: node.getChildren().flatMap((child) => buildRuns(child, rtl)) as TextRun[],
       }),
     ];
   }
   if ($isEquationNode(node) && node.isInline()) {
     return [inlineEquationRun(node.getEquation())];
   }
-  if ($isElementNode(node)) return node.getChildren().flatMap((child) => buildRuns(child));
+  if ($isElementNode(node)) return node.getChildren().flatMap((child) => buildRuns(child, rtl));
   return [];
 }
 
@@ -281,7 +287,7 @@ function listParagraphs(node: LexicalNode, depth: number): DocxChild[] {
     }
     for (const child of item.getChildren()) {
       if ($isListNode(child)) continue;
-      runs.push(...buildRuns(child));
+      runs.push(...buildRuns(child, isRtlBlock(item)));
     }
     out.push(
       new Paragraph({
@@ -351,7 +357,7 @@ function nodeToDocx(node: LexicalNode): DocxChild[] {
     return [
       new Paragraph({
         heading: heading[level],
-        children: buildRuns(node),
+        children: buildRuns(node, isRtlBlock(node)),
         alignment: alignmentFromNode(node),
         bidirectional: isRtlBlock(node),
       }),
@@ -360,7 +366,7 @@ function nodeToDocx(node: LexicalNode): DocxChild[] {
   if ($isQuoteNode(node)) {
     return [
       new Paragraph({
-        children: buildRuns(node),
+        children: buildRuns(node, isRtlBlock(node)),
         indent: { left: 720 },
         alignment: alignmentFromNode(node),
         bidirectional: isRtlBlock(node),
@@ -388,7 +394,7 @@ function nodeToDocx(node: LexicalNode): DocxChild[] {
     const tone = $isCalloutNode(node) ? node.getTone() : node.getKind();
     return [
       new Paragraph({
-        children: buildRuns(node),
+        children: buildRuns(node, isRtlBlock(node)),
         shading: {
           type: ShadingType.CLEAR,
           fill: BLOCK_SHADING[tone] ?? "F5F5F4",
@@ -415,7 +421,7 @@ function nodeToDocx(node: LexicalNode): DocxChild[] {
   if ($isElementNode(node)) {
     return [
       new Paragraph({
-        children: buildRuns(node),
+        children: buildRuns(node, isRtlBlock(node)),
         alignment: alignmentFromNode(node),
         bidirectional: isRtlBlock(node),
       }),
@@ -520,10 +526,12 @@ export async function exportDocx(
     font: string;
     size?: number;
     color?: string;
-  } = { font: concreteFont(options.fontFamily, "Calibri") };
-  if (options.fontSizeScalePct) {
-    defaultRun.size = Math.round(22 * activeFontFactor);
-  }
+  } = {
+    font: concreteFont(options.fontFamily, "Calibri"),
+    // The editor's default body size is 14px; export it as 14pt so text
+    // without an explicit size matches what the editor shows.
+    size: Math.round(28 * activeFontFactor),
+  };
   if (options.textColor) {
     const color = parseColor(options.textColor);
     if (color) defaultRun.color = color;

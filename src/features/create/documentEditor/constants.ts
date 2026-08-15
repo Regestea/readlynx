@@ -9,6 +9,16 @@ export const FONT_SIZE_OPTIONS = [
   { value: "24px", label: "24px" },
   { value: "28px", label: "28px" },
   { value: "32px", label: "32px" },
+  { value: "36px", label: "36px" },
+  { value: "40px", label: "40px" },
+  { value: "44px", label: "44px" },
+  { value: "48px", label: "48px" },
+  { value: "52px", label: "52px" },
+  { value: "56px", label: "56px" },
+  { value: "60px", label: "60px" },
+  { value: "64px", label: "64px" },
+  { value: "68px", label: "68px" },
+  { value: "72px", label: "72px" },
 ] as const;
 
 export const TEXT_COLORS = [
