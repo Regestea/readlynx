@@ -185,9 +185,8 @@ const handlers: Record<string, (payload: unknown) => unknown> = {
   "update-book": (payload) => handleUpdateBook(payload as UpdateBookPayload),
   "get-app-settings": () => appSettings.get() ?? null,
   "update-app-settings": (payload) => {
-    const { theme } = payload as { theme: string };
-    appSettings.updateTheme(theme);
-    return { theme };
+    appSettings.update(payload as { theme?: string; chatZoom?: number });
+    return appSettings.get() ?? null;
   },
   "ai-models-list": () => aiModels.list(),
   "ai-model-create": (payload) => {

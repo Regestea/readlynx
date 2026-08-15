@@ -27,7 +27,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
           {leading}
         </span>
       )}
-      <input ref={ref} className={classes} {...rest} />
+      <input ref={ref} className={classes} dir="auto" {...rest} />
       {trailing && <span className={styles.trailing}>{trailing}</span>}
     </div>
   );

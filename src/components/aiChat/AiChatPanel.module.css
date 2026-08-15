@@ -44,6 +44,49 @@
   color: var(--color-icon);
 }
 
+.zoomControls {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+  margin-right: var(--space-3);
+}
+
+.zoomButton {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition:
+    background var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.zoomButton:hover {
+  background: var(--color-hover);
+  color: var(--color-text);
+}
+
+.zoomValue {
+  min-width: 42px;
+  padding: 0 4px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+  cursor: pointer;
+  transition: color var(--transition-fast);
+}
+
+.zoomValue:hover {
+  color: var(--color-text);
+}
+
 .closeButton {
   display: grid;
   place-items: center;

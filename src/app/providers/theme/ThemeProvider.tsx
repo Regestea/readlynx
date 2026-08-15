@@ -15,7 +15,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   useLayoutEffect(() => {
     document.documentElement.dataset.theme = theme;
     if (!loaded.current) return;
-    void window.readlynx?.db.updateAppSettings(theme).catch(() => {});
+    void window.readlynx?.db.updateAppSettings({ theme }).catch(() => {});
   }, [theme]);
 
   useEffect(() => {

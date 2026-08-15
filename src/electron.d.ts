@@ -11,6 +11,7 @@ import type {
   UpdateBookPayload,
 } from "./infrastructure/db/entities/types.ts";
 import type { AiModel } from "./infrastructure/db/entities/AiModel.ts";
+import type { AppSettingsEntity } from "./infrastructure/db/entities/AppSettings.ts";
 import type { CustomInstructionEntity } from "./infrastructure/db/entities/CustomInstruction.ts";
 import type { ReadingStateEntity } from "./infrastructure/db/entities/ReadingState.ts";
 import type { ReaderSettingsEntity, ReaderViewer } from "./infrastructure/db/entities/ReaderSettings.ts";
@@ -75,8 +76,11 @@ declare global {
         getBook(bookId: string): Promise<GetBookResult | null>;
         deleteBook(bookId: string): Promise<boolean>;
         updateBook(payload: UpdateBookPayload): Promise<BookListItem | null>;
-        getAppSettings(): Promise<{ theme: string } | null>;
-        updateAppSettings(theme: string): Promise<{ theme: string }>;
+        getAppSettings(): Promise<AppSettingsEntity | null>;
+        updateAppSettings(patch: {
+          theme?: string;
+          chatZoom?: number;
+        }): Promise<AppSettingsEntity | null>;
         listAiModels(): Promise<AiModel[]>;
         createAiModel(model: AiModel): Promise<boolean>;
         updateAiModel(model: AiModel): Promise<boolean>;

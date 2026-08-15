@@ -6,6 +6,8 @@ import type {
   TranslationMethod,
 } from "../../src/infrastructure/db/entities/index.ts";
 import type { ReadingStateEntity } from "../../src/infrastructure/db/entities/ReadingState.ts";
+import type { AppSettingsEntity } from "../../src/infrastructure/db/entities/AppSettings.ts";
+import type { AppSettingsInput } from "../../src/infrastructure/db/repositories/AppSettingsRepository.ts";
 import type { ReadingProgressRow, ReadingWeekSummary } from "../../src/infrastructure/db/entities/types.ts";
 import type { ReaderSettingsEntity, ReaderViewer } from "../../src/infrastructure/db/entities/ReaderSettings.ts";
 import type { ReadingStateInput, ReaderSettingsInput } from "../../src/infrastructure/db/repositories/index.ts";
@@ -100,12 +102,12 @@ export class DbWorkerClient {
     return this.exec("delete-book", bookId);
   }
 
-  getAppSettings(): Promise<{ theme: string } | null> {
+  getAppSettings(): Promise<AppSettingsEntity | null> {
     return this.exec("get-app-settings");
   }
 
-  updateAppSettings(theme: string): Promise<{ theme: string }> {
-    return this.exec("update-app-settings", { theme });
+  updateAppSettings(patch: AppSettingsInput): Promise<AppSettingsEntity | null> {
+    return this.exec("update-app-settings", patch);
   }
 
   listAiModels(): Promise<AiModel[]> {

@@ -3,6 +3,7 @@ import type { DbWorkerClient } from "../db/client.ts";
 import type { AiModel } from "../../src/infrastructure/db/entities/AiModel.ts";
 import type { SaveDocumentPayload, UpdateBookPayload } from "../../src/infrastructure/db/entities/types.ts";
 import type { ReadingStateInput } from "../../src/infrastructure/db/repositories/ReadingStateRepository.ts";
+import type { AppSettingsInput } from "../../src/infrastructure/db/repositories/AppSettingsRepository.ts";
 
 export function registerDbIpc(db: DbWorkerClient) {
   ipcMain.handle("db:create-book", () => db.createBook());
@@ -31,7 +32,7 @@ export function registerDbIpc(db: DbWorkerClient) {
 
   ipcMain.handle("db:get-app-settings", () => db.getAppSettings());
 
-  ipcMain.handle("db:update-app-settings", (_event, theme: string) => db.updateAppSettings(theme));
+  ipcMain.handle("db:update-app-settings", (_event, patch: AppSettingsInput) => db.updateAppSettings(patch));
 
   ipcMain.handle("db:ai-models-list", () => db.listAiModels());
 

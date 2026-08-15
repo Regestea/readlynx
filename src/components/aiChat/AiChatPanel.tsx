@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Loader2, Send, Sparkles, X } from "lucide-react";
+import { Loader2, Send, Sparkles, X, ZoomIn, ZoomOut } from "lucide-react";
 import { Markdown } from "../markdown/Markdown";
 import { useDefaultAiModel } from "../../infrastructure/ai/useDefaultAiModel";
 import { resolveProviderBaseUrl } from "../../infrastructure/ai/modelResolver";
@@ -53,6 +53,34 @@ export function AiChatPanel({
   const [busy, setBusy] = useState(false);
   const [typingLabel, setTypingLabel] = useState("Thinking…");
   const [error, setError] = useState<string | null>(null);
+  /** Conversation zoom in percent (applies to the message content). */
+  const [zoomPct, setZoomPct] = useState(100);
+  /** False until the saved zoom arrived, so the initial value is never
+   *  persisted over the user's stored choice. */
+  const zoomLoadedRef = useRef(false);
+
+  /** Loads the saved chat zoom from the app settings. */
+  useEffect(() => {
+    let cancelled = false;
+    void window.readlynx?.db.getAppSettings().then((settings) => {
+      if (cancelled) return;
+      zoomLoadedRef.current = true;
+      const saved = settings?.chatZoom;
+      if (typeof saved === "number") {
+        setZoomPct(Math.min(160, Math.max(70, saved)));
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  /** Persists the chat zoom so the conversation stays the same size next
+   *  time. */
+  useEffect(() => {
+    if (!zoomLoadedRef.current) return;
+    void window.readlynx?.db.updateAppSettings({ chatZoom: zoomPct }).catch(() => {});
+  }, [zoomPct]);
   const modelRef = useRef<{ url: string; apiKey: string; modelName: string } | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -172,6 +200,34 @@ export function AiChatPanel({
             <Sparkles size={16} strokeWidth={2} aria-hidden="true" />
             AI Assistant
           </span>
+          <span className={styles.zoomControls}>
+            <button
+              type="button"
+              className={styles.zoomButton}
+              onClick={() => setZoomPct((current) => Math.max(70, current - 10))}
+              aria-label="Zoom out chat content"
+              title="Zoom out chat content"
+            >
+              <ZoomOut size={15} strokeWidth={2} aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              className={styles.zoomValue}
+              onClick={() => setZoomPct(100)}
+              title="Reset zoom to 100%"
+            >
+              {zoomPct}%
+            </button>
+            <button
+              type="button"
+              className={styles.zoomButton}
+              onClick={() => setZoomPct((current) => Math.min(160, current + 10))}
+              aria-label="Zoom in chat content"
+              title="Zoom in chat content"
+            >
+              <ZoomIn size={15} strokeWidth={2} aria-hidden="true" />
+            </button>
+          </span>
           <button
             type="button"
             className={styles.closeButton}
@@ -183,7 +239,7 @@ export function AiChatPanel({
           </button>
         </header>
 
-        <div className={styles.messages} ref={listRef}>
+        <div className={styles.messages} ref={listRef} style={{ zoom: zoomPct / 100 }}>
           {messages.length === 0 && !busy && (
             <div className={styles.empty}>
               <Sparkles size={22} strokeWidth={1.6} aria-hidden="true" />
@@ -199,7 +255,7 @@ export function AiChatPanel({
           {messages.map((message, index) =>
             message.role === "user" ? (
               <div key={index} className={styles.userRow}>
-                <div className={styles.userBubble}>{message.content}</div>
+                <div className={styles.userBubble} dir="auto">{message.content}</div>
               </div>
             ) : (
               <div key={index} className={styles.assistantRow}>
@@ -229,6 +285,7 @@ export function AiChatPanel({
             ref={inputRef}
             className={styles.input}
             rows={1}
+            dir="auto"
             placeholder={modelError ?? "Ask anything…"}
             value={input}
             disabled={busy}

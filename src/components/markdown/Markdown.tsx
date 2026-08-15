@@ -544,16 +544,29 @@ export function Markdown({
       // a moment (covers keyboard-driven selections with no mouse events).
       showTimer = window.setTimeout(compute, 250);
     };
+    /** Right-clicking inside the document with no text selection hands the
+     *  whole document to the AI chat instead of opening the native menu. */
+    const onContextMenu = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (!host || !target || !host.contains(target)) return;
+      const sel = window.getSelection();
+      const selected = sel?.toString().trim() ?? "";
+      if (sel && !sel.isCollapsed && selected) return;
+      event.preventDefault();
+      onAskAi(content);
+    };
     document.addEventListener("mousedown", onDown);
     document.addEventListener("mouseup", onUp);
     document.addEventListener("selectionchange", onSelectionChange);
+    document.addEventListener("contextmenu", onContextMenu);
     return () => {
       document.removeEventListener("mousedown", onDown);
       document.removeEventListener("mouseup", onUp);
       document.removeEventListener("selectionchange", onSelectionChange);
+      document.removeEventListener("contextmenu", onContextMenu);
       if (showTimer) window.clearTimeout(showTimer);
     };
-  }, [onAskAi]);
+  }, [onAskAi, content]);
 
   /** Exits the in-page fullscreen overlay with Escape. */
   useEffect(() => {

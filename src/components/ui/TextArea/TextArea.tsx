@@ -8,5 +8,5 @@ export const TextArea = forwardRef<HTMLTextAreaElement, TextAreaProps>(function 
   { className = "", ...rest },
   ref,
 ) {
-  return <textarea ref={ref} className={`${styles.textarea} ${className}`} {...rest} />;
+  return <textarea ref={ref} className={`${styles.textarea} ${className}`} dir="auto" {...rest} />;
 });

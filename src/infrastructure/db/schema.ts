@@ -95,7 +95,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_translations_lookup
   ON Translations (bookId, pageNumber, chunkKey);
 
 CREATE TABLE IF NOT EXISTS AppSettings (
-  theme TEXT NOT NULL DEFAULT 'light'
+  theme    TEXT NOT NULL DEFAULT 'light',
+  chatZoom INTEGER NOT NULL DEFAULT 100
 );
 
 CREATE TABLE IF NOT EXISTS CustomInstructions (
@@ -163,6 +164,7 @@ export function applySchema(db: Database.Database): void {
     ensureReadingStateStatsColumns(db);
     ensureAiModelDefaultColumn(db);
     ensureTranslationLookupIndex(db);
+    ensureAppSettingsChatZoomColumn(db);
   });
 }
 
@@ -415,4 +417,13 @@ function ensureAiModelDefaultColumn(db: Database.Database): void {
   if (!columns.some((entry) => entry.name === "IsDefault")) {
     db.exec("ALTER TABLE AiModels ADD COLUMN IsDefault INTEGER NOT NULL DEFAULT 0");
   }
+}
+
+/** Databases created before the AI chat zoom existed lack `chatZoom` on
+ *  `AppSettings`. Adds it with the default; the single settings row keeps
+ *  its theme. */
+function ensureAppSettingsChatZoomColumn(db: Database.Database): void {
+  const columns = db.pragma("table_info(AppSettings)") as Array<{ name: string }>;
+  if (columns.some((entry) => entry.name === "chatZoom")) return;
+  db.exec("ALTER TABLE AppSettings ADD COLUMN chatZoom INTEGER NOT NULL DEFAULT 100");
 }
