@@ -131,6 +131,7 @@ function PdfViewerInner({
   const [extractMode, setExtractMode] = useState<"ocr" | "vision">("ocr");
   const [visionInstruction, setVisionInstruction] = useState("");
   const visionInstructionRef = useRef(visionInstruction);
+  const [visionInstructionId, setVisionInstructionId] = useState("");
   const [selectedLangs, setSelectedLangs] = useState<string[]>(["eng"]);
   const [installed, setInstalled] = useState<string[]>([]);
   const [downloading, setDownloading] = useState<string | null>(null);
@@ -763,6 +764,8 @@ const task = pageProxy.render({ canvas, viewport, transform });
             onModeChange={onAiVision ? setExtractMode : undefined}
             instruction={visionInstruction}
             onInstructionChange={onAiVision ? setVisionInstruction : undefined}
+            instructionId={onAiVision ? visionInstructionId : undefined}
+            onInstructionIdChange={onAiVision ? setVisionInstructionId : undefined}
             onClose={() => setOcrOpen(false)}
           />
         )}

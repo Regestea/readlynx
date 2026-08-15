@@ -1,24 +1,23 @@
 import { useEffect, useState } from "react";
 import { Loader2, Pencil, Plus, Save, Trash2, X } from "lucide-react";
-import type { CustomInstructionEntity } from "../../../infrastructure/db/entities/CustomInstruction.ts";
-import type { TranslationSettings } from "./types.ts";
-import { Button } from "../../../components/ui/Button/Button";
-import { Input } from "../../../components/ui/Input/Input";
-import { TextArea } from "../../../components/ui/TextArea/TextArea";
-import { Modal } from "../../../components/ui/Modal/Modal";
+import type { CustomInstructionEntity } from "../../infrastructure/db/entities/CustomInstruction.ts";
+import { Button } from "../ui/Button/Button";
+import { Input } from "../ui/Input/Input";
+import { TextArea } from "../ui/TextArea/TextArea";
+import { Modal } from "../ui/Modal/Modal";
 import styles from "./CustomInstructionsModal.module.css";
 
 interface CustomInstructionsModalProps {
   open: boolean;
   onClose: () => void;
-  /** Id of the instruction currently used by the book ("" = none). */
+  /** Id of the instruction currently in use ("" = none). */
   selectedId: string;
-  /** Propagates edits/deletions of the selected instruction back to the
-   *  reading settings (content updates, or reset when it is deleted). */
-  onSettingsChange: (patch: Partial<TranslationSettings>) => void;
-  /** Re-resolves the selected instruction's text after it is edited (the id
-   *  does not change, so the caller's id-keyed effect would not re-run). */
-  onInstructionEdited: () => void;
+  /** Called with the updated instruction after the currently selected one is
+   *  edited (its id does not change, so the caller's id-keyed effect would
+   *  not re-run). */
+  onSelectedEdited?: (instruction: CustomInstructionEntity) => void;
+  /** Called after the currently selected instruction is deleted. */
+  onSelectedDeleted?: () => void;
 }
 
 interface Draft {
@@ -27,14 +26,14 @@ interface Draft {
   content: string;
 }
 
-/** Manager for the user's saved translation instructions: create, edit and
- *  delete the prompts offered by the header bar's instruction select. */
+/** Manager for the user's saved instruction templates: create, edit and
+ *  delete the prompts offered by every instruction select. */
 export function CustomInstructionsModal({
   open,
   onClose,
   selectedId,
-  onSettingsChange,
-  onInstructionEdited,
+  onSelectedEdited,
+  onSelectedDeleted,
 }: CustomInstructionsModalProps) {
   const [instructions, setInstructions] = useState<CustomInstructionEntity[]>([]);
   const [loading, setLoading] = useState(false);
@@ -98,7 +97,7 @@ export function CustomInstructionsModal({
       const rows = await db?.listCustomInstructions();
       setInstructions(rows ?? []);
       if (draft.id && draft.id === selectedId) {
-        onInstructionEdited();
+        onSelectedEdited?.({ id: draft.id, name, content, createdAt: "", updatedAt: "" });
       }
       if (ok) setDraft(null);
     } catch (err) {
@@ -116,7 +115,7 @@ export function CustomInstructionsModal({
       const rows = await window.readlynx?.db.listCustomInstructions();
       setInstructions(rows ?? []);
       if (instruction.id === selectedId) {
-        onSettingsChange({ customPromptId: "" });
+        onSelectedDeleted?.();
       }
       if (draft?.id === instruction.id) setDraft(null);
     } catch (err) {
@@ -127,8 +126,8 @@ export function CustomInstructionsModal({
   return (
     <Modal open={open} onClose={close} title="Custom instructions" footer={null} wide>
       <p className={styles.hint}>
-        Saved instruction templates that can be layered on every translation. Pick one from the
-        instruction dropdown of any book, or keep “None”.
+        Saved instruction templates that can be reused anywhere — pick one from an instruction
+        dropdown, or keep “None”.
       </p>
 
       <div className={styles.actions}>
@@ -196,7 +195,7 @@ export function CustomInstructionsModal({
           ))}
           {instructions.length === 0 && !draft && (
             <li className={styles.empty}>
-              No instructions yet — create one to reuse it across books.
+              No instructions yet — create one to reuse it anywhere.
             </li>
           )}
         </ul>

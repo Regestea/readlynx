@@ -2,6 +2,7 @@ import { useState } from "react";
 import { CheckCircle2, Download, Loader2, ScanText, Search, Sparkles, Trash2, X } from "lucide-react";
 import { Checkbox } from "../ui/Checkbox/Checkbox";
 import { Button } from "../ui/Button/Button";
+import { CustomInstructionSelect } from "../customInstruction/CustomInstructionSelect";
 import { OCR_LANGUAGES } from "../../infrastructure/ocr/ocrLanguages";
 import styles from "./OcrPanel.module.css";
 
@@ -36,6 +37,12 @@ interface OcrPanelProps {
    *  anything). Optional — when omitted, no instruction box is shown. */
   instruction?: string;
   onInstructionChange?: (value: string) => void;
+  /** Id of the saved instruction template chosen for the extraction ("" =
+   *  none). Optional — when provided together with `onInstructionIdChange`,
+   *  a "Custom instruction" select (saved templates + manage) is shown above
+   *  the instruction box. */
+  instructionId?: string;
+  onInstructionIdChange?: (id: string) => void;
   onClose: () => void;
   /** Overrides the panel header title (e.g. "OCR source languages"). */
   title?: string;
@@ -65,6 +72,8 @@ export function OcrPanel({
   onModeChange,
   instruction = "",
   onInstructionChange,
+  instructionId,
+  onInstructionIdChange,
   onClose,
   title = "Extract text (OCR)",
   hint,
@@ -152,15 +161,31 @@ export function OcrPanel({
       </p>
 
       {isVision && onInstructionChange && (
-        <textarea
-          className={styles.instructionBox}
-          value={instruction}
-          onChange={(event) => onInstructionChange(event.target.value)}
-          placeholder="Instructions for the extraction — e.g. “join broken lines into paragraphs”, “keep all headings as headings”, “ignore page numbers”…"
-          rows={3}
-          disabled={extracting}
-          aria-label="Extraction instructions"
-        />
+        <div className={styles.visionInstructions}>
+          {onInstructionIdChange && (
+            <CustomInstructionSelect
+              compact
+              value={instructionId ?? ""}
+              onChange={onInstructionIdChange}
+              onPicked={(instruction) => onInstructionChange(instruction?.content ?? "")}
+              onInstructionEdited={(instruction) => {
+                if (instruction.id === instructionId) onInstructionChange(instruction.content);
+              }}
+              disabled={extracting}
+              ariaLabel="Custom instruction for the extraction"
+              title="Saved instruction template layered on the extraction"
+            />
+          )}
+          <textarea
+            className={styles.instructionBox}
+            value={instruction}
+            onChange={(event) => onInstructionChange(event.target.value)}
+            placeholder="Instructions for the extraction — e.g. “join broken lines into paragraphs”, “keep all headings as headings”, “ignore page numbers”…"
+            rows={3}
+            disabled={extracting}
+            aria-label="Extraction instructions"
+          />
+        </div>
       )}
 
       {!isVision && (

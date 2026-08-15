@@ -1,20 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import { ChevronDown, Languages, Loader2, RefreshCw, X } from "lucide-react";
 import type { AiModel } from "../../../infrastructure/db/entities/AiModel.ts";
-import type { CustomInstructionEntity } from "../../../infrastructure/db/entities/CustomInstruction.ts";
 import type { BookSourceType } from "../../../infrastructure/db/entities/types.ts";
 import { Button } from "../../../components/ui/Button/Button";
 import { Select } from "../../../components/ui/Select/Select";
+import { CustomInstructionSelect } from "../../../components/customInstruction/CustomInstructionSelect";
 import { OcrPanel } from "../../../components/pdfViewer/OcrPanel";
-import { CustomInstructionsModal } from "./CustomInstructionsModal.tsx";
 import { PageRangeModal } from "./PageRangeModal.tsx";
 import { NO_LANGUAGE, TRANSLATION_LANGUAGES, languageLabel, ocrLanguagesLabel } from "./languages.ts";
 import type { TranslationMethod, TranslationSettings } from "./types.ts";
 import styles from "./TranslationPanel.module.css";
-
-/** "Modify…" entry at the bottom of the instruction select: opens the
- *  manager modal instead of picking an instruction. */
-const MANAGE_INSTRUCTIONS = "__manage__";
 
 interface TranslationSettingsPanelProps {
   sourceType: BookSourceType;
@@ -84,30 +79,10 @@ export function TranslationSettingsPanel({
 }: TranslationSettingsPanelProps) {
   const [ocrOpen, setOcrOpen] = useState(false);
   const [modelOpen, setModelOpen] = useState(false);
-  const [manageOpen, setManageOpen] = useState(false);
   const [rangeOpen, setRangeOpen] = useState(false);
   const [rangeSelect, setRangeSelect] = useState("current");
-  const [instructions, setInstructions] = useState<CustomInstructionEntity[]>([]);
   const ocrAnchorRef = useRef<HTMLDivElement>(null);
   const modelAnchorRef = useRef<HTMLDivElement>(null);
-
-  /** Saved instruction list: loaded once on mount and refreshed every time
-   *  the manager modal closes (it may have created/edited/deleted rows). */
-  useEffect(() => {
-    let cancelled = false;
-    const load = async () => {
-      try {
-        const rows = await window.readlynx?.db.listCustomInstructions();
-        if (!cancelled) setInstructions(rows ?? []);
-      } catch {
-        // keep whatever was loaded before
-      }
-    };
-    if (!manageOpen) void load();
-    return () => {
-      cancelled = true;
-    };
-  }, [manageOpen]);
 
   /** Closes the OCR languages and AI model dropdowns on outside click or
    *  Escape. */
@@ -149,24 +124,6 @@ export function TranslationSettingsPanel({
         .map((id) => models.find((row) => row.Id === id)?.DisplayName ?? id)
         .join(", ")
     : "app default";
-  const selectedInstruction = instructions.find(
-    (instruction) => instruction.id === settings.customPromptId,
-  );
-  const instructionValue = selectedInstruction?.id ?? "";
-
-  const handleInstructionChange = (value: string) => {
-    if (value === MANAGE_INSTRUCTIONS) {
-      setOcrOpen(false);
-      setManageOpen(true);
-      return;
-    }
-    if (value === "") {
-      onSettingsChange({ customPromptId: "" });
-      return;
-    }
-    const found = instructions.find((instruction) => instruction.id === value);
-    if (found) onSettingsChange({ customPromptId: found.id });
-  };
 
   return (
     <div className={styles.toolbar} role="toolbar" aria-label="Translation settings">
@@ -353,27 +310,14 @@ export function TranslationSettingsPanel({
         title="Target language"
       />
 
-      <Select
+      <CustomInstructionSelect
         compact
         className={styles.control}
-        value={instructionValue}
-        onChange={(event) => handleInstructionChange(event.target.value)}
-        options={[{ value: "", label: "No instruction" }]}
-        groups={[
-          {
-            label: "Saved",
-            options: instructions.map((instruction) => ({
-              value: instruction.id,
-              label: instruction.name,
-            })),
-          },
-          {
-            label: "Manage",
-            options: [{ value: MANAGE_INSTRUCTIONS, label: "Modify…" }],
-          },
-        ]}
+        value={settings.customPromptId}
+        onChange={(id) => onSettingsChange({ customPromptId: id })}
+        onInstructionEdited={() => onInstructionEdited()}
         disabled={busy}
-        aria-label="Custom instruction"
+        ariaLabel="Custom instruction"
         title="Custom instruction layered on the translation"
       />
 
@@ -400,14 +344,6 @@ export function TranslationSettingsPanel({
       </Button>
         </>
       )}
-
-      <CustomInstructionsModal
-        open={manageOpen}
-        onClose={() => setManageOpen(false)}
-        selectedId={settings.customPromptId}
-        onSettingsChange={onSettingsChange}
-        onInstructionEdited={onInstructionEdited}
-      />
 
       <PageRangeModal
         open={rangeOpen}
