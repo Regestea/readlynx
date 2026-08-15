@@ -32,9 +32,11 @@ export function useAiModels() {
     if (data) setModels(data);
   };
 
+  /** Adds a model. The first model added is automatically the default (the
+   *  worker enforces this too), so the local list mirrors it. */
   const addModel = async (model: AiModel) => {
     await getDb()?.createAiModel(model);
-    setModels((prev) => [...prev, model]);
+    setModels((prev) => [...prev, { ...model, IsDefault: prev.length === 0 || model.IsDefault }]);
   };
 
   const updateModel = async (model: AiModel) => {

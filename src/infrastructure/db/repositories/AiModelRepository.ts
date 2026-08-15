@@ -43,21 +43,33 @@ export class AiModelRepository {
     return models.find((model) => model.IsDefault) ?? models[0];
   }
 
+  /** Inserts a model. When it is the first model in the table it is forced
+   *  to be the default; an explicitly-default insert clears the flag on the
+   *  others first. */
   insert(model: AiModel): void {
-    this.db
-      .prepare(
-        `INSERT INTO AiModels (Id, DisplayName, URL, ModelName, APIKey, Provider, IsDefault)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      )
-      .run(
-        model.Id,
-        model.DisplayName,
-        model.URL,
-        model.ModelName,
-        model.APIKey,
-        model.Provider,
-        model.IsDefault ? 1 : 0,
-      );
+    this.db.transaction(() => {
+      const count = (this.db
+        .prepare("SELECT COUNT(*) AS n FROM AiModels")
+        .get() as { n: number }).n;
+      const isDefault = count === 0 || model.IsDefault;
+      if (isDefault && count > 0) {
+        this.db.prepare("UPDATE AiModels SET IsDefault = 0").run();
+      }
+      this.db
+        .prepare(
+          `INSERT INTO AiModels (Id, DisplayName, URL, ModelName, APIKey, Provider, IsDefault)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .run(
+          model.Id,
+          model.DisplayName,
+          model.URL,
+          model.ModelName,
+          model.APIKey,
+          model.Provider,
+          isDefault ? 1 : 0,
+        );
+    })();
   }
 
   update(model: AiModel): void {
