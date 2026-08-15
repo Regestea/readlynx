@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { fetchWithLog } from "./httpLog.ts";
 
 /** Shared shape for calling any OpenAI-compatible provider from the main
  *  process. Requests leave the app here, so the renderer never makes browser
@@ -25,6 +26,8 @@ function createClient(input: AiConnectionInput): OpenAI {
   return new OpenAI({
     baseURL: input.url,
     apiKey: input.apiKey,
+    // Log every request the SDK makes (see httpLog.ts).
+    fetch: fetchWithLog,
   });
 }
 
@@ -66,7 +69,8 @@ async function withRateLimitRetry<T>(
 }
 
 /** Tiny completion that verifies an API key + model combination actually
- *  works before it is saved. */
+ *  works before it is saved. Any successful response counts as a pass —
+ *  some models return empty content, which is fine. */
 export async function testConnection(
   input: AiConnectionInput,
 ): Promise<{ ok: boolean; message?: string; error?: string }> {
@@ -78,9 +82,7 @@ export async function testConnection(
       max_tokens: 8,
     });
     const content = completion.choices[0]?.message?.content?.trim();
-    return content
-      ? { ok: true, message: content }
-      : { ok: false, error: "The provider returned an empty response." };
+    return { ok: true, message: content || undefined };
   } catch (error) {
     return {
       ok: false,
@@ -93,7 +95,7 @@ export async function testConnection(
 export async function listGeminiModels(
   apiKey: string,
 ): Promise<{ value: string; label: string }[]> {
-  const response = await fetch(
+  const response = await fetchWithLog(
     `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(apiKey)}`,
   );
 

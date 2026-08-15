@@ -104,6 +104,7 @@ function PdfViewerInner({
   const toolbarRef = useRef<HTMLDivElement>(null);
   const loadTaskRef = useRef<PDFDocumentLoadingTask | null>(null);
   const renderTaskRef = useRef<RenderTask | null>(null);
+  const renderGenerationRef = useRef(0);
   const onReadyRef = useRef(onReady);
   const onOcrTextRef = useRef(onOcrText);
   const onPageSnapshotRef = useRef(onPageSnapshot);
@@ -415,13 +416,24 @@ function PdfViewerInner({
   const renderPage = useCallback(async (pdf: PDFDocumentProxy, page: number, s: number) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    renderTaskRef.current?.cancel();
+    const generation = ++renderGenerationRef.current;
+    const previousTask = renderTaskRef.current;
+    renderTaskRef.current = null;
+    if (previousTask) {
+      previousTask.cancel();
+      try {
+        await previousTask.promise;
+      } catch {
+        // Expected: the superseded render was cancelled; the canvas is now free.
+      }
+    }
     textLayerTaskRef.current?.cancel();
     textLayerTaskRef.current = null;
     annotationLayerTaskRef.current?.destroy();
     annotationLayerTaskRef.current = null;
     try {
       const pageProxy: PDFPageProxy = await pdf.getPage(page);
+      if (generation !== renderGenerationRef.current) return;
       setRendering(true);
       const viewport = pageProxy.getViewport({ scale: s });
       const dpr = Math.min(window.devicePixelRatio || 1, 2);

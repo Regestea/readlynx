@@ -29,6 +29,10 @@ declare global {
       }): Promise<string | null>;
       onPrepareClose(callback: () => void): () => void;
       notifyReadyToClose(): void;
+      /** Main-process HTTP request log lines (AI, OCR downloads, …), mirrored
+       *  so they show up in the DevTools console. `body` is the (redacted)
+       *  request body when the request had one. */
+      onHttpLog(callback: (payload: { line: string; body?: unknown }) => void): () => void;
       readFileBytes(filePath: string): Promise<ArrayBuffer | null>;
       readCoverDataUrl(relativePath: string): Promise<string | null>;
       pickFile(options?: {

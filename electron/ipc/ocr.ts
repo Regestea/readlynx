@@ -2,6 +2,7 @@ import { app, ipcMain } from "electron";
 import fs from "node:fs";
 import path from "node:path";
 import Tesseract from "tesseract.js";
+import { fetchWithLog } from "../httpLog.ts";
 
 const tessdataDir = (): string => path.join(app.getPath("userData"), "tessdata");
 
@@ -40,8 +41,8 @@ export function registerOcrIpc() {
       try {
         // Prefer the higher-quality best_int models; fall back to the
         // standard 4.0.0 data for languages that don't ship them.
-        let resp = await fetch(url("4.0.0_best_int"));
-        if (!resp.ok) resp = await fetch(url("4.0.0"));
+        let resp = await fetchWithLog(url("4.0.0_best_int"));
+        if (!resp.ok) resp = await fetchWithLog(url("4.0.0"));
         if (!resp.ok) throw new Error(`Download failed with status ${resp.status}`);
         const total = Number(resp.headers.get("content-length")) || 0;
         if (!resp.body) throw new Error("Response body is empty");

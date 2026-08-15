@@ -8,6 +8,11 @@ contextBridge.exposeInMainWorld("readlynx", {
     return () => ipcRenderer.removeListener("app:prepare-close", listener);
   },
   notifyReadyToClose: () => ipcRenderer.send("app:ready-to-close"),
+  onHttpLog: (callback) => {
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on("http:log", listener);
+    return () => ipcRenderer.removeListener("http:log", listener);
+  },
   readFileBytes: (filePath) => ipcRenderer.invoke("fs:read-bytes", filePath),
   readCoverDataUrl: (relativePath) => ipcRenderer.invoke("cover:read-data-url", relativePath),
   pickFile: (options) => ipcRenderer.invoke("fs:pick-file", options),

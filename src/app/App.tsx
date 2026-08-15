@@ -38,6 +38,21 @@ export default function App() {
     return () => unsubscribe?.();
   }, []);
 
+  /** Native HTTP requests (AI calls, OCR model downloads, …) leave the app
+   *  from the main process, so the renderer Network tab can't see them. Mirror
+   *  the main-process log lines into this DevTools console instead. */
+  useEffect(() => {
+    return window.readlynx?.onHttpLog(({ line, body }) => {
+      if (body !== undefined) {
+        // Log the body as a second argument so DevTools renders it as an
+        // expandable object instead of one unreadable JSON line.
+        console.log(`%c${line}`, "color:#5a8dee;font-weight:600", body);
+      } else {
+        console.log(`%c${line}`, "color:#5a8dee;font-weight:600");
+      }
+    });
+  }, []);
+
   const handleNavigate = (id: string) => {
     if (id !== "create-book") {
       setSidebarCollapsed(false);

@@ -1,71 +1,139 @@
 import type { TranslationDocType } from "./types.ts";
-import { languageLabel, ocrLanguagesLabel } from "./languages.ts";
+import { languageLabel } from "./languages.ts";
 
 export interface TranslationPromptContext {
   docType: TranslationDocType;
-  /** Tesseract codes of the OCR page, when `docType` is "PDF OCR text". */
+  /** Tesseract codes used when OCR was performed. */
   ocrLangs?: string[];
   /** Target language code. */
   targetLang: string;
-  /** Optional user instruction layered on top of translation. */
+  /** Optional user instruction layered on top of the default translation behavior. */
   customPrompt?: string;
 }
 
-function sourceDescription(context: TranslationPromptContext): string {
-  if (context.docType === "PDF OCR text" && context.ocrLangs?.length) {
-    const langs = ocrLanguagesLabel(context.ocrLangs);
-    return `the text extracted from the page (recognized as ${langs})`;
-  }
-  return "the source language (detected automatically from the content)";
-}
-
-/** The behaviour contract sent to the model on every translation request. */
-export function buildTranslationSystemPrompt(context: TranslationPromptContext): string {
-  const source = sourceDescription(context);
+/**
+ * The behaviour contract sent to the model on every translation request.
+ *
+ * Important:
+ * - The source language is intentionally NOT provided.
+ * - The model should detect the source language from the actual content.
+ * - The target language is provided explicitly by the application.
+ * - Custom instructions are sent separately as a user-level instruction.
+ */
+export function buildTranslationSystemPrompt(
+    context: TranslationPromptContext,
+): string {
   const target = languageLabel(context.targetLang);
+
   const lines = [
-    "You are the translation engine of a reading app. You translate pages and chapters that the user is reading.",
-    `Translate the content from ${source} to ${target}.`,
+    "You are the translation engine of a reading app.",
+    `Translate the source content into ${target}.`,
+    "Detect the source language automatically from the actual content. Do not assume a source language in advance.",
+    "Translate faithfully and naturally while preserving the meaning, context, terminology, and important details of the source.",
+    "Do not invent information that is not present in the source.",
+    "Do not summarize, shorten, or omit content unless the user's instruction explicitly asks you to do so.",
+
     "Output rules:",
-    "- Return Markdown only. Do not wrap the whole response in code fences and do not add any explanation outside the Markdown.",
-    "- Preserve useful structure whenever the source has it: headings, paragraphs, lists, tables, code blocks and block quotes.",
-    "- Translate code as code: put any code in a fenced code block annotated with its language (```language ... ```). Never write code as plain text, and use inline backticks (`code`) only for short identifiers inside a sentence.",
-    "- Mermaid diagrams are supported: render them in a fenced code block with the mermaid language (```mermaid ... ```). Pie charts are fully supported; quadrant charts are also supported when a chart fits the content.",
-    "- Do not summarize, shorten or omit content unless the user's instruction asks you to.",
-    "- The user instruction below is an extra layer that overrides the default \"translate normally\" behaviour when it conflicts.",
+    "- Return Markdown only.",
+    "- Do not wrap the whole response in a single code fence.",
+    "- Do not add explanations about the translation process outside the requested content.",
+    "- Preserve useful document structure whenever the source supports it: headings, paragraphs, lists, tables, block quotes, code blocks, diagrams, and charts.",
+
+    "Code:",
+    "- Do not translate executable source code.",
+    "- Preserve code as code whenever possible.",
+    "- Put code inside fenced Markdown code blocks with the appropriate language.",
+    "- Use inline backticks only for short identifiers, commands, or code fragments inside normal text.",
+    "- Preserve URLs, file paths, identifiers, commands, API names, version numbers, and similar technical tokens when appropriate.",
+
+    "Mermaid and charts:",
+    "- When the source contains a diagram or chart that can be meaningfully represented with Mermaid, prefer converting it into a Mermaid diagram instead of replacing it with a plain-text description.",
+    "- Preserve the meaning, relationships, hierarchy, labels, and data from the source as accurately as possible.",
+    "- Use the most appropriate Mermaid diagram type for the source.",
+    "- Put every Mermaid diagram inside a fenced Markdown code block using the `mermaid` language.",
+    "- Do not omit a diagram merely because its exact visual styling cannot be reproduced.",
+    "- Do not invent relationships, labels, values, or data that are not supported by the source.",
+    "- Supported Mermaid visualizations include flowcharts, sequence diagrams, class diagrams, state diagrams, entity relationship diagrams, mind maps, timelines, journey diagrams, Gantt charts, pie charts, quadrant charts, and other Mermaid-compatible diagram types.",
+    "- Pie charts should use Mermaid `pie` syntax when the source contains a pie chart.",
+    "- Quadrant charts should use Mermaid quadrant syntax when the source contains a suitable quadrant chart.",
+    "- If a diagram or chart cannot be represented faithfully with Mermaid, preserve its important information as Markdown rather than inventing an inaccurate diagram.",
+
+    "Mermaid examples:",
+    "A simple flow such as A → B → C may be represented as:",
+    "```mermaid",
+    "flowchart LR",
+    "    A --> B --> C",
+    "```",
+    "A pie chart may be represented as:",
+    "```mermaid",
+    "pie",
+    '    title Example',
+    '    "A" : 40',
+    '    "B" : 35',
+    '    "C" : 25',
+    "```",
   ];
+
   if (context.docType === "PDF image") {
-    lines.splice(
-      1,
-      0,
-      "The input is an image of a page. Read all the text on the image first, then translate it into Markdown, preserving headings, paragraphs, lists, tables and code blocks as best as the image allows.",
+    lines.push(
+        "The input is an image of a page. First read and understand all visible text and visual structure on the image, then translate and reconstruct the content as Markdown.",
     );
   }
+
+  if (context.docType === "PDF OCR text") {
+    lines.push(
+        "The input is text extracted from a page using OCR. Correct obvious OCR artifacts when the intended text is clear from context, but do not invent missing content.",
+    );
+  }
+
   if (context.docType === "EPUB chapter") {
-    lines.splice(
-      1,
-      0,
-      "The input is the plain text of a chapter with only minimal structural markers (# for headings, - for lists, > for quotes). Rebuild the chapter as clean Markdown: translate all text and use headings, paragraphs, lists, tables and block quotes where the source implies them. Do not copy or invent any formatting symbols.",
-    );
-    lines.splice(
-      2,
-      0,
-      "The input may contain image placeholders like [IMG-0] between paragraphs. Keep every placeholder exactly as it is: do not translate, describe, explain, wrap or remove it — the image itself is rendered separately.",
+    lines.push(
+        "The input is the plain text of a chapter with minimal structural markers. Reconstruct clean Markdown based on the structure and meaning of the source.",
+        "Do not invent formatting that is not supported by the source.",
+        "The input may contain image placeholders such as [IMG-0] between paragraphs.",
+        "Keep every image placeholder exactly as it is: do not translate, describe, explain, wrap, modify, or remove it.",
     );
   }
-  if (context.customPrompt?.trim()) {
-    lines.push(`User instruction: ${context.customPrompt.trim()}`);
-  }
+
+  lines.push(
+      "The user may provide an additional instruction describing how they want the content processed, such as summarization, simplification, explanation, restructuring, tone, or level of detail. Follow that instruction as part of the requested transformation while still using the application-provided target language and preserving valid Markdown output.",
+  );
+
   return lines.join("\n");
 }
 
-/** The text (or, for images, the instruction) sent as the user message. */
+/**
+ * The user-level request sent to the model.
+ *
+ * This is intentionally separate from the system prompt so that
+ * custom user instructions can modify the transformation without
+ * becoming part of the application's core behaviour contract.
+ */
 export function buildTranslationUserPrompt(
-  context: TranslationPromptContext,
-  content: string,
+    context: TranslationPromptContext,
+    content: string,
 ): string {
-  if (context.docType === "PDF image") {
-    return "Translate the text visible in the image according to your instructions.";
+  const customPrompt = context.customPrompt?.trim();
+
+  const parts: string[] = [];
+
+  if (customPrompt) {
+    parts.push(
+        "Additional user instruction:",
+        customPrompt,
+    );
   }
-  return content;
+
+  if (context.docType === "PDF image") {
+    parts.push(
+        "Process the text and visual content visible in the provided image according to the system instructions.",
+    );
+  } else {
+    parts.push(
+        "Process the following source content according to the system instructions:",
+        content,
+    );
+  }
+
+  return parts.join("\n\n");
 }
