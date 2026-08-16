@@ -1,0 +1,39 @@
+appId: com.readlynx.app
+productName: ReadLynx
+copyright: Copyright (c) 2026 ReadLynx Contributors
+
+directories:
+  output: release
+
+files:
+  - dist/**
+  - electron/**
+  - package.json
+
+# Native modules (better-sqlite3) must live outside the asar archive.
+asarUnpack:
+  - "**/*.node"
+
+win:
+  target:
+    - nsis
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: ReadLynx
+
+mac:
+  target:
+    - dmg
+    - zip
+  category: public.app-category.productivity
+
+linux:
+  target:
+    - AppImage
+    - deb
+  category: Office
+  synopsis: A modern reading app
