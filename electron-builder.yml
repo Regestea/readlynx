@@ -8,11 +8,15 @@ directories:
 files:
   - dist/**
   - electron/**
+  - src/**
   - package.json
 
-# Native modules (better-sqlite3) must live outside the asar archive.
+# Native modules (better-sqlite3) and the worker threads that use them
+# must live outside the asar archive.
 asarUnpack:
   - "**/*.node"
+  - "electron/**"
+  - "src/**"
 
 win:
   target:

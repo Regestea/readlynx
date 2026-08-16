@@ -54,10 +54,12 @@ export class DbWorkerClient {
       }
     });
     this.worker.on("error", (error) => {
+      console.error("[db-worker] error:", error);
       for (const entry of this.pending.values()) entry.reject(error);
       this.pending.clear();
     });
-    this.worker.on("exit", () => {
+    this.worker.on("exit", (code) => {
+      console.error("[db-worker] exit:", code);
       for (const entry of this.pending.values()) {
         entry.reject(new Error("The database worker stopped."));
       }
