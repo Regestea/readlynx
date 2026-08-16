@@ -19,6 +19,7 @@ asarUnpack:
   - "src/**"
 
 win:
+  icon: src/assets/icon/app-icon.png
   target:
     - nsis
 
@@ -36,6 +37,7 @@ mac:
   category: public.app-category.productivity
 
 linux:
+  icon: src/assets/icon/app-icon.png
   target:
     - AppImage
     - deb

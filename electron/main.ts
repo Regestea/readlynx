@@ -24,6 +24,7 @@ function createWindow() {
     minWidth: 1200,
     minHeight: 800,
     title: "ReadLynx",
+    icon: path.join(import.meta.dirname, "../src/assets/icon/app-icon.png"),
     backgroundColor: "#f7f2ea",
     autoHideMenuBar: true,
     show: false,
