@@ -30,6 +30,9 @@ function createWindow() {
     webPreferences: {
       contextIsolation: true,
       preload: path.join(import.meta.dirname, "preload.cjs"),
+      spellcheck: false,
+      backgroundThrottling: false,
+      v8CacheOptions: "bypassHeatCheckAndEagerCompile",
     },
   });
 

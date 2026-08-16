@@ -108,7 +108,15 @@ export function BookCard({
           className={`${styles.cover} ${styles.coverSmall} ${COVER_STYLES[book.cover]}`}
           aria-hidden="true"
         >
-          {book.coverImage && <img className={styles.coverImage} src={book.coverImage} alt="" />}
+{book.coverImage && (
+            <img
+              className={styles.coverImage}
+              src={book.coverImage}
+              alt=""
+              loading="lazy"
+              decoding="async"
+            />
+          )}
           <span className={styles.coverTitle}>{book.title}</span>
           <span className={styles.coverAuthor}>{book.author}</span>
         </div>
@@ -134,7 +142,15 @@ export function BookCard({
       {...interactiveProps}
     >
       <div className={`${styles.cover} ${COVER_STYLES[book.cover]}`} aria-hidden="true">
-        {book.coverImage && <img className={styles.coverImage} src={book.coverImage} alt="" />}
+        {book.coverImage && (
+          <img
+            className={styles.coverImage}
+            src={book.coverImage}
+            alt=""
+            loading="lazy"
+            decoding="async"
+          />
+        )}
         {book.kind && <span className={styles.badge}>{BADGE_LABELS[book.kind]}</span>}
         <span className={styles.coverTitle}>{book.title}</span>
         <span className={styles.coverAuthor}>{book.author}</span>
