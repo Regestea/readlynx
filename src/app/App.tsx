@@ -8,7 +8,7 @@ import { BackupPage } from "../features/backup/BackupPage";
 import { CreateBookPage } from "../features/create/CreateBookPage";
 import type { CreateBookDetails } from "../features/home/components/CreateBookDialog";
 import { ReadingPage } from "../features/reading/ReadingPage";
-import type { BookListItem } from "../infrastructure/db/entities/types";
+import type { BookListItem } from "../infrastructure/db/entities";
 import { ReadingProgress } from "../features/home/widgets/ReadingProgress/ReadingProgress";
 import { WeeklyStats } from "../features/home/widgets/WeeklyStats/WeeklyStats";
 import { getCloseFlush } from "../shared/closeFlush";
@@ -42,14 +42,13 @@ export default function App() {
    *  from the main process, so the renderer Network tab can't see them. Mirror
    *  the main-process log lines into this DevTools console instead. */
   useEffect(() => {
-    return window.readlynx?.onHttpLog(({ line, body }) => {
-      if (body !== undefined) {
-        // Log the body as a second argument so DevTools renders it as an
-        // expandable object instead of one unreadable JSON line.
-        console.log(`%c${line}`, "color:#5a8dee;font-weight:600", body);
-      } else {
-        console.log(`%c${line}`, "color:#5a8dee;font-weight:600");
-      }
+    return window.readlynx?.onHttpLog(({ line, body, responseBody }) => {
+      // Log the bodies as extra arguments so DevTools renders them as
+      // expandable objects instead of one unreadable JSON line.
+      const args: unknown[] = [];
+      if (body !== undefined) args.push(body);
+      if (responseBody !== undefined) args.push(responseBody);
+      console.log(`%c${line}`, "color:#5a8dee;font-weight:600", ...args);
     });
   }, []);
 

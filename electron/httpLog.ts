@@ -2,9 +2,9 @@ import { BrowserWindow } from "electron";
 
 /** Native HTTP requests (AI providers, OCR model downloads, …) leave the app
  *  from the main process, so they never show up in the renderer Network tab.
- *  These helpers log every request — method, URL, status, size and duration —
- *  both to the terminal and, via IPC, into the DevTools console of every
- *  window. */
+ *  These helpers log every request and response — method, URL, status, size,
+ *  duration, request body and JSON response body — both to the terminal and,
+ *  via IPC, into the DevTools console of every window. */
 
 export interface HttpLogInfo {
   method: string;
@@ -15,6 +15,7 @@ export interface HttpLogInfo {
   error?: string;
   detail?: string;
   body?: unknown;
+  responseBody?: unknown;
 }
 
 const SENSITIVE_PARAM = /(key|api[-_]?key|apikey|token|auth|secret|password)/i;
@@ -92,20 +93,43 @@ function lineFor(info: HttpLogInfo): string {
   return `[http] ${parts.join(" ")}`;
 }
 
+/** Reads a JSON response body for logging. Only JSON payloads are captured —
+ *  binary streams (OCR model downloads, SSE) are skipped. The body is read
+ *  from a clone so the caller still receives the untouched response. */
+async function readResponseBody(response: Response): Promise<unknown | undefined> {
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) return undefined;
+  try {
+    const text = await response.clone().text();
+    if (text.length === 0) return undefined;
+    return prepareBody(text).body;
+  } catch {
+    return undefined;
+  }
+}
+
 export function logHttpRequest(info: HttpLogInfo): void {
   const line = lineFor(info);
   console.log(line);
-  if (info.body !== undefined) {
-    const text = JSON.stringify(info.body, null, 2);
+  const printBody = (label: string, body: unknown) => {
+    const text = JSON.stringify(body, null, 2);
     console.log(
-      text.length > MAX_TERMINAL_BODY_CHARS
-        ? `${text.slice(0, MAX_TERMINAL_BODY_CHARS)}…`
-        : text,
+      `${label}:\n${
+        text.length > MAX_TERMINAL_BODY_CHARS
+          ? `${text.slice(0, MAX_TERMINAL_BODY_CHARS)}…`
+          : text
+      }`,
     );
-  }
+  };
+  if (info.body !== undefined) printBody("request body", info.body);
+  if (info.responseBody !== undefined) printBody("response body", info.responseBody);
   for (const win of BrowserWindow.getAllWindows()) {
     if (!win.isDestroyed()) {
-      win.webContents.send("http:log", { line, body: info.body });
+      win.webContents.send("http:log", {
+        line,
+        body: info.body,
+        responseBody: info.responseBody,
+      });
     }
   }
 }
@@ -137,11 +161,13 @@ export async function fetchWithLog(
   try {
     const response = await fetch(input, init);
     const bytes = Number(response.headers.get("content-length")) || undefined;
+    const responseBody = await readResponseBody(response);
     logHttpRequest({
       method: method.toUpperCase(),
       url,
       detail,
       body,
+      responseBody,
       status: response.status,
       bytes,
       durationMs: Math.round(performance.now() - started),

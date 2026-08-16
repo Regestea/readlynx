@@ -9,15 +9,15 @@ import type {
   ReadingWeekSummary,
   SaveDocumentPayload,
   UpdateBookPayload,
-} from "./infrastructure/db/entities/types.ts";
-import type { AiModel } from "./infrastructure/db/entities/AiModel.ts";
-import type { AppSettingsEntity } from "./infrastructure/db/entities/AppSettings.ts";
-import type { CustomInstructionEntity } from "./infrastructure/db/entities/CustomInstruction.ts";
-import type { ReadingStateEntity } from "./infrastructure/db/entities/ReadingState.ts";
-import type { ReaderSettingsEntity, ReaderViewer } from "./infrastructure/db/entities/ReaderSettings.ts";
-import type { ReadingStateInput } from "./infrastructure/db/repositories/ReadingStateRepository.ts";
-import type { ReaderSettingsInput } from "./infrastructure/db/repositories/ReaderSettingsRepository.ts";
-import type { TranslationEntity, TranslationMethod } from "./infrastructure/db/entities/Translation.ts";
+} from "./infrastructure/db/entities";
+import type { AiModel } from "./infrastructure/db/entities";
+import type { AppSettingsEntity } from "./infrastructure/db/entities";
+import type { CustomInstructionEntity } from "./infrastructure/db/entities";
+import type { ReadingStateEntity } from "./infrastructure/db/entities";
+import type { ReaderSettingsEntity, ReaderViewer } from "./infrastructure/db/entities";
+import type { ReadingStateInput } from "./infrastructure/db/repositories";
+import type { ReaderSettingsInput } from "./infrastructure/db/repositories";
+import type { TranslationEntity, TranslationMethod } from "./infrastructure/db/entities";
 
 export {};
 
@@ -32,8 +32,15 @@ declare global {
       notifyReadyToClose(): void;
       /** Main-process HTTP request log lines (AI, OCR downloads, …), mirrored
        *  so they show up in the DevTools console. `body` is the (redacted)
-       *  request body when the request had one. */
-      onHttpLog(callback: (payload: { line: string; body?: unknown }) => void): () => void;
+       *  request body and `responseBody` the (redacted) JSON response body,
+       *  when present. */
+      onHttpLog(
+        callback: (payload: {
+          line: string;
+          body?: unknown;
+          responseBody?: unknown;
+        }) => void,
+      ): () => void;
       readFileBytes(filePath: string): Promise<ArrayBuffer | null>;
       readCoverDataUrl(relativePath: string): Promise<string | null>;
       pickFile(options?: {
