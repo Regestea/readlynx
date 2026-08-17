@@ -4,6 +4,8 @@ import { ImageIcon, Loader2, Pencil, X } from "lucide-react";
 import { PdfViewer } from "../../../components/pdfViewer/PdfViewer";
 import { ImageEditorDialog } from "../../../components/ImageEditorDialog/ImageEditorDialog";
 import type { BookSourceType } from "../../../infrastructure/db/entities/types";
+import { randomCover } from "./coverOptions";
+import type { CoverOption } from "./coverOptions";
 import styles from "./FirstPageCover.module.css";
 
 export type CoverSource = "capture" | "custom";
@@ -36,9 +38,6 @@ interface FirstPageCoverProps {
   onError?: (message: string | null) => void;
 }
 
-const COVER_OPTIONS = ["forest", "moss", "terracotta", "navy", "sand", "moon"] as const;
-type CoverOption = (typeof COVER_OPTIONS)[number];
-
 const COVER_CLASSES: Record<CoverOption, string> = {
   forest: styles.coverForest,
   moss: styles.coverMoss,
@@ -47,9 +46,6 @@ const COVER_CLASSES: Record<CoverOption, string> = {
   sand: styles.coverSand,
   moon: styles.coverMoon,
 };
-
-const randomCover = (): CoverOption =>
-  COVER_OPTIONS[Math.floor(Math.random() * COVER_OPTIONS.length)];
 
 function waitUntil(predicate: () => boolean, timeout: number): Promise<boolean> {
   const start = Date.now();

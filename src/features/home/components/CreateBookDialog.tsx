@@ -4,6 +4,8 @@ import { Modal } from "../../../components/ui/Modal/Modal";
 import { Button } from "../../../components/ui/Button/Button";
 import { Input } from "../../../components/ui/Input/Input";
 import { ImageEditorDialog } from "../../../components/ImageEditorDialog/ImageEditorDialog";
+import { randomCover } from "./coverOptions";
+import type { CoverOption } from "./coverOptions";
 import styles from "./CreateBookDialog.module.css";
 
 export interface CreateBookDetails {
@@ -18,9 +20,6 @@ interface CreateBookDialogProps {
   onConfirm: (details: CreateBookDetails) => void;
 }
 
-const COVER_OPTIONS = ["forest", "moss", "terracotta", "navy", "sand", "moon"] as const;
-type CoverOption = (typeof COVER_OPTIONS)[number];
-
 const COVER_CLASSES: Record<CoverOption, string> = {
   forest: styles.coverForest,
   moss: styles.coverMoss,
@@ -29,9 +28,6 @@ const COVER_CLASSES: Record<CoverOption, string> = {
   sand: styles.coverSand,
   moon: styles.coverMoon,
 };
-
-const randomCover = (): CoverOption =>
-  COVER_OPTIONS[Math.floor(Math.random() * COVER_OPTIONS.length)];
 
 export function CreateBookDialog({ open, onClose, onConfirm }: CreateBookDialogProps) {
   const [title, setTitle] = useState("");

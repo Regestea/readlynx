@@ -735,7 +735,7 @@
   width: 14px;
   height: 14px;
   margin-inline-end: 0.5em;
-  border: 1.5px solid var(--color-primary);
+  border: 2px solid var(--color-primary);
   border-radius: 4px;
   vertical-align: -2px;
 }
@@ -1335,9 +1335,9 @@
   margin: 0;
 }
 
-.equationEdit {
+.equationEdit,
+.htmlBlockEdit {
   width: 100%;
-  min-height: 48px;
   padding: var(--space-2);
   background: var(--color-glass);
   border: 1px solid var(--color-border);
@@ -1353,6 +1353,14 @@
     border-color: var(--color-primary);
     box-shadow: 0 0 0 2px var(--color-primary-soft);
   }
+}
+
+.equationEdit {
+  min-height: 48px;
+}
+
+.htmlBlockEdit {
+  min-height: 96px;
 }
 
 /* ---------- Raw HTML blocks ---------- */
@@ -1392,26 +1400,6 @@
   flex-direction: column;
   gap: var(--space-1);
   margin: var(--space-2) 0;
-}
-
-.htmlBlockEdit {
-  width: 100%;
-  min-height: 96px;
-  padding: var(--space-2);
-  background: var(--color-glass);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-small);
-  color: var(--color-text);
-  font-family: "Courier New", monospace;
-  font-size: var(--font-size-sm);
-  line-height: 1.5;
-  resize: vertical;
-  outline: none;
-
-  &:focus {
-    border-color: var(--color-primary);
-    box-shadow: 0 0 0 2px var(--color-primary-soft);
-  }
 }
 
 .htmlBlockHint {

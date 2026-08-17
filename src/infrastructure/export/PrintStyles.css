@@ -60,7 +60,7 @@ h1.rl-chapter-start {
   break-inside: avoid;
   background-color: var(--rl-paper);
   color: var(--rl-ink);
-  font-family: var(--rl-font-family);
+  font-family: var(--rl-font-family), serif;
   font-size: var(--rl-font-size);
   line-height: var(--rl-line-height);
   text-rendering: optimizelegibility;
@@ -187,7 +187,7 @@ h1.rl-chapter-start {
 }
 
 .pagedjs_page_content code {
-  font-family: var(--rl-code-family);
+  font-family: var(--rl-code-family), serif;
   font-size: 0.85em;
   background-color: var(--rl-inline-code-bg);
   border-radius: 3px;
@@ -195,7 +195,7 @@ h1.rl-chapter-start {
 }
 
 .pagedjs_page_content pre {
-  font-family: var(--rl-code-family);
+  font-family: var(--rl-code-family), serif;
   font-size: 0.8em;
   line-height: 1.5;
   background-color: var(--rl-code-bg);
@@ -335,7 +335,7 @@ h1.rl-chapter-start {
 .pagedjs_margin {
   font-size: 0.75em;
   color: var(--rl-muted);
-  font-family: var(--rl-font-family);
+  font-family: var(--rl-font-family), serif;
 }
 
 .pagedjs_margin-content {

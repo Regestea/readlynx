@@ -190,47 +190,7 @@
   font-size: var(--font-size-sm);
 }
 
-.layout {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  padding: 2px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-small);
-  background: var(--color-card);
-  flex-shrink: 0;
-}
-
-.layoutButton {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  height: 26px;
-  padding: 0 var(--space-2);
-  border: none;
-  border-radius: calc(var(--radius-small) - 2px);
-  background: transparent;
-  color: var(--color-text-secondary);
-  font-family: var(--font-sans), serif;
-  font-size: var(--font-size-sm);
-  white-space: nowrap;
-  cursor: pointer;
-  transition:
-    background var(--transition-fast),
-    color var(--transition-fast);
-}
-
-.layoutButton:hover {
-  background: var(--color-hover);
-  color: var(--color-text);
-}
-
-.layoutButtonActive {
-  background: var(--color-active);
-  color: var(--color-primary);
-  font-weight: 600;
-}
-
+.layout,
 .viewGroup {
   display: flex;
   align-items: center;
@@ -242,6 +202,7 @@
   flex-shrink: 0;
 }
 
+.layoutButton,
 .viewButton {
   display: inline-flex;
   align-items: center;
@@ -261,11 +222,13 @@
     color var(--transition-fast);
 }
 
+.layoutButton:hover,
 .viewButton:hover {
   background: var(--color-hover);
   color: var(--color-text);
 }
 
+.layoutButtonActive,
 .viewButtonActive {
   background: var(--color-active);
   color: var(--color-primary);

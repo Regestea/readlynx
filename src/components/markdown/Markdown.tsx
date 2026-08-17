@@ -17,6 +17,7 @@ import { FontFamilySelect } from "../FontFamilySelect/FontFamilySelect";
 import { ColorPickerPanel } from "../ui/ColorPickerPanel/ColorPickerPanel";
 import { AiSelectionBubble } from "../AiSelectionBubble/AiSelectionBubble";
 import { useReaderSettings } from "../../hooks/useReaderSettings.ts";
+import { getSelectionEndRect } from "../../shared/selection";
 import { MermaidDiagram } from "./MermaidDiagram";
 import styles from "./Markdown.module.css";
 
@@ -483,23 +484,27 @@ export function Markdown({
     let selecting = false;
     let showTimer: number | undefined;
 
-    const compute = () => {
+    const getSelectionInHost = (): Selection | null => {
       const sel = window.getSelection();
       const text = sel?.toString().trim() ?? "";
       if (!sel || sel.isCollapsed || !text || text.length < 2) {
         setAiSelection(null);
-        return;
+        return null;
       }
       const anchor = sel.anchorNode;
       if (!anchor || !host?.contains(anchor)) {
         setAiSelection(null);
-        return;
+        return null;
       }
+      return sel;
+    };
+
+    const compute = () => {
+      const sel = getSelectionInHost();
+      if (!sel) return;
       // Anchor the bubble to the end of the selection's last line.
-      const range = sel.getRangeAt(0).cloneRange();
-      range.collapse(false);
-      const endRect = range.getBoundingClientRect();
-      if (!endRect.top && !endRect.left && endRect.width === 0 && endRect.height === 0) {
+      const endRect = getSelectionEndRect(sel);
+      if (!endRect) {
         setAiSelection(null);
         return;
       }
@@ -510,7 +515,7 @@ export function Markdown({
           ? rightOfEnd
           : Math.max(8, endRect.left - bubbleWidth - 8);
       const y = Math.max(8, Math.min(endRect.top - 20, window.innerHeight - bubbleWidth));
-      setAiSelection({ x, y, text });
+      setAiSelection({ x, y, text: sel.toString().trim() });
     };
 
     const onDown = (event: MouseEvent) => {
@@ -526,17 +531,7 @@ export function Markdown({
     const onSelectionChange = () => {
       if (showTimer) window.clearTimeout(showTimer);
       if (selecting) return;
-      const sel = window.getSelection();
-      const text = sel?.toString().trim() ?? "";
-      if (!sel || sel.isCollapsed || !text || text.length < 2) {
-        setAiSelection(null);
-        return;
-      }
-      const anchor = sel.anchorNode;
-      if (!anchor || !host?.contains(anchor)) {
-        setAiSelection(null);
-        return;
-      }
+      if (!getSelectionInHost()) return;
       // Debounce like epubjs: show only once the selection has been stable for
       // a moment (covers keyboard-driven selections with no mouse events).
       showTimer = window.setTimeout(compute, 250);

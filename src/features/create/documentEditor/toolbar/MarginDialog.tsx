@@ -4,18 +4,10 @@ import { Button } from "../../../../components/ui/Button/Button";
 import { NumberInput } from "../../../../components/ui/NumberInput/NumberInput";
 import { PAGE_FORMATS, marginPx } from "../constants";
 import type { PageFormat, PageMargins } from "../constants";
+import { clampInches, INCH_MAX, INCH_MIN, toInches, toMm } from "./marginUnits";
 import styles from "./MarginDialog.module.css";
 
-const INCH_MIN = 0;
-const INCH_MAX = 2.4;
 const PREVIEW_WIDTH = 236;
-const MM_PER_INCH = 25.4;
-
-const toInches = (mm: number): number => Math.round((mm / MM_PER_INCH) * 100) / 100;
-const toMm = (inch: number): number => Math.round(inch * MM_PER_INCH * 100) / 100;
-
-const clamp = (value: number): number =>
-  Math.min(INCH_MAX, Math.max(INCH_MIN, Number.isFinite(value) ? value : INCH_MIN));
 
 interface MarginDialogProps {
   open: boolean;
@@ -45,10 +37,10 @@ export function MarginDialog({ open, onClose, format, margins, onApply }: Margin
   const scale = PREVIEW_WIDTH / width;
 
   const normalized: PageMargins = {
-    top: clamp(draft.top),
-    right: clamp(draft.right),
-    bottom: clamp(draft.bottom),
-    left: clamp(draft.left),
+    top: clampInches(draft.top),
+    right: clampInches(draft.right),
+    bottom: clampInches(draft.bottom),
+    left: clampInches(draft.left),
   };
 
   const patch = (side: keyof PageMargins) => (value: number) => {

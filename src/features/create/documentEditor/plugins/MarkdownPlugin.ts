@@ -358,6 +358,27 @@ const HTML_BLOCK_TAG_RE =
 
 export const HTML_BLOCK_START_RE = /^\s{0,3}<(?:[/!]?)(?:[a-zA-Z][\w-]*|--|!)/;
 
+/** Collects the non-blank lines of an HTML block starting at `startLineIndex`
+ *  and appends a sanitized HtmlBlockNode. Returns the consumed index range. */
+function appendHtmlBlock(
+  lines: string[],
+  startLineIndex: number,
+  rootNode: ElementNode,
+): [true, number] | null {
+  const htmlLines: string[] = [];
+  let i = startLineIndex;
+  while (i < lines.length) {
+    const l = lines[i];
+    if (l.trim() === "") break;
+    htmlLines.push(l);
+    i += 1;
+  }
+  const html = sanitizeHtmlBlock(htmlLines.join("\n"));
+  if (!html.trim()) return null;
+  rootNode.append($createHtmlBlockNode(html));
+  return [true, i - 1];
+}
+
 const HTML_BLOCK: MultilineElementTransformer = {
   type: "multiline-element",
   dependencies: [HtmlBlockNode],
@@ -366,36 +387,14 @@ const HTML_BLOCK: MultilineElementTransformer = {
     const first = lines[startLineIndex].trimStart();
     // HTML comment blocks.
     if (/^<!--/.test(first)) {
-      const htmlLines: string[] = [];
-      let i = startLineIndex;
-      while (i < lines.length) {
-        const l = lines[i];
-        if (l.trim() === "") break;
-        htmlLines.push(l);
-        i += 1;
-      }
-      const html = sanitizeHtmlBlock(htmlLines.join("\n"));
-      if (!html.trim()) return null;
-      rootNode.append($createHtmlBlockNode(html));
-      return [true, i - 1];
+      return appendHtmlBlock(lines, startLineIndex, rootNode);
     }
     const closing = first.startsWith("</");
     const tagMatch = (closing ? first.slice(2) : first.slice(1)).match(/^([a-zA-Z][\w:-]*)\b/);
     if (!tagMatch || !HTML_BLOCK_TAG_RE.test(tagMatch[1])) {
       return null;
     }
-    const htmlLines: string[] = [];
-    let i = startLineIndex;
-    while (i < lines.length) {
-      const l = lines[i];
-      if (l.trim() === "") break;
-      htmlLines.push(l);
-      i += 1;
-    }
-    const html = sanitizeHtmlBlock(htmlLines.join("\n"));
-    if (!html.trim()) return null;
-    rootNode.append($createHtmlBlockNode(html));
-    return [true, i - 1];
+    return appendHtmlBlock(lines, startLineIndex, rootNode);
   },
   replace() {
     return false;

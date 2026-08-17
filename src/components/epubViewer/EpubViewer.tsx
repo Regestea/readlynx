@@ -7,6 +7,7 @@ import { useTheme } from "../../app/providers/theme/ThemeContext";
 import { useReaderSettings } from "../../hooks/useReaderSettings.ts";
 import { epubHtmlToMarkdown, epubHtmlToPlainTextWithImages } from "../../shared/document/epubToMarkdown";
 import type { EpubImageRef } from "../../shared/document/epubToMarkdown";
+import { getSelectionEndRect } from "../../shared/selection";
 import { FontFamilySelect } from "../FontFamilySelect/FontFamilySelect";
 import { ColorPickerPanel } from "../ui/ColorPickerPanel/ColorPickerPanel";
 import { AiSelectionBubble } from "../AiSelectionBubble/AiSelectionBubble";
@@ -612,10 +613,8 @@ export function EpubViewer({
         setAiSelection(null);
         return;
       }
-      const range = sel.getRangeAt(0).cloneRange();
-      range.collapse(false);
-      const endRect = range.getBoundingClientRect();
-      if (!endRect.top && !endRect.left && endRect.width === 0 && endRect.height === 0) {
+      const endRect = getSelectionEndRect(sel);
+      if (!endRect) {
         setAiSelection(null);
         return;
       }

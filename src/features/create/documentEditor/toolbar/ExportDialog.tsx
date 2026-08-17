@@ -17,6 +17,7 @@ import { exportHtml } from "../exporters/htmlExporter";
 import { exportEpub, zipEpubFiles } from "../exporters/epubExporter";
 import { Button } from "../../../../components/ui/Button/Button";
 import { Modal } from "../../../../components/ui/Modal/Modal";
+import { clampInches, INCH_MAX, INCH_MIN, toInches, toMm } from "./marginUnits";
 import styles from "./ExportDialog.module.css";
 
 export type ExportFormat = "pdf" | "docx" | "html" | "epub";
@@ -118,14 +119,6 @@ const MARGIN_SIDES: { key: "marginTopMm" | "marginRightMm" | "marginBottomMm" | 
   { key: "marginBottomMm", label: "Bottom" },
   { key: "marginLeftMm", label: "Left" },
 ];
-
-const INCH_MIN = 0;
-const INCH_MAX = 2.4;
-const MM_PER_INCH = 25.4;
-const toInches = (mm: number): number => Math.round((mm / MM_PER_INCH) * 100) / 100;
-const toMm = (inch: number): number => Math.round(inch * MM_PER_INCH * 100) / 100;
-const clampInches = (value: number): number =>
-  Math.min(INCH_MAX, Math.max(INCH_MIN, Number.isFinite(value) ? value : INCH_MIN));
 
 interface ExportDialogProps {
   open: boolean;

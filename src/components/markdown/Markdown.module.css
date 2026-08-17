@@ -115,7 +115,7 @@
   height: 18px;
   flex-shrink: 0;
   border-radius: 6px;
-  border: 1.5px solid var(--color-primary);
+  border: 2px solid var(--color-primary);
   color: var(--color-on-primary);
   background: transparent;
 }
