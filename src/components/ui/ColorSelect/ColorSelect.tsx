@@ -16,6 +16,10 @@ export function ColorSelect({ value, onChange, label, presets }: ColorSelectProp
   const colorInputRef = useRef<HTMLInputElement>(null);
   const swatches = presets ?? PRESET_COLORS;
   const isPreset = swatches.includes(value.toLowerCase());
+  // An empty value means "no color" (e.g. the editor's Default/None); it is
+  // neither a preset nor a custom pick, and the color input needs a valid
+  // hex fallback.
+  const customActive = value !== "" && !isPreset;
 
   return (
     <div className={styles.wrap} role="radiogroup" aria-label={label ?? "Pick a color"}>
@@ -38,12 +42,12 @@ export function ColorSelect({ value, onChange, label, presets }: ColorSelectProp
       <button
         type="button"
         role="radio"
-        aria-checked={!isPreset}
+        aria-checked={customActive}
         aria-label="Pick a custom color"
-        className={`${styles.swatch} ${styles.customSwatch} ${!isPreset ? styles.swatchActive : ""}`}
+        className={`${styles.swatch} ${styles.customSwatch} ${customActive ? styles.swatchActive : ""}`}
         onClick={() => colorInputRef.current?.click()}
       >
-        {!isPreset && (
+        {customActive && (
           <Check size={12} strokeWidth={3.5} className={styles.swatchCheck} aria-hidden="true" />
         )}
       </button>
@@ -51,7 +55,7 @@ export function ColorSelect({ value, onChange, label, presets }: ColorSelectProp
         ref={colorInputRef}
         type="color"
         className={styles.colorInput}
-        value={value}
+        value={value === "" ? "#000000" : value}
         onChange={(event) => onChange(event.target.value)}
         aria-label="Custom color picker"
       />

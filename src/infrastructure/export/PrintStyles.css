@@ -19,7 +19,6 @@
    ========================================================================== */
 
 html {
-  -webkit-print-color-adjust: exact;
   print-color-adjust: exact;
 }
 
@@ -32,7 +31,6 @@ html {
 
 h1.rl-chapter-start {
   break-before: page;
-  page-break-before: always;
 }
 
 /* --------------------------------------------------------------------------
@@ -42,32 +40,30 @@ h1.rl-chapter-start {
 .pagedjs_page {
   /* theme defaults (overridable via `themeVariables()`) */
   --rl-ink: #20242e;
-  --rl-paper: #ffffff;
+  --rl-paper: #fff;
   --rl-muted: #5d6673;
   --rl-accent: #2f6b57;
-  --rl-font-family: Georgia, "Times New Roman", serif;
+  --rl-font-family: georgia, "Times New Roman", serif;
   --rl-font-size: 15px;
   --rl-line-height: 1.65;
-  --rl-code-family: Consolas, "Courier New", monospace;
+  --rl-code-family: consolas, "Courier New", monospace;
   --rl-rule: #d9dce1;
   --rl-table-head: #eef0f3;
-  --rl-callout-bg: rgba(47, 107, 87, 0.08);
+  --rl-callout-bg: rgb(47 107 87 / 8%);
   --rl-block-bg: #f7f8fa;
-  --rl-quote-border: rgba(47, 107, 87, 0.35);
+  --rl-quote-border: rgb(47 107 87 / 35%);
   --rl-code-bg: #f6f8fa;
   --rl-code-border: #dde1e6;
   --rl-code-ink: #24292f;
-  --rl-inline-code-bg: rgba(36, 41, 47, 0.08);
+  --rl-inline-code-bg: rgb(36 41 47 / 8%);
 
   break-inside: avoid;
-  page-break-inside: avoid;
   background-color: var(--rl-paper);
   color: var(--rl-ink);
   font-family: var(--rl-font-family);
   font-size: var(--rl-font-size);
   line-height: var(--rl-line-height);
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizelegibility;
 }
 
 .pagedjs_page_content p {
@@ -106,7 +102,6 @@ h1.rl-chapter-start {
 .pagedjs_page_content h6 {
   break-after: avoid;
   break-inside: avoid;
-  page-break-after: avoid;
   font-weight: 700;
   line-height: 1.25;
   color: var(--rl-ink);
@@ -211,7 +206,6 @@ h1.rl-chapter-start {
   color: var(--rl-code-ink);
   white-space: pre-wrap;
   break-inside: avoid;
-  page-break-inside: avoid;
 }
 
 .pagedjs_page_content pre code {
@@ -276,7 +270,6 @@ h1.rl-chapter-start {
   margin: 0 0 0.9em;
   font-size: 0.92em;
   break-inside: avoid;
-  page-break-inside: avoid;
 }
 
 .pagedjs_page_content th,
@@ -302,7 +295,6 @@ h1.rl-chapter-start {
   max-width: 100%;
   height: auto;
   break-inside: avoid;
-  page-break-inside: avoid;
 }
 
 .pagedjs_page_content figure {
@@ -330,7 +322,6 @@ h1.rl-chapter-start {
 
 [data-page-break] {
   break-after: page;
-  page-break-after: always;
 }
 
 /* --------------------------------------------------------------------------

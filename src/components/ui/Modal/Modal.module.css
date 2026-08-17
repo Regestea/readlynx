@@ -5,16 +5,16 @@
   display: grid;
   place-items: center;
   padding: var(--space-6);
-  background: rgba(20, 26, 38, 0.45);
+  background: rgb(20 26 38 / 45%);
   backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  animation: fadeIn var(--transition-base) ease both;
+  animation: fade-in var(--transition-base) ease both;
 }
 
-@keyframes fadeIn {
+@keyframes fade-in {
   from {
     opacity: 0;
   }
+
   to {
     opacity: 1;
   }
@@ -32,25 +32,28 @@
   border: 1px solid var(--color-border);
   border-radius: var(--radius-dialog);
   box-shadow: var(--shadow-lg);
-  animation: popIn 420ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  animation: pop-in 420ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
 
 .dialogWide {
   width: min(1200px, 100%);
 }
 
-@keyframes popIn {
+@keyframes pop-in {
   0% {
     opacity: 0;
     transform: scale(0.7) translateY(24px);
   }
+
   55% {
     opacity: 1;
     transform: scale(1.06) translateY(-4px);
   }
+
   75% {
     transform: scale(0.97) translateY(2px);
   }
+
   100% {
     opacity: 1;
     transform: scale(1) translateY(0);

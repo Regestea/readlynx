@@ -54,7 +54,7 @@
   background: linear-gradient(135deg, var(--color-primary), var(--color-olive));
   box-shadow:
     var(--shadow-sm),
-    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    inset 0 1px 0 rgb(255 255 255 / 20%);
 }
 
 .sectionTitle {
@@ -152,19 +152,19 @@
   border: 1px solid var(--color-border);
   box-shadow:
     var(--shadow-sm),
-    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    inset 0 1px 0 rgb(255 255 255 / 20%);
 }
 
 .swatchLight {
   color: #8c6248;
   background: linear-gradient(135deg, #f7f2ea, #efe3d2);
-  border-color: rgba(255, 255, 255, 0.6);
+  border-color: rgb(255 255 255 / 60%);
 }
 
 .swatchDark {
   color: #8fa8c7;
   background: linear-gradient(135deg, #162033, #1f2b43);
-  border-color: rgba(255, 255, 255, 0.12);
+  border-color: rgb(255 255 255 / 12%);
 }
 
 /* ---------- List rows ---------- */

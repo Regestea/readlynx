@@ -48,7 +48,7 @@
 .previewLabel {
   position: absolute;
   color: var(--color-primary);
-  font-family: var(--font-sans);
+  font-family: var(--font-sans), serif;
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.06em;

@@ -5,7 +5,6 @@
   background: var(--color-card);
   box-shadow: var(--shadow-sm);
   backdrop-filter: blur(var(--blur-glass));
-  -webkit-backdrop-filter: blur(var(--blur-glass));
   overflow: auto;
 }
 
@@ -19,7 +18,7 @@
     "SF Mono",
     Consolas,
     Menlo,
-    "Vazirmatn",
+    Vazirmatn,
     "Noto Sans Arabic",
     "Segoe UI",
     monospace !important;

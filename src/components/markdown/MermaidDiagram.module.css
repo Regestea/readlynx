@@ -8,10 +8,19 @@
   background: var(--color-card);
   box-shadow: var(--shadow-sm);
   backdrop-filter: blur(var(--blur-glass));
-  -webkit-backdrop-filter: blur(var(--blur-glass));
   touch-action: none;
   user-select: none;
   cursor: grab;
+}
+
+.diagram {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  transform-origin: center center;
+  transition: transform 0.1s ease;
+  pointer-events: none;
 }
 
 .dragging {
@@ -36,7 +45,6 @@
   background: var(--color-glass);
   box-shadow: var(--shadow-sm);
   backdrop-filter: blur(var(--blur-glass));
-  -webkit-backdrop-filter: blur(var(--blur-glass));
 }
 
 .controlButton {
@@ -76,16 +84,6 @@
 
 .hint {
   left: var(--space-2);
-}
-
-.diagram {
-  display: grid;
-  place-items: center;
-  width: 100%;
-  height: 100%;
-  transform-origin: center center;
-  transition: transform 0.1s ease;
-  pointer-events: none;
 }
 
 .error {

@@ -47,6 +47,7 @@ import { insertTable } from "../plugins/TablePlugin";
 import { $createPageBreakNode } from "../nodes/PageBreakNode";
 import { ImageEditorDialog } from "../../../../components/ImageEditorDialog/ImageEditorDialog";
 import { FontFamilySelect } from "./FontFamilySelect";
+import { ColorPickerPanel } from "../../../../components/ui/ColorPickerPanel/ColorPickerPanel";
 import { ExportDialog, type ExportSettings } from "./ExportDialog";
 import { MarginDialog } from "./MarginDialog";
 import { DEFAULT_FONT_SIZE_VALUE, FONT_SIZE_OPTIONS, HEADING_OPTIONS, TEXT_COLORS, BACKGROUND_COLORS, PAGE_MARGIN_OPTIONS, PAGE_MARGIN_MM, uniformMargins } from "../constants";
@@ -241,8 +242,8 @@ export function Toolbar({
   const state = useToolbarState();
   const { defaultFontFamily } = useDefaultFont();
   const importInputRef = useRef<HTMLInputElement>(null);
-  const textColorInputRef = useRef<HTMLInputElement>(null);
-  const bgColorInputRef = useRef<HTMLInputElement>(null);
+  const colorsWrapRef = useRef<HTMLDivElement>(null);
+  const [colorsOpen, setColorsOpen] = useState(false);
   const [promptDialog, setPromptDialog] = useState<PromptDialogState | null>(null);
   const [imageEditorOpen, setImageEditorOpen] = useState(false);
   const [imageEditorKey, setImageEditorKey] = useState(0);
@@ -294,6 +295,18 @@ export function Toolbar({
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [fullscreen, handleToggleFullscreen]);
+
+  /** Closes the color picker panel on outside click. */
+  useEffect(() => {
+    if (!colorsOpen) return;
+    const handleOutside = (event: MouseEvent) => {
+      if (colorsWrapRef.current && !colorsWrapRef.current.contains(event.target as Node)) {
+        setColorsOpen(false);
+      }
+    };
+    window.addEventListener("mousedown", handleOutside);
+    return () => window.removeEventListener("mousedown", handleOutside);
+  }, [colorsOpen]);
 
   const onImport = (file: File) => {
     const reader = new FileReader();
@@ -530,15 +543,6 @@ export function Toolbar({
     });
   };
 
-  const isCustomColor = (
-    value: string,
-    presets: readonly { value: string }[],
-  ): boolean =>
-    value !== "" && !presets.some((preset) => preset.value.toLowerCase() === value.toLowerCase());
-
-  const safeHex = (value: string): string =>
-    /^#[0-9a-f]{6}$/i.test(value) ? value : "#000000";
-
   const applyAlignment = (alignment: "left" | "center" | "right" | "justify") => {
     editor.dispatchCommand(FORMAT_ELEMENT_COMMAND, alignment);
   };
@@ -676,99 +680,44 @@ export function Toolbar({
       )}
 
       <div className={styles.toolbarGroup}>
-        <Menu label="Colors" icon={<Palette size={14} strokeWidth={1.8} aria-hidden="true" />}>
-          {(close) => (
-            <>
-              <div className={styles.menuSection}>
-                <span className={styles.menuSectionLabel}>Text color</span>
-                <div className={styles.swatchRow}>
-                  {TEXT_COLORS.map(({ value, label, swatch }) => (
-                    <button
-                      key={value}
-                      type="button"
-                      className={[
-                        styles.swatch,
-                        state.textColor === value ? styles.swatchActive : "",
-                      ]
-                        .filter(Boolean)
-                        .join(" ")}
-                      style={{ backgroundColor: swatch }}
-                      title={label}
-                      aria-label={`Text color ${label}`}
-                      onClick={() => applyColor("color", value)}
-                    />
-                  ))}
-                  <button
-                    type="button"
-                    className={[
-                      styles.swatch,
-                      styles.customSwatch,
-                      isCustomColor(state.textColor, TEXT_COLORS) ? styles.swatchActive : "",
-                    ]
-                      .filter(Boolean)
-                      .join(" ")}
-                    title="Custom text color…"
-                    aria-label="Pick a custom text color"
-                    onClick={() => textColorInputRef.current?.click()}
-                  />
-                  <input
-                    ref={textColorInputRef}
-                    type="color"
-                    className={styles.hiddenColorInput}
-                    value={safeHex(state.textColor)}
-                    onChange={(event) => applyColor("color", event.target.value)}
-                  />
-                </div>
-              </div>
-              <div className={styles.menuSection}>
-                <span className={styles.menuSectionLabel}>Highlight</span>
-                <div className={styles.swatchRow}>
-                  {BACKGROUND_COLORS.map(({ value, label, swatch }) => (
-                    <button
-                      key={value}
-                      type="button"
-                      className={[
-                        styles.swatch,
-                        state.bgColor === value ? styles.swatchActive : "",
-                      ]
-                        .filter(Boolean)
-                        .join(" ")}
-                      style={{ backgroundColor: swatch }}
-                      title={label}
-                      aria-label={`Highlight ${label}`}
-                      onClick={() => applyColor("background-color", value)}
-                    />
-                  ))}
-                  <button
-                    type="button"
-                    className={[
-                      styles.swatch,
-                      styles.customSwatch,
-                      isCustomColor(state.bgColor, BACKGROUND_COLORS) ? styles.swatchActive : "",
-                    ]
-                      .filter(Boolean)
-                      .join(" ")}
-                    title="Custom highlight…"
-                    aria-label="Pick a custom highlight"
-                    onClick={() => bgColorInputRef.current?.click()}
-                  />
-                  <input
-                    ref={bgColorInputRef}
-                    type="color"
-                    className={styles.hiddenColorInput}
-                    value={safeHex(state.bgColor)}
-                    onChange={(event) => applyColor("background-color", event.target.value)}
-                  />
-                </div>
-              </div>
-              <MenuItem
-                label="Clear formatting"
-                onSelect={clearFormatting}
-                close={close}
-              />
-            </>
-          )}
-        </Menu>
+        <div className={styles.menu} ref={colorsWrapRef}>
+          <button
+            type="button"
+            className={styles.menuButton}
+            aria-haspopup="menu"
+            aria-expanded={colorsOpen}
+            onClick={() => setColorsOpen((open) => !open)}
+          >
+            <Palette size={14} strokeWidth={1.8} aria-hidden="true" />
+            <span>Colors</span>
+            <ChevronDown size={12} strokeWidth={2} aria-hidden="true" />
+          </button>
+          <ColorPickerPanel
+            open={colorsOpen}
+            onClose={() => setColorsOpen(false)}
+            title="Colors"
+            sections={[
+              {
+                id: "text",
+                label: "Text color",
+                value: state.textColor,
+                onChange: (color) => applyColor("color", color),
+                presets: TEXT_COLORS.map(({ value }) => value).filter(Boolean),
+                noneLabel: "Default",
+              },
+              {
+                id: "bg",
+                label: "Highlight",
+                value: state.bgColor,
+                onChange: (color) => applyColor("background-color", color),
+                presets: BACKGROUND_COLORS.map(({ value }) => value).filter(Boolean),
+                noneLabel: "None",
+              },
+            ]}
+            resetLabel="Clear formatting"
+            onReset={clearFormatting}
+          />
+        </div>
       </div>
 
       <div className={styles.toolbarGroup}>

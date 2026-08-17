@@ -14,10 +14,8 @@
   font-weight: var(--font-weight-regular);
   color: var(--color-text);
   appearance: none;
-  -webkit-appearance: none;
   cursor: pointer;
   backdrop-filter: blur(var(--blur-glass));
-  -webkit-backdrop-filter: blur(var(--blur-glass));
   box-shadow: var(--shadow-sm);
   transition:
     border-color var(--transition-base) ease,

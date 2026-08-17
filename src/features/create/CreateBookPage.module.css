@@ -48,7 +48,7 @@
   outline: none !important;
   background: transparent;
   color: var(--color-text);
-  font-family: var(--font-sans);
+  font-family: var(--font-sans), serif;
   font-size: var(--font-size-lg);
   font-weight: var(--font-weight-semibold);
 }
@@ -96,7 +96,7 @@
   outline: none !important;
   background: transparent;
   color: var(--color-text);
-  font-family: var(--font-sans);
+  font-family: var(--font-sans), serif;
   font-size: var(--font-size-md);
 }
 
@@ -131,14 +131,14 @@
     color var(--transition-fast);
 }
 
-.searchNav:hover:not(:disabled) {
-  background: var(--color-hover);
-  color: var(--color-text);
-}
-
 .searchNav:disabled {
   opacity: 0.35;
   cursor: default;
+}
+
+.searchNav:hover:not(:disabled) {
+  background: var(--color-hover);
+  color: var(--color-text);
 }
 
 .autoSave {
@@ -151,7 +151,7 @@
   border-radius: var(--radius-input);
   background: var(--color-glass);
   color: var(--color-text-secondary);
-  font-family: var(--font-sans);
+  font-family: var(--font-sans), serif;
   font-size: var(--font-size-sm);
   white-space: nowrap;
   flex-shrink: 0;
@@ -211,7 +211,7 @@
   border-radius: calc(var(--radius-small) - 2px);
   background: transparent;
   color: var(--color-text-secondary);
-  font-family: var(--font-sans);
+  font-family: var(--font-sans), serif;
   font-size: var(--font-size-sm);
   white-space: nowrap;
   cursor: pointer;
@@ -252,7 +252,7 @@
   border-radius: calc(var(--radius-small) - 2px);
   background: transparent;
   color: var(--color-text-secondary);
-  font-family: var(--font-sans);
+  font-family: var(--font-sans), serif;
   font-size: var(--font-size-sm);
   white-space: nowrap;
   cursor: pointer;
@@ -317,6 +317,16 @@
   overflow: hidden;
 }
 
+.sourcePanel {
+  display: flex;
+  overflow: hidden;
+}
+
+.editorRoot {
+  flex: 1;
+  min-height: 0;
+}
+
 .split > * {
   flex: 1 1 50%;
   min-width: 0;
@@ -366,21 +376,11 @@
   min-height: 0;
 }
 
-.sourcePanel {
-  display: flex;
-  overflow: hidden;
-}
-
 .hidden {
   display: none;
 }
 
-.editorRoot {
-  flex: 1;
-  min-height: 0;
-}
-
-@media (max-width: 720px) {
+@media (width <= 720px) {
   .stats,
   .layout,
   .pageSizeSelect {

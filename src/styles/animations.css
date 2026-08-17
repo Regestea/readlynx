@@ -3,42 +3,46 @@
    All around 250ms ease
    ============================================================ */
 
-@keyframes fadeIn {
+@keyframes fade-in {
   from {
     opacity: 0;
   }
+
   to {
     opacity: 1;
   }
 }
 
-@keyframes fadeUp {
+@keyframes fade-up {
   from {
     opacity: 0;
     transform: translateY(16px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
   }
 }
 
-@keyframes slideIn {
+@keyframes slide-in {
   from {
     opacity: 0;
     transform: translateX(-24px);
   }
+
   to {
     opacity: 1;
     transform: translateX(0);
   }
 }
 
-@keyframes cardAppear {
+@keyframes card-appear {
   from {
     opacity: 0;
     transform: translateY(20px) scale(0.98);
   }
+
   to {
     opacity: 1;
     transform: translateY(0) scale(1);
@@ -47,19 +51,19 @@
 
 /* Entrance utilities */
 .animate-fade-in {
-  animation: fadeIn var(--transition-base) ease both;
+  animation: fade-in var(--transition-base) ease both;
 }
 
 .animate-fade-up {
-  animation: fadeUp var(--transition-base) ease both;
+  animation: fade-up var(--transition-base) ease both;
 }
 
 .animate-slide-in {
-  animation: slideIn var(--transition-base) ease both;
+  animation: slide-in var(--transition-base) ease both;
 }
 
 .animate-card-appear {
-  animation: cardAppear var(--transition-base) ease both;
+  animation: card-appear var(--transition-base) ease both;
 }
 
 /* Interaction utilities */

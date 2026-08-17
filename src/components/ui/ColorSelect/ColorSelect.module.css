@@ -12,8 +12,11 @@
   width: 30px;
   height: 30px;
   border-radius: 50%;
-  border: 1px solid var(--color-border);
-  box-shadow: var(--shadow-sm);
+
+  /* The border must stay visible on any swatch color and in any theme:
+   * dark outline for light colors, inset light ring for dark colors. */
+  border: 1px solid rgb(0 0 0 / 25%);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 45%);
   transition:
     transform var(--transition-base) ease,
     box-shadow var(--transition-base) ease;
@@ -21,19 +24,22 @@
 
 .swatch:hover {
   transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 45%),
+    var(--shadow-md);
 }
 
 .swatchActive {
   transform: scale(1.12);
   box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 45%),
     var(--shadow-md),
     0 0 0 3px var(--color-glow);
 }
 
 .swatchCheck {
   color: var(--color-on-cover);
-  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35));
+  filter: drop-shadow(0 1px 2px rgb(0 0 0 / 35%));
 }
 
 .customSwatch {

@@ -6,7 +6,7 @@
   min-height: 420px;
 }
 
-@media (max-width: 860px) {
+@media (width <= 860px) {
   .layout {
     grid-template-columns: 1fr;
     height: auto;
@@ -58,7 +58,7 @@
   border-radius: calc(var(--radius-small) - 2px);
   background: transparent;
   color: var(--color-text-secondary);
-  font-family: var(--font-sans);
+  font-family: var(--font-sans), serif;
   font-size: var(--font-size-sm);
   font-weight: 600;
   cursor: pointer;
@@ -95,7 +95,7 @@
   border-radius: var(--radius-small);
   background: var(--color-card);
   color: var(--color-text);
-  font-family: var(--font-sans);
+  font-family: var(--font-sans), serif;
   text-align: start;
   cursor: pointer;
   transition:
@@ -147,7 +147,7 @@
   border-radius: var(--radius-small);
   background: var(--color-card);
   color: var(--color-text);
-  font-family: var(--font-sans);
+  font-family: var(--font-sans), serif;
   font-size: var(--font-size-sm);
 }
 
@@ -211,7 +211,11 @@
 .swatch {
   width: 22px;
   height: 22px;
-  border: 1px solid var(--color-border);
+
+  /* Border visible on any swatch color and in any theme: dark outline for
+   * light colors, inset light ring for dark colors. */
+  border: 1px solid rgb(0 0 0 / 25%);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 45%);
   border-radius: 50%;
   cursor: pointer;
   transition: transform var(--transition-fast);
@@ -312,7 +316,7 @@
   min-height: 0;
   width: 100%;
   border: 0;
-  background: #ffffff;
+  background: #fff;
 }
 
 .previewPlaceholder {
@@ -326,7 +330,7 @@
 }
 
 .epubPreview.epubPreview {
-  background: #ffffff;
+  background: #fff;
   box-shadow: none;
 }
 

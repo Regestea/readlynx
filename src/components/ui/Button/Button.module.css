@@ -43,7 +43,7 @@
   color: var(--color-on-primary);
   box-shadow:
     var(--shadow-md),
-    inset 0 1px 0 rgba(255, 255, 255, 0.18);
+    inset 0 1px 0 rgb(255 255 255 / 18%);
 }
 
 .primary:hover {
@@ -57,7 +57,6 @@
   color: var(--color-text);
   box-shadow: var(--shadow-sm);
   backdrop-filter: blur(var(--blur-glass));
-  -webkit-backdrop-filter: blur(var(--blur-glass));
 }
 
 .secondary:hover {
@@ -85,7 +84,6 @@
   color: var(--color-icon);
   box-shadow: var(--shadow-sm);
   backdrop-filter: blur(var(--blur-glass));
-  -webkit-backdrop-filter: blur(var(--blur-glass));
 }
 
 .icon:hover {

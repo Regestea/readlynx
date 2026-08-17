@@ -6,13 +6,11 @@
 
 :root {
   /* ---------- Typography ---------- */
-  --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-
+  --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", roboto, sans-serif;
   --font-weight-regular: 400;
   --font-weight-medium: 500;
   --font-weight-semibold: 600;
   --font-weight-bold: 700;
-
   --font-size-xs: 12px;
   --font-size-sm: 13px;
   --font-size-md: 14px;
@@ -20,7 +18,6 @@
   --font-size-xl: 20px;
   --font-size-2xl: 24px;
   --font-size-3xl: 32px;
-
   --line-height-tight: 1.25;
   --line-height-normal: 1.5;
   --line-height-relaxed: 1.7;
@@ -48,11 +45,12 @@
   --radius-cover: 16px;
   --radius-medium: 16px;
   --radius-small: 12px;
+  --radius-full: 16px;
 
   /* ---------- Shadows (soft only) ---------- */
-  --shadow-sm: 0 8px 20px rgba(0, 0, 0, 0.06);
-  --shadow-md: 0 16px 40px rgba(0, 0, 0, 0.08);
-  --shadow-lg: 0 24px 60px rgba(0, 0, 0, 0.1);
+  --shadow-sm: 0 8px 20px rgb(0 0 0 / 6%);
+  --shadow-md: 0 16px 40px rgb(0 0 0 / 8%);
+  --shadow-lg: 0 24px 60px rgb(0 0 0 / 10%);
 
   /* ---------- Glass ---------- */
   --blur-glass: 18px;
@@ -84,10 +82,10 @@
   /* Surfaces */
   --color-bg: #f7f2ea;
   --color-bg-secondary: #efe3d2;
-  --color-card: rgba(255, 248, 240, 0.72);
-  --color-glass: rgba(255, 250, 245, 0.58);
-  --color-hover: rgba(255, 255, 255, 0.18);
-  --color-border: rgba(255, 255, 255, 0.38);
+  --color-card: rgb(255 248 240 / 72%);
+  --color-glass: rgb(255 250 245 / 58%);
+  --color-hover: rgb(255 255 255 / 18%);
+  --color-border: rgb(255 255 255 / 38%);
 
   /* Text */
   --color-text: #322b26;
@@ -109,43 +107,30 @@
   /* Status */
   --color-progress: #7a8764;
   --color-success: #6e8965;
-  --color-success-soft: rgba(110, 137, 101, 0.14);
+  --color-success-soft: rgb(110 137 101 / 14%);
   --color-warning: #c18b4d;
   --color-danger: #c0563f;
 
   /* Effects */
-  --color-track: rgba(50, 43, 38, 0.1);
-  --color-glow: rgba(91, 107, 80, 0.16);
-  --color-active: rgba(115, 123, 88, 0.18);
+  --color-track: rgb(50 43 38 / 10%);
+  --color-glow: rgb(91 107 80 / 16%);
+  --color-active: rgb(115 123 88 / 18%);
   --color-on-primary: #fbf7f0;
   --color-on-cover: #fbf7f0;
-  --color-selection: rgba(138, 140, 103, 0.3);
-  --color-scroll-thumb: rgba(143, 139, 130, 0.45);
-  --color-search: rgba(185, 121, 76, 0.28);
-  --color-search-active: rgba(185, 121, 76, 0.5);
+  --color-selection: rgb(138 140 103 / 30%);
+  --color-scroll-thumb: rgb(143 139 130 / 45%);
+  --color-search: rgb(185 121 76 / 28%);
+  --color-search-active: rgb(185 121 76 / 50%);
   --color-bg-overlay: linear-gradient(
     180deg,
-    rgba(247, 242, 234, 0.28) 0%,
-    rgba(247, 242, 234, 0.58) 100%
+    rgb(247 242 234 / 28%) 0%,
+    rgb(247 242 234 / 58%) 100%
   );
 
   /* Paged document (editor) */
   --color-canvas: #e6ded0;
-  --color-page: #ffffff;
-  --color-page-edge: rgba(70, 60, 50, 0.18);
-
-  /* Syntax highlighting (matches prism oneLight) */
-  --syntax-comment: #a0a1a7;
-  --syntax-keyword: #a626a4;
-  --syntax-string: #50a14f;
-  --syntax-number: #986801;
-  --syntax-boolean: #986801;
-  --syntax-function: #4078f2;
-  --syntax-property: #e45649;
-  --syntax-operator: #0184bc;
-  --syntax-punctuation: #383a42;
-  --syntax-class: #c18401;
-  --syntax-tag: #e45649;
+  --color-page: #fff;
+  --color-page-edge: rgb(70 60 50 / 18%);
 
   /* Syntax highlighting (matches prism oneLight) */
   --syntax-comment: #a0a1a7;
@@ -176,10 +161,10 @@ html[data-theme="dark"] {
   /* Surfaces */
   --color-bg: #162033;
   --color-bg-secondary: #1f2b43;
-  --color-card: rgba(26, 34, 53, 0.72);
-  --color-glass: rgba(30, 40, 62, 0.6);
-  --color-hover: rgba(255, 255, 255, 0.1);
-  --color-border: rgba(255, 255, 255, 0.08);
+  --color-card: rgb(26 34 53 / 72%);
+  --color-glass: rgb(30 40 62 / 60%);
+  --color-hover: rgb(255 255 255 / 10%);
+  --color-border: rgb(255 255 255 / 8%);
 
   /* Text */
   --color-text: #eef2f7;
@@ -201,43 +186,30 @@ html[data-theme="dark"] {
   /* Status */
   --color-progress: #b7be91;
   --color-success: #8daf89;
-  --color-success-soft: rgba(141, 175, 137, 0.16);
+  --color-success-soft: rgb(141 175 137 / 16%);
   --color-warning: #c18b4d;
   --color-danger: #d96b52;
 
   /* Effects */
-  --color-track: rgba(238, 242, 247, 0.12);
-  --color-glow: rgba(143, 168, 199, 0.18);
-  --color-active: rgba(138, 146, 114, 0.16);
+  --color-track: rgb(238 242 247 / 12%);
+  --color-glow: rgb(143 168 199 / 18%);
+  --color-active: rgb(138 146 114 / 16%);
   --color-on-primary: #162033;
   --color-on-cover: #eef2f7;
-  --color-selection: rgba(143, 168, 199, 0.3);
-  --color-scroll-thumb: rgba(125, 135, 152, 0.45);
-  --color-search: rgba(185, 121, 76, 0.3);
-  --color-search-active: rgba(185, 121, 76, 0.55);
+  --color-selection: rgb(143 168 199 / 30%);
+  --color-scroll-thumb: rgb(125 135 152 / 45%);
+  --color-search: rgb(185 121 76 / 30%);
+  --color-search-active: rgb(185 121 76 / 55%);
   --color-bg-overlay: linear-gradient(
     180deg,
-    rgba(22, 32, 51, 0.32) 0%,
-    rgba(22, 32, 51, 0.62) 100%
+    rgb(22 32 51 / 32%) 0%,
+    rgb(22 32 51 / 62%) 100%
   );
 
   /* Paged document (editor) */
   --color-canvas: #0e1526;
   --color-page: #1c2945;
-  --color-page-edge: rgba(238, 242, 247, 0.12);
-
-  /* Syntax highlighting (matches prism oneDark) */
-  --syntax-comment: #7f848e;
-  --syntax-keyword: #c678dd;
-  --syntax-string: #98c379;
-  --syntax-number: #d19a66;
-  --syntax-boolean: #d19a66;
-  --syntax-function: #61afef;
-  --syntax-property: #e06c75;
-  --syntax-operator: #abb2bf;
-  --syntax-punctuation: #abb2bf;
-  --syntax-class: #e5c07b;
-  --syntax-tag: #e06c75;
+  --color-page-edge: rgb(238 242 247 / 12%);
 
   /* Syntax highlighting (matches prism oneDark) */
   --syntax-comment: #7f848e;

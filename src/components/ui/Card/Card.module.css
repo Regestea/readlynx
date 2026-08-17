@@ -5,7 +5,6 @@
   padding: var(--space-6);
   box-shadow: var(--shadow-md);
   backdrop-filter: blur(var(--blur-glass));
-  -webkit-backdrop-filter: blur(var(--blur-glass));
   transition:
     background-color var(--transition-base) ease,
     border-color var(--transition-base) ease,

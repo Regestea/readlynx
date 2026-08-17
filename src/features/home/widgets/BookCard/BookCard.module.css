@@ -18,7 +18,7 @@
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  background: linear-gradient(90deg, rgba(0, 0, 0, 0.16) 0%, transparent 20%);
+  background: linear-gradient(90deg, rgb(0 0 0 / 16%) 0%, transparent 20%);
   pointer-events: none;
 }
 
@@ -27,7 +27,7 @@
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  background: radial-gradient(120% 90% at 85% 0%, rgba(255, 255, 255, 0.22), transparent 55%);
+  background: radial-gradient(120% 90% at 85% 0%, rgb(255 255 255 / 22%), transparent 55%);
   pointer-events: none;
 }
 
@@ -47,7 +47,7 @@
   font-weight: var(--font-weight-semibold);
   line-height: 1.3;
   color: var(--color-on-cover);
-  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+  text-shadow: 0 1px 4px rgb(0 0 0 / 25%);
 }
 
 .coverAuthor {
@@ -70,9 +70,8 @@
   font-weight: var(--font-weight-semibold);
   letter-spacing: 0.02em;
   color: #fff;
-  background: rgba(0, 0, 0, 0.55);
+  background: rgb(0 0 0 / 55%);
   backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
 }
 
 .deleteButton,
@@ -89,9 +88,8 @@
   border: none;
   border-radius: var(--radius-pill);
   color: #fff;
-  background: rgba(0, 0, 0, 0.55);
+  background: rgb(0 0 0 / 55%);
   backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
   opacity: 0;
   cursor: pointer;
   transition:
@@ -108,11 +106,11 @@
   right: 44px;
 }
 
-.vertical:hover .deleteButton,
-.vertical:hover .editButton,
 .deleteButton:focus-visible,
 .editButton:focus-visible {
   opacity: 1;
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
 }
 
 .deleteButton:hover {
@@ -123,10 +121,9 @@
   background: var(--color-primary);
 }
 
-.deleteButton:focus-visible,
-.editButton:focus-visible {
-  outline: 2px solid var(--color-primary);
-  outline-offset: 2px;
+.vertical:hover .deleteButton,
+.vertical:hover .editButton {
+  opacity: 1;
 }
 
 /* ---------- Cover gradients (palette only) ---------- */
@@ -188,9 +185,7 @@
   font-weight: var(--font-weight-semibold);
   line-height: 1.35;
   color: var(--color-text);
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+  line-clamp: 2;
   overflow: hidden;
 }
 

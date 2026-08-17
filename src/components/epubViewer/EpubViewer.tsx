@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 import type { Ref } from "react";
-import { ChevronLeft, ChevronRight, FileDown, FileWarning, Loader2, Maximize2, Minus, Minimize2, Plus, Settings2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, FileDown, FileWarning, Loader2, Maximize2, Minus, Minimize2, Palette, Plus } from "lucide-react";
 import ePub from "epubjs";
 import type { Book, Contents, Location, Rendition } from "epubjs";
 import { useTheme } from "../../app/providers/theme/ThemeContext";
@@ -8,7 +8,7 @@ import { useReaderSettings } from "../../hooks/useReaderSettings.ts";
 import { epubHtmlToMarkdown, epubHtmlToPlainTextWithImages } from "../../shared/document/epubToMarkdown";
 import type { EpubImageRef } from "../../shared/document/epubToMarkdown";
 import { FontFamilySelect } from "../FontFamilySelect/FontFamilySelect";
-import { ColorSelect } from "../ui/ColorSelect/ColorSelect";
+import { ColorPickerPanel } from "../ui/ColorPickerPanel/ColorPickerPanel";
 import { AiSelectionBubble } from "../AiSelectionBubble/AiSelectionBubble";
 import hljs from "highlight.js/lib/common";
 import powershell from "highlight.js/lib/languages/powershell";
@@ -209,9 +209,6 @@ const FONT_FORCE_SELECTOR = [
   "nav",
 ].join(", ");
 
-const BG_PRESETS = ["#ffffff", "#f7f2ea", "#e6ded0", "#cbb99b", "#1c2945", "#162033", "#2b2b33"];
-const TEXT_PRESETS = ["#322b26", "#111111", "#1c2945", "#5b6b50", "#cbb99b", "#eef2f7", "#ffffff"];
-
 interface EpubViewerProps {
   /** Path of the EPUB to open; ignored when `srcData` is provided. */
   filePath?: string;
@@ -320,7 +317,7 @@ export function EpubViewer({
   const [pageNumber, setPageNumber] = useState(0);
   const [numPages, setNumPages] = useState(0);
   const [progressPct, setProgressPct] = useState(0);
-  const [menuOpen, setMenuOpen] = useState(false);
+  const [colorOpen, setColorOpen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [spacerHeight, setSpacerHeight] = useState(0);
   const [aiSelection, setAiSelection] = useState<{ x: number; y: number; text: string } | null>(null);
@@ -693,17 +690,17 @@ export function EpubViewer({
     (rendition.getContents() as unknown as Contents[]).forEach((content) => injectFontStyle(content));
   }, [theme, book, customBg, customText, backgroundColorOverride, textColorOverride, injectFontStyle]);
 
-  /** Closes the settings dropdown on outside click or Escape. */
+  /** Closes the color picker on outside click or Escape. */
   useEffect(() => {
-    if (!menuOpen) return;
+    if (!colorOpen) return;
     const onDown = (event: MouseEvent) => {
       const wrap = controlsWrapRef.current;
       if (wrap && !wrap.contains(event.target as Node)) {
-        setMenuOpen(false);
+        setColorOpen(false);
       }
     };
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setMenuOpen(false);
+      if (event.key === "Escape") setColorOpen(false);
     };
     document.addEventListener("mousedown", onDown);
     document.addEventListener("keydown", onKey);
@@ -711,13 +708,12 @@ export function EpubViewer({
       document.removeEventListener("mousedown", onDown);
       document.removeEventListener("keydown", onKey);
     };
-  }, [menuOpen]);
+  }, [colorOpen]);
 
   const handleResetSettings = () => {
-    setFontFamily("");
     setCustomBg(null);
     setCustomText(null);
-    setMenuOpen(false);
+    setColorOpen(false);
   };
 
   const goTo = (delta: number) => {
@@ -835,54 +831,48 @@ export function EpubViewer({
             <span className={styles.divider} aria-hidden="true" />
           </>
         )}
+        <span className={styles.divider} aria-hidden="true" />
+        <FontFamilySelect
+          value={fontFamily}
+          onSelect={setFontFamily}
+          defaultLabel="Book font"
+        />
+        <span className={styles.divider} aria-hidden="true" />
         <div className={styles.controlsWrap} ref={controlsWrapRef}>
           <button
             type="button"
-            className={`${styles.toolButton} ${menuOpen ? styles.toolButtonActive : ""}`}
-            onClick={() => setMenuOpen((open) => !open)}
+            className={`${styles.toolButton} ${colorOpen ? styles.toolButtonActive : ""}`}
+            onClick={() => setColorOpen((open) => !open)}
             disabled={!book}
-            aria-label="Reader settings"
-            title="Reader settings"
+            aria-label="Reader colors"
+            title="Reader colors"
             aria-haspopup="true"
-            aria-expanded={menuOpen}
+            aria-expanded={colorOpen}
           >
-            <Settings2 size={16} strokeWidth={2} aria-hidden="true" />
+            <Palette size={16} strokeWidth={2} aria-hidden="true" />
           </button>
-          {menuOpen && (
-            <div className={styles.menuPanel} role="menu" aria-label="Reader settings">
-              <div className={styles.menuGroup}>
-                <span className={styles.menuLabel}>Font family</span>
-                <FontFamilySelect
-                  value={fontFamily}
-                  onSelect={setFontFamily}
-                  defaultLabel="Book font"
-                />
-              </div>
-              <div className={styles.menuGroup}>
-                <span className={styles.menuLabel}>Background color</span>
-                <ColorSelect
-                  value={customBg ?? backgroundColor}
-                  onChange={setCustomBg}
-                  presets={BG_PRESETS}
-                  label="Background color"
-                />
-              </div>
-              <div className={styles.menuGroup}>
-                <span className={styles.menuLabel}>Text color</span>
-                <ColorSelect
-                  value={customText ?? textColor}
-                  onChange={setCustomText}
-                  presets={TEXT_PRESETS}
-                  label="Text color"
-                />
-              </div>
-              <button type="button" className={styles.menuReset} onClick={handleResetSettings}>
-                Reset to theme
-              </button>
-            </div>
-          )}
+          <ColorPickerPanel
+            open={colorOpen}
+            onClose={() => setColorOpen(false)}
+            title="Reader colors"
+            sections={[
+              {
+                id: "background",
+                label: "Background color",
+                value: customBg ?? backgroundColor,
+                onChange: setCustomBg,
+              },
+              {
+                id: "text",
+                label: "Text color",
+                value: customText ?? textColor,
+                onChange: setCustomText,
+              },
+            ]}
+            resetLabel="Reset to theme"
+            onReset={handleResetSettings}
+          />
         </div>
-        <span className={styles.divider} aria-hidden="true" />
         <button
           type="button"
           className={`${styles.toolButton} ${styles.toolbarEnd} ${isFullscreen ? styles.toolButtonActive : ""}`}

@@ -8,7 +8,7 @@
    ============================================================ */
 
 /* pdfjs-dist layer styles (text-layer spans, annotation elements) */
-@import "pdfjs-dist/web/pdf_viewer.css";
+@import url("pdfjs-dist/web/pdf_viewer.css");
 
 /* ---------- Theme variables ---------- */
 :root {
@@ -101,7 +101,7 @@
 }
 
 .pdf-text-layer .textLayer ::selection {
-  background: var(--color-selection, rgba(138, 140, 103, 0.3));
+  background: var(--color-selection, rgb(138 140 103 / 30%));
 }
 
 /* ---------- Annotation layer ---------- */

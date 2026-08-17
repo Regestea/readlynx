@@ -14,9 +14,7 @@
   font-weight: var(--font-weight-regular);
   color: var(--color-text);
   appearance: textfield;
-  -moz-appearance: textfield;
   backdrop-filter: blur(var(--blur-glass));
-  -webkit-backdrop-filter: blur(var(--blur-glass));
   box-shadow: var(--shadow-sm);
   transition:
     border-color var(--transition-base) ease,
@@ -26,7 +24,7 @@
 
 .input::-webkit-outer-spin-button,
 .input::-webkit-inner-spin-button {
-  -webkit-appearance: none;
+  appearance: none;
   margin: 0;
 }
 

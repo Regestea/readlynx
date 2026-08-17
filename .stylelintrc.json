@@ -1,0 +1,27 @@
+{
+  "extends": ["stylelint-config-standard"],
+  "rules": {
+    "selector-pseudo-class-no-unknown": [
+      true,
+      { "ignorePseudoClasses": ["global"] }
+    ]
+  },
+  "overrides": [
+    {
+      "files": ["**/*.module.css"],
+      "rules": {
+        "selector-class-pattern": null
+      }
+    },
+    {
+      "files": [
+        "src/styles/global.css",
+        "src/infrastructure/export/PrintStyles.css",
+        "src/components/pdfViewer/theme/pdf-theme.css"
+      ],
+      "rules": {
+        "selector-class-pattern": null
+      }
+    }
+  ]
+}

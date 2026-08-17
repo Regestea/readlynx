@@ -17,10 +17,6 @@
   scrollbar-width: none;
 }
 
-.tablist::-webkit-scrollbar {
-  display: none;
-}
-
 .tab {
   display: inline-flex;
   align-items: center;
@@ -50,5 +46,5 @@
 
 .panel {
   padding-top: var(--space-5);
-  animation: fadeUp var(--transition-base) ease both;
+  animation: fade-up var(--transition-base) ease both;
 }

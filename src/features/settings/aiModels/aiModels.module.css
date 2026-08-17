@@ -29,7 +29,7 @@
   background: linear-gradient(135deg, var(--color-primary), var(--color-olive));
   box-shadow:
     var(--shadow-sm),
-    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    inset 0 1px 0 rgb(255 255 255 / 20%);
 }
 
 .sectionTitle {
@@ -294,10 +294,10 @@
 }
 
 .spin {
-  animation: aiSpin 900ms linear infinite;
+  animation: ai-spin 900ms linear infinite;
 }
 
-@keyframes aiSpin {
+@keyframes ai-spin {
   to {
     transform: rotate(360deg);
   }

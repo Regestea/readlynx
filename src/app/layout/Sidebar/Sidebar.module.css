@@ -11,9 +11,7 @@
   border-radius: var(--radius-sidebar);
   box-shadow: var(--shadow-md);
   backdrop-filter: blur(var(--blur-glass));
-  -webkit-backdrop-filter: blur(var(--blur-glass));
-  overflow-x: hidden;
-  overflow-y: auto;
+  overflow: hidden auto;
 }
 
 /* ---------- Brand ---------- */
@@ -38,7 +36,7 @@
   background: linear-gradient(135deg, var(--color-primary), var(--color-olive));
   box-shadow:
     var(--shadow-sm),
-    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    inset 0 1px 0 rgb(255 255 255 / 20%);
 }
 
 /* ---------- Navigation ---------- */
@@ -75,7 +73,7 @@
   transition: color var(--transition-base) ease;
 }
 
-.navItem:hover .navIcon {
+.active .navIcon {
   color: var(--color-icon);
 }
 
@@ -84,7 +82,7 @@
   color: var(--color-text);
 }
 
-.active .navIcon {
+.navItem:hover .navIcon {
   color: var(--color-icon);
 }
 

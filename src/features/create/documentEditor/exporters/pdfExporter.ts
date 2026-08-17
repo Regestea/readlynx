@@ -46,7 +46,6 @@ export function exportPdfHtml(
   const rootProps = [
     "margin: 0",
     "padding: 0",
-    "-webkit-print-color-adjust: exact",
     "print-color-adjust: exact",
   ].join("; ");
 
@@ -54,7 +53,6 @@ export function exportPdfHtml(
     "margin: 0",
     "padding: 0",
     "line-height: 1.6",
-    "-webkit-print-color-adjust: exact",
     "print-color-adjust: exact",
     ...(options.fontFamily ? [`font-family: ${options.fontFamily}`] : []),
     ...(baseFontSize ? [`font-size: ${baseFontSize}`] : []),
@@ -67,7 +65,6 @@ export function exportPdfHtml(
     `padding: ${margins.top}mm ${margins.right}mm ${margins.bottom}mm ${margins.left}mm`,
     "break-after: page",
     "page-break-after: always",
-    "-webkit-print-color-adjust: exact",
     "print-color-adjust: exact",
     ...(options.backgroundColor ? [`background-color: ${options.backgroundColor}`] : []),
   ].join("; ");

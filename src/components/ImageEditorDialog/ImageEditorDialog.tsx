@@ -112,7 +112,7 @@ export function ImageEditorDialog({ open, onClose, onInsert, initialSrc }: Image
 
   useEffect(() => {
     const canvas = previewRef.current;
-    if (!canvas || !img || !oriented) return;
+    if (!canvas || !img || !oriented || !open) return;
     canvas.width = oriented.w;
     canvas.height = oriented.h;
     const ctx = canvas.getContext("2d");
@@ -124,7 +124,7 @@ export function ImageEditorDialog({ open, onClose, onInsert, initialSrc }: Image
     ctx.scale(flipH ? -1 : 1, flipV ? -1 : 1);
     ctx.drawImage(img, -img.naturalWidth / 2, -img.naturalHeight / 2);
     ctx.restore();
-  }, [img, steps, flipH, flipV, brightness, contrast, grayscale, oriented]);
+  }, [img, steps, flipH, flipV, brightness, contrast, grayscale, oriented, open]);
 
   const cropW = crop?.w ?? oriented?.w ?? 0;
   const cropH = crop?.h ?? oriented?.h ?? 0;
@@ -166,13 +166,13 @@ export function ImageEditorDialog({ open, onClose, onInsert, initialSrc }: Image
         x1 = clamp(Math.round(Math.min(start.x + dx, start.x + start.w)), 0, oriented.w);
       }
       if (mode.includes("e")) {
-        x2 = clamp(Math.round(Math.max(start.x + dx, start.x)), 0, oriented.w);
+        x2 = clamp(Math.round(Math.max(start.x + start.w + dx, start.x)), 0, oriented.w);
       }
       if (mode.includes("n")) {
         y1 = clamp(Math.round(Math.min(start.y + dy, start.y + start.h)), 0, oriented.h);
       }
       if (mode.includes("s")) {
-        y2 = clamp(Math.round(Math.max(start.y + dy, start.y)), 0, oriented.h);
+        y2 = clamp(Math.round(Math.max(start.y + start.h + dy, start.y)), 0, oriented.h);
       }
       const nextW = x2 - x1;
       const nextH = y2 - y1;

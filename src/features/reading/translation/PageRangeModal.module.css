@@ -63,20 +63,18 @@
   width: 100%;
   height: 100%;
   margin: 0;
-  -webkit-appearance: none;
   appearance: none;
   background: transparent;
   pointer-events: none;
 }
 
 .slider::-webkit-slider-thumb {
-  -webkit-appearance: none;
   appearance: none;
   pointer-events: auto;
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  border: 2px solid var(--color-bg-secondary, #ffffff);
+  border: 2px solid var(--color-bg-secondary, #fff);
   background: var(--color-primary);
   cursor: pointer;
   box-shadow: var(--shadow-sm);

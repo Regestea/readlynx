@@ -7,7 +7,10 @@
  *
  *  Themes are presentation-only: the PDF binary is never read for styling
  *  and never written. Everything happens through CSS variables on the
- *  viewer root element. */
+ *  viewer root element. The curated color set itself lives in the shared
+ *  `ColorPickerPanel/colors` module so every reader offers the same colors. */
+
+import { READING_BACKGROUNDS, READING_DEFAULT_BACKGROUND } from "../../ui/ColorPickerPanel/colors";
 
 export interface PdfThemeBackground {
   /** Human-readable name shown in the picker. */
@@ -26,24 +29,15 @@ export interface PdfThemeState {
   background: string;
 }
 
-/** Eye-friendly backgrounds: soft, low-glare papers and muted darks.
- *  Same values as the CSS defaults in pdf-theme.css. */
-export const PDF_THEME_BACKGROUNDS: PdfThemeBackground[] = [
-  { name: "Sepia", background: "#f4ecd8", dark: false },
-  { name: "Cream", background: "#fdf6e3", dark: false },
-  { name: "Soft green", background: "#dcedc8", dark: false },
-  { name: "Mint", background: "#d7efe4", dark: false },
-  { name: "Sky", background: "#e3ecf5", dark: false },
-  { name: "Cloud", background: "#ececec", dark: false },
-  { name: "Amber", background: "#f6e7c1", dark: false },
-  { name: "Dark gray", background: "#242424", dark: true },
-  { name: "Slate", background: "#232a35", dark: true },
-  { name: "Night blue", background: "#1b2a41", dark: true },
-  { name: "Onyx", background: "#101418", dark: true },
-];
+/** Eye-friendly backgrounds: soft, low-glare papers and muted darks. */
+export const PDF_THEME_BACKGROUNDS: PdfThemeBackground[] = READING_BACKGROUNDS.map(({ name, color }) => ({
+  name: name ?? color,
+  background: color,
+  dark: isDarkBackground(color),
+}));
 
 /** The default background — a warm, low-glare paper instead of pure white. */
-export const PDF_THEME_DEFAULT_BACKGROUND = PDF_THEME_BACKGROUNDS[0].background;
+export const PDF_THEME_DEFAULT_BACKGROUND = READING_DEFAULT_BACKGROUND;
 
 const DEFAULT_STORAGE_KEY = "readlynx:pdf-theme";
 

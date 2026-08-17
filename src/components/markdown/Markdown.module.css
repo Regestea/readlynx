@@ -197,14 +197,14 @@
     color var(--transition-base) ease;
 }
 
-.toolButton:hover:not(:disabled) {
-  background: var(--color-hover);
-  color: var(--color-primary);
-}
-
 .toolButton:disabled {
   opacity: 0.4;
   cursor: default;
+}
+
+.toolButton:hover:not(:disabled) {
+  background: var(--color-hover);
+  color: var(--color-primary);
 }
 
 .toolButtonActive,
@@ -244,56 +244,4 @@
   position: relative;
   display: flex;
   align-items: center;
-}
-
-.menuPanel {
-  position: absolute;
-  top: calc(100% + var(--space-2));
-  left: 0;
-  z-index: var(--z-dialog);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-  width: 272px;
-  padding: var(--space-4);
-  background: var(--color-card);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-card);
-  box-shadow: var(--shadow-lg);
-  backdrop-filter: blur(var(--blur-glass));
-  -webkit-backdrop-filter: blur(var(--blur-glass));
-}
-
-.menuGroup {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-
-.menuLabel {
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-semibold);
-  color: var(--color-text-secondary);
-}
-
-.menuReset {
-  align-self: flex-start;
-  height: 32px;
-  padding: 0 var(--space-3);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-small);
-  background: transparent;
-  color: var(--color-text-secondary);
-  font-family: var(--font-sans);
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
-  cursor: pointer;
-  transition:
-    background var(--transition-fast),
-    color var(--transition-fast);
-}
-
-.menuReset:hover {
-  background: var(--color-hover);
-  color: var(--color-primary);
 }

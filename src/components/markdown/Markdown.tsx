@@ -2,7 +2,7 @@ import { isValidElement, useCallback, useEffect, useMemo, useRef, useState } fro
 import type { CSSProperties, ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import type { Components } from "react-markdown";
-import { Maximize2, Minus, Minimize2, Plus, Settings2 } from "lucide-react";
+import { Maximize2, Minus, Minimize2, Palette, Plus } from "lucide-react";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
@@ -14,7 +14,7 @@ import { Table } from "../ui/Table/Table";
 import type { TableColumn } from "../ui/Table/Table";
 import tableStyles from "../ui/Table/Table.module.css";
 import { FontFamilySelect } from "../FontFamilySelect/FontFamilySelect";
-import { ColorSelect } from "../ui/ColorSelect/ColorSelect";
+import { ColorPickerPanel } from "../ui/ColorPickerPanel/ColorPickerPanel";
 import { AiSelectionBubble } from "../AiSelectionBubble/AiSelectionBubble";
 import { useReaderSettings } from "../../hooks/useReaderSettings.ts";
 import { MermaidDiagram } from "./MermaidDiagram";
@@ -44,9 +44,6 @@ function safeUrlTransform(url: string, key: string): string {
     return "";
   }
 }
-
-const BG_PRESETS = ["#ffffff", "#f7f2ea", "#e6ded0", "#cbb99b", "#1c2945", "#162033", "#2b2b33"];
-const TEXT_PRESETS = ["#322b26", "#111111", "#1c2945", "#5b6b50", "#cbb99b", "#eef2f7", "#ffffff"];
 
 /** Attribute names allowed on raw-HTML elements. Anything else — e.g. names
  *  mangled by markdown emphasis inside a tag (`**classname`, `border-**`) —
@@ -470,12 +467,12 @@ export function Markdown({
     customText,
     setCustomText,
   } = useReaderSettings(settingsBookId, "markdown");
-  const [menuOpen, setMenuOpen] = useState(false);
+  const [colorOpen, setColorOpen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [spacerHeight, setSpacerHeight] = useState(0);
   const [aiSelection, setAiSelection] = useState<{ x: number; y: number; text: string } | null>(null);
   const hostRef = useRef<HTMLDivElement>(null);
-  const controlsRef = useRef<HTMLDivElement>(null);
+  const colorsWrapRef = useRef<HTMLDivElement>(null);
 
   /** Shows the floating "Ask AI" bubble next to the end of a text selection
    *  inside this document — only after the mouse button is released, never
@@ -578,17 +575,17 @@ export function Markdown({
     return () => document.removeEventListener("keydown", onKey);
   }, [isFullscreen]);
 
-  /** Closes the settings dropdown on outside click or Escape. */
+  /** Closes the color picker on outside click or Escape. */
   useEffect(() => {
-    if (!menuOpen) return;
+    if (!colorOpen) return;
     const onDown = (event: MouseEvent) => {
-      const wrap = controlsRef.current;
+      const wrap = colorsWrapRef.current;
       if (wrap && !wrap.contains(event.target as Node)) {
-        setMenuOpen(false);
+        setColorOpen(false);
       }
     };
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setMenuOpen(false);
+      if (event.key === "Escape") setColorOpen(false);
     };
     document.addEventListener("mousedown", onDown);
     document.addEventListener("keydown", onKey);
@@ -596,13 +593,12 @@ export function Markdown({
       document.removeEventListener("mousedown", onDown);
       document.removeEventListener("keydown", onKey);
     };
-  }, [menuOpen]);
+  }, [colorOpen]);
 
   const handleResetSettings = () => {
-    setFontFamily("");
     setCustomBg(null);
     setCustomText(null);
-    setMenuOpen(false);
+    setColorOpen(false);
   };
 
   const changeZoom = useCallback((delta: number) => {
@@ -641,17 +637,17 @@ export function Markdown({
   );
 
   /** Theme CSS variables are only needed for the color pickers' current
-   *  values, which are only visible while the settings menu is open — reading
+   *  values, which are only visible while the color panel is open — reading
    *  them here (instead of on every render) avoids a `getComputedStyle` per
    *  frame of any state change. */
   const themeVars = useMemo(() => {
-    if (!menuOpen) return { page: "", text: "" };
+    if (!colorOpen) return { page: "", text: "" };
     const sheet = getComputedStyle(document.documentElement);
     return {
       page: sheet.getPropertyValue("--color-page").trim(),
       text: sheet.getPropertyValue("--color-text").trim(),
     };
-  }, [menuOpen]);
+  }, [colorOpen]);
 
   const backgroundColor = customBg ?? (themeVars.page || "#ffffff");
   const textColor = customText ?? (themeVars.text || "#322b26");
@@ -706,51 +702,45 @@ export function Markdown({
               <Plus size={16} strokeWidth={2} aria-hidden="true" />
             </button>
             <span className={styles.divider} aria-hidden="true" />
-            <div className={styles.controlsWrap} ref={controlsRef}>
+            <FontFamilySelect
+              value={fontFamily}
+              onSelect={setFontFamily}
+              defaultLabel="Reader font"
+            />
+            <span className={styles.divider} aria-hidden="true" />
+            <div className={styles.controlsWrap} ref={colorsWrapRef}>
               <button
                 type="button"
-                className={`${styles.toolButton} ${menuOpen ? styles.toolButtonActive : ""}`}
-                onClick={() => setMenuOpen((open) => !open)}
-                aria-label="Reader settings"
-                title="Reader settings"
+                className={`${styles.toolButton} ${colorOpen ? styles.toolButtonActive : ""}`}
+                onClick={() => setColorOpen((open) => !open)}
+                aria-label="Reader colors"
+                title="Reader colors"
                 aria-haspopup="true"
-                aria-expanded={menuOpen}
+                aria-expanded={colorOpen}
               >
-                <Settings2 size={16} strokeWidth={2} aria-hidden="true" />
+                <Palette size={16} strokeWidth={2} aria-hidden="true" />
               </button>
-              {menuOpen && (
-                <div className={styles.menuPanel} role="menu" aria-label="Reader settings">
-                  <div className={styles.menuGroup}>
-                    <span className={styles.menuLabel}>Font family</span>
-                    <FontFamilySelect
-                      value={fontFamily}
-                      onSelect={setFontFamily}
-                      defaultLabel="Reader font"
-                    />
-                  </div>
-                  <div className={styles.menuGroup}>
-                    <span className={styles.menuLabel}>Background color</span>
-                    <ColorSelect
-                      value={backgroundColor}
-                      onChange={setCustomBg}
-                      presets={BG_PRESETS}
-                      label="Background color"
-                    />
-                  </div>
-                  <div className={styles.menuGroup}>
-                    <span className={styles.menuLabel}>Text color</span>
-                    <ColorSelect
-                      value={textColor}
-                      onChange={setCustomText}
-                      presets={TEXT_PRESETS}
-                      label="Text color"
-                    />
-                  </div>
-                  <button type="button" className={styles.menuReset} onClick={handleResetSettings}>
-                    Reset to theme
-                  </button>
-                </div>
-              )}
+              <ColorPickerPanel
+                open={colorOpen}
+                onClose={() => setColorOpen(false)}
+                title="Reader colors"
+                sections={[
+                  {
+                    id: "background",
+                    label: "Background color",
+                    value: backgroundColor,
+                    onChange: setCustomBg,
+                  },
+                  {
+                    id: "text",
+                    label: "Text color",
+                    value: textColor,
+                    onChange: setCustomText,
+                  },
+                ]}
+                resetLabel="Reset to theme"
+                onReset={handleResetSettings}
+              />
             </div>
             <span className={styles.divider} aria-hidden="true" />
             <button

@@ -64,14 +64,14 @@
     color var(--transition-base) ease;
 }
 
-.toolButton:hover:not(:disabled) {
-  background: var(--color-hover);
-  color: var(--color-primary);
-}
-
 .toolButton:disabled {
   opacity: 0.4;
   cursor: default;
+}
+
+.toolButton:hover:not(:disabled) {
+  background: var(--color-hover);
+  color: var(--color-primary);
 }
 
 .pageInfo {
@@ -147,12 +147,12 @@
   display: flex;
   align-items: flex-start;
   justify-content: center;
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.16);
+  box-shadow: 0 6px 24px rgb(0 0 0 / 16%);
 }
 
 .canvas {
   display: block;
-  background: var(--pdf-background-color, #ffffff);
+  background: var(--pdf-background-color, #fff);
   border-radius: 2px;
 }
 
@@ -167,7 +167,7 @@
   z-index: 4;
   display: grid;
   place-items: center;
-  background: rgba(255, 255, 255, 0.5);
+  background: rgb(255 255 255 / 50%);
 }
 
 .loading {

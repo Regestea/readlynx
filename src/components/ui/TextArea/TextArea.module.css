@@ -12,7 +12,6 @@
   resize: vertical;
   appearance: none;
   backdrop-filter: blur(var(--blur-glass));
-  -webkit-backdrop-filter: blur(var(--blur-glass));
   box-shadow: var(--shadow-sm);
   transition:
     border-color var(--transition-base) ease,

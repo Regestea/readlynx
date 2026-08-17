@@ -16,21 +16,17 @@
   scrollbar-gutter: stable;
 }
 
-/* Physical pages: paper sheet with shadow, laid out one after another. */
+/* Physical pages: paper sheet with shadow, laid out one after another.
+   Prevents app-wide page-break rules from double-paging the preview. */
 .viewport :global(.pagedjs_page) {
   margin: 0 auto 28px;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35), 0 10px 32px rgba(0, 0, 0, 0.45);
-  background: #ffffff;
+  box-shadow: 0 2px 6px rgb(0 0 0 / 35%), 0 10px 32px rgb(0 0 0 / 45%);
+  background: #fff;
+  break-after: auto;
 }
 
 .viewport :global(.pagedjs_page:last-child) {
   margin-bottom: 0;
-}
-
-/* Prevents app-wide page-break rules from double-paging the preview. */
-.viewport :global(.pagedjs_page) {
-  break-after: auto;
-  page-break-after: auto;
 }
 
 .status {
@@ -38,7 +34,7 @@
   top: 50%;
   transform: translateY(-50%);
   text-align: center;
-  color: rgba(255, 255, 255, 0.75);
+  color: rgb(255 255 255 / 75%);
   font-size: 13px;
   letter-spacing: 0.04em;
 }

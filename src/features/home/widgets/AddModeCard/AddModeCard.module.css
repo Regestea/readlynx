@@ -8,7 +8,6 @@
   background: var(--color-card);
   box-shadow: var(--shadow-md);
   backdrop-filter: blur(var(--blur-glass));
-  -webkit-backdrop-filter: blur(var(--blur-glass));
   cursor: pointer;
   text-align: left;
   font-family: inherit;

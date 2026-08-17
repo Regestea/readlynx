@@ -39,6 +39,12 @@ export function CreateBookDialog({ open, onClose, onConfirm }: CreateBookDialogP
   const [coverWidth, setCoverWidth] = useState<number | null>(null);
   const [coverColor, setCoverColor] = useState<CoverOption>(() => randomCover());
   const [imageEditorOpen, setImageEditorOpen] = useState(false);
+  const [editorKey, setEditorKey] = useState(0);
+
+  const openImageEditor = () => {
+    setEditorKey((key) => key + 1);
+    setImageEditorOpen(true);
+  };
 
   const resetForm = () => {
     setTitle("");
@@ -102,7 +108,7 @@ export function CreateBookDialog({ open, onClose, onConfirm }: CreateBookDialogP
               <span className={styles.fieldLabel}>Cover</span>
               {coverSrc ? (
                 <div className={styles.coverActions}>
-                  <Button variant="secondary" onClick={() => setImageEditorOpen(true)}>
+                  <Button variant="secondary" onClick={openImageEditor}>
                     <Pencil size={14} strokeWidth={1.8} aria-hidden="true" />
                     Edit cover
                   </Button>
@@ -121,7 +127,7 @@ export function CreateBookDialog({ open, onClose, onConfirm }: CreateBookDialogP
                 <button
                   type="button"
                   className={styles.uploadZone}
-                  onClick={() => setImageEditorOpen(true)}
+                  onClick={openImageEditor}
                 >
                   <ImagePlus size={22} strokeWidth={1.6} aria-hidden="true" />
                   <span className={styles.uploadText}>Add a cover image</span>
@@ -134,7 +140,9 @@ export function CreateBookDialog({ open, onClose, onConfirm }: CreateBookDialogP
       </Modal>
 
       <ImageEditorDialog
+        key={editorKey}
         open={imageEditorOpen}
+        initialSrc={coverSrc}
         onClose={() => setImageEditorOpen(false)}
         onInsert={(src, width) => {
           setCoverSrc(src);

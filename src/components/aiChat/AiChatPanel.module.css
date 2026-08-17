@@ -7,8 +7,7 @@
   justify-content: center;
   background: var(--color-bg-overlay);
   backdrop-filter: blur(var(--blur-glass));
-  -webkit-backdrop-filter: blur(var(--blur-glass));
-  animation: fadeIn var(--transition-fast);
+  animation: fade-in var(--transition-fast);
 }
 
 .panel {
@@ -21,7 +20,7 @@
   border-radius: var(--radius-dialog);
   box-shadow: var(--shadow-lg);
   overflow: hidden;
-  animation: popIn var(--transition-base);
+  animation: pop-in var(--transition-base);
 }
 
 .header {
@@ -141,7 +140,7 @@
   padding: var(--space-2) var(--space-3);
   background: var(--color-primary);
   color: var(--color-on-primary);
-  border-radius: 18px 18px 4px 18px;
+  border-radius: 18px 18px 4px;
   font-size: var(--font-size-md);
   line-height: var(--line-height-normal);
   white-space: pre-wrap;
@@ -219,33 +218,35 @@
     transform var(--transition-fast);
 }
 
-.sendButton:hover:not(:disabled) {
-  transform: scale(1.05);
-}
-
 .sendButton:disabled {
   opacity: 0.5;
   cursor: default;
+}
+
+.sendButton:hover:not(:disabled) {
+  transform: scale(1.05);
 }
 
 .spinner {
   animation: spin 1s linear infinite;
 }
 
-@keyframes fadeIn {
+@keyframes fade-in {
   from {
     opacity: 0;
   }
+
   to {
     opacity: 1;
   }
 }
 
-@keyframes popIn {
+@keyframes pop-in {
   from {
     opacity: 0;
     transform: scale(0.96) translateY(8px);
   }
+
   to {
     opacity: 1;
     transform: none;
@@ -263,6 +264,7 @@
   100% {
     opacity: 0.4;
   }
+
   50% {
     opacity: 1;
   }
