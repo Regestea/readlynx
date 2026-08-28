@@ -68,6 +68,8 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef, epubReady 
   const [refreshTick, setRefreshTick] = useState(0);
   /** Progress of a running page-range translation (null while idle). */
   const [rangeProgress, setRangeProgress] = useState<{ done: number; total: number } | null>(null);
+  /** Rate-limit retry attempt counter (null when not retrying). */
+  const [rateLimitRetry, setRateLimitRetry] = useState<number | null>(null);
   /** True while waiting for the EPUB viewer to finish loading so cached
    *  translation image tokens can be resolved into real image URLs. */
   const [imagesPending, setImagesPending] = useState(false);
@@ -94,6 +96,8 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef, epubReady 
   const autoTriedRef = useRef<string | null>(null);
   const savedRef = useRef(false);
   const customPromptRef = useRef("");
+  /** Base status text without retry suffix — used to append retry info. */
+  const baseStatusRef = useRef<string | null>(null);
   /** Text of the currently chosen instruction, resolved from the
    *  `CustomInstructions` table and paired with the id it was fetched for so
    *  the effective prompt is derived synchronously during render (empty while
@@ -443,6 +447,24 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef, epubReady 
     return () => unsubscribe?.();
   }, [busy, sourceType, settings.pdfMethod]);
 
+  /** Rate-limit retry indicator: shows "retrying (attempt N)" while the AI
+   *  call is being retried due to HTTP 429. */
+  useEffect(() => {
+    if (!busy) return;
+    const unsubscribe =
+      window.readlynx?.ai.onRateLimitRetry(({ attempt }) => {
+        setRateLimitRetry(attempt);
+        const base = baseStatusRef.current;
+        if (base) {
+          setStatus(`${base} (retrying – attempt ${attempt})`);
+        }
+      });
+    return () => {
+      unsubscribe?.();
+      setRateLimitRetry(null);
+    };
+  }, [busy]);
+
   /** Download progress while an OCR model is being fetched. */
   useEffect(() => {
     const unsubscribe =
@@ -677,17 +699,21 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef, epubReady 
           if (cancelRequestedRef.current) {
             throw new TranslationCancelledError("Translation cancelled.");
           }
-          setStatus(
+          const chunkStatus =
             chunks.length === 1
               ? "Translating chapter…"
-              : `Translating chunk ${index + 1} of ${chunks.length}…`,
-          );
+              : `Translating chunk ${index + 1} of ${chunks.length}…`;
+          baseStatusRef.current = chunkStatus;
+          setRateLimitRetry(null);
+          setStatus(chunkStatus);
           const chunk = await chatWithFailover({
             messages: [
               { role: "system", content: systemPrompt },
               { role: "user", content: buildTranslationUserPrompt(promptContext, chunks[index]) },
             ],
           });
+          setRateLimitRetry(null);
+          baseStatusRef.current = null;
           await saveRow({ method, pageNumber: null, chunkKey: chunkKeyFor(chapterKey, index), markdown: chunk });
           results.push(chunk);
         }
@@ -703,6 +729,8 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef, epubReady 
       setImagesPending(false);
       rawCachedMarkdownRef.current = null;
       setStatus(null);
+      setRateLimitRetry(null);
+      baseStatusRef.current = null;
       // The user asked for the translation — take them to it once it's done
       // (no-op when the translation view is already showing).
       setViewModeState("translation");
@@ -715,6 +743,8 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef, epubReady 
         setError(err instanceof Error ? err.message : String(err));
         setStatus(null);
       }
+      setRateLimitRetry(null);
+      baseStatusRef.current = null;
     } finally {
       busyRef.current = false;
       setBusy(false);
@@ -771,5 +801,6 @@ markdown,
     cancelTranslation,
     rangeProgress,
     regenerate,
+    rateLimitRetry,
   };
 }

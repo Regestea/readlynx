@@ -44,6 +44,8 @@ interface TranslationSettingsPanelProps {
   onTranslateRange: (from: number, to: number) => void;
   /** Stops the running range translation at the next page boundary. */
   onCancel: () => void;
+  /** Rate-limit retry attempt (null when not retrying). */
+  rateLimitRetry: number | null;
 }
 
 /** Translation settings toolbar, anchored in the reading view header bar:
@@ -76,6 +78,7 @@ export function TranslationSettingsPanel({
   onRegenerate,
   onTranslateRange,
   onCancel,
+  rateLimitRetry,
 }: TranslationSettingsPanelProps) {
   const [ocrOpen, setOcrOpen] = useState(false);
   const [modelOpen, setModelOpen] = useState(false);
@@ -323,7 +326,7 @@ export function TranslationSettingsPanel({
 
       {(status || error) && (
         <span
-          className={error ? styles.errorText : styles.statusText}
+          className={error ? styles.errorText : rateLimitRetry ? styles.retryWarning : styles.statusText}
           role={error ? "alert" : "status"}
           title={error ?? status ?? ""}
         >

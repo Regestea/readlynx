@@ -47,11 +47,13 @@ function isRateLimitError(error: unknown): boolean {
 
 /** Runs `request` and retries it after a fixed delay when the provider
  *  rate-limits us, up to `maxAttempts` tries. Non-429 errors pass through
- *  immediately. */
+ *  immediately. `onRetry(attempt)` is called before each retry so the caller
+ *  can update UI (e.g. show "retrying due to rate limit"). */
 async function withRateLimitRetry<T>(
   request: () => Promise<T>,
   maxAttempts = 10,
   delayMs = 6000,
+  onRetry?: (attempt: number) => void,
 ): Promise<T> {
   let lastError: unknown;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -62,6 +64,7 @@ async function withRateLimitRetry<T>(
       if (!isRateLimitError(error) || attempt === maxAttempts) {
         throw error;
       }
+      onRetry?.(attempt);
       await sleep(delayMs);
     }
   }
@@ -121,11 +124,13 @@ export async function listGeminiModels(
 
 /** Plain chat completion over IPC (mirrors `sendChatMessage`). `images`
  *  (data URLs) are attached to the final user message, which lets vision
- *  models read pages directly. */
+ *  models read pages directly. `onRetry(attempt)` is called before each
+ *  rate-limit retry so the caller can surface it in the UI. */
 export async function chatCompletion(
   input: AiConnectionInput,
   messages: AiChatMessage[],
   images?: string[],
+  onRetry?: (attempt: number) => void,
 ): Promise<string> {
   const client = createClient(input);
   const mapped: OpenAI.ChatCompletionMessageParam[] = messages.map((m) => ({
@@ -145,11 +150,15 @@ export async function chatCompletion(
       ],
     };
   }
-  const completion = await withRateLimitRetry(() =>
-    client.chat.completions.create({
-      model: input.modelName,
-      messages: mapped,
-    }),
+  const completion = await withRateLimitRetry(
+    () =>
+      client.chat.completions.create({
+        model: input.modelName,
+        messages: mapped,
+      }),
+    10,
+    6000,
+    onRetry,
   );
   const content = completion.choices[0]?.message?.content;
   if (!content) {

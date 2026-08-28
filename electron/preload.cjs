@@ -85,6 +85,11 @@ contextBridge.exposeInMainWorld("readlynx", {
     listGeminiModels: (apiKey) => ipcRenderer.invoke("ai:list-gemini-models", apiKey),
     chat: (payload) => ipcRenderer.invoke("ai:chat", payload),
     structured: (payload) => ipcRenderer.invoke("ai:structured", payload),
+    onRateLimitRetry: (callback) => {
+      const listener = (_event, data) => callback(data);
+      ipcRenderer.on("ai:rate-limit-retry", listener);
+      return () => ipcRenderer.removeListener("ai:rate-limit-retry", listener);
+    },
   },
   systemFonts: {
     list: () => ipcRenderer.invoke("fonts:list"),

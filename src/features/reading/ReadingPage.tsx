@@ -478,6 +478,7 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
             onRegenerate={translation.regenerate}
             onTranslateRange={translation.translateRange}
             onCancel={translation.cancelTranslation}
+            rateLimitRetry={translation.rateLimitRetry}
           />
         )}
       </header>

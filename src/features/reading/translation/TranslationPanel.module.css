@@ -209,6 +209,21 @@
   color: var(--color-terracotta);
 }
 
+.retryWarning {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-size-xs);
+  color: var(--color-terracotta);
+  animation: retry-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes retry-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
 .action {
   display: inline-flex;
   align-items: center;

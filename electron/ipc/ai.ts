@@ -21,9 +21,12 @@ export function registerAiIpc() {
   ipcMain.handle(
     "ai:chat",
     (
-      _event,
+      event,
       payload: { input: AiConnectionInput; messages: AiChatMessage[]; images?: string[] },
-    ) => chatCompletion(payload.input, payload.messages, payload.images),
+    ) =>
+      chatCompletion(payload.input, payload.messages, payload.images, (attempt) => {
+        event.sender.send("ai:rate-limit-retry", { attempt });
+      }),
   );
 
   ipcMain.handle(
