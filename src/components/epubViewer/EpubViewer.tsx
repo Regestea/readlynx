@@ -677,6 +677,7 @@ export function EpubViewer({
     // book's decorative boxes follow the reader's palette.
     skinCssRef.current = [
       `html, body { background-color: ${background} !important; color: ${text} !important; }`,
+      `p { background-color: ${background} !important; }`,
       `a { color: ${text} !important; }`,
       `.box1, .box2, .box3, .box4 { background-color: ${background} !important; }`,
       `.box1 *, .box2 *, .box3 *, .box4 * { color: ${text} !important; }`,
