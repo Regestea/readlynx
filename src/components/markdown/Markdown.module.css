@@ -8,7 +8,7 @@
 }
 
 .h1 {
-  margin: 0;
+  margin: var(--space-6) 0 var(--space-3);
   font-size: var(--font-size-2xl);
   font-weight: var(--font-weight-bold);
   letter-spacing: -0.01em;
@@ -16,7 +16,7 @@
 }
 
 .h2 {
-  margin: 0;
+  margin: var(--space-5) 0 var(--space-3);
   font-size: var(--font-size-xl);
   font-weight: var(--font-weight-bold);
   letter-spacing: -0.01em;
@@ -24,16 +24,23 @@
 }
 
 .h3 {
-  margin: 0;
+  margin: var(--space-4) 0 var(--space-2);
   font-size: var(--font-size-lg);
   font-weight: var(--font-weight-semibold);
   line-height: var(--line-height-tight);
 }
 
 .h4 {
-  margin: 0;
+  margin: var(--space-4) 0 var(--space-2);
   font-size: var(--font-size-md);
   font-weight: var(--font-weight-semibold);
+}
+
+.h1:first-child,
+.h2:first-child,
+.h3:first-child,
+.h4:first-child {
+  margin-top: 0;
 }
 
 .p {
@@ -60,13 +67,21 @@
 }
 
 .blockquote {
-  margin: 0;
+  margin: var(--space-4) 0;
   padding: var(--space-3) var(--space-5);
   border-left: 3px solid var(--color-primary);
   border-radius: 0 var(--radius-medium) var(--radius-medium) 0;
   background: var(--color-glass);
   color: var(--color-text-secondary);
   font-style: italic;
+}
+
+.blockquote:first-child {
+  margin-top: 0;
+}
+
+.blockquote:last-child {
+  margin-bottom: 0;
 }
 
 .blockquote p {
@@ -90,12 +105,71 @@
 }
 
 .list {
-  margin: 0;
-  padding-left: var(--space-5);
+  margin: var(--space-3) 0;
+  padding-left: var(--space-6);
+  list-style-position: inside;
+}
+
+.list:first-child {
+  margin-top: 0;
+}
+
+.list:last-child {
+  margin-bottom: 0;
+}
+
+ul.list {
+  list-style-type: disc;
+}
+
+ol.list {
+  list-style-type: decimal;
+}
+
+/* Nested lists */
+.list .list {
+  margin-top: var(--space-2);
+}
+
+ul.list ul {
+  list-style-type: circle;
+}
+
+ul.list ul ul {
+  list-style-type: square;
+}
+
+ol.list ol {
+  list-style-type: lower-alpha;
+}
+
+ol.list ol ol {
+  list-style-type: lower-roman;
+}
+
+.listItem {
+  padding-left: var(--space-1);
+}
+
+.listItem + .listItem {
+  margin-top: var(--space-2);
+}
+
+.listItem:first-child {
+  margin-top: 0;
+}
+
+.listItem:last-child {
+  margin-bottom: 0;
+}
+
+.listItem::marker {
+  color: var(--color-text-secondary);
 }
 
 .listItem > p {
   margin: 0;
+  display: inline;
 }
 
 .taskItem {

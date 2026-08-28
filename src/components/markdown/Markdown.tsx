@@ -192,6 +192,17 @@ function classifyWord(word: string): "rtl" | "ltr" | undefined {
 
 function getDir(node: ReactNode): "rtl" | "ltr" | undefined {
   const text = extractText(node);
+  // A text that opens with a Persian/Arabic digit ("۱...", "۰۲...", …)
+  // is conventionally Persian — align it right regardless of the rest.
+  const lead = text.trim();
+  if (lead) {
+    const leadCp = lead.codePointAt(0) ?? 0;
+    // Opens with a Persian/Arabic digit ("۱...", "۰۲...", …) — conventionally
+    // Persian, align right regardless of the rest.
+    if (isArabicDigit(leadCp)) return "rtl";
+    // Opens with a Persian/Arabic letter — treat as an RTL-run heading/list.
+    if (isRtlCodePoint(leadCp)) return "rtl";
+  }
   let rtlWords = 0;
   let ltrWords = 0;
 
@@ -352,21 +363,37 @@ const components: Components = {
       {children}
     </a>
   ),
-  ul: ({ children, node: _node, ...props }) => (
-    <ul className={styles.list} {...props}>
-      {children}
-    </ul>
-  ),
-  ol: ({ children, node: _node, ...props }) => (
-    <ol className={styles.list} {...props}>
-      {children}
-    </ol>
-  ),
-  li: ({ children, node: _node, ...props }) => (
-    <li className={styles.listItem} {...props} {...dirProps(children)}>
-      {children}
-    </li>
-  ),
+  ul: ({ children, node: _node, className, ...props }) => {
+    const cn = Array.isArray(className) ? className.join(" ") : (className ?? "");
+    const isTaskList = typeof cn === "string" && cn.includes("contains-task-list");
+    return (
+      <ul className={`${isTaskList ? styles.tasks : styles.list}${cn ? ` ${cn}` : ""}`} {...props}>
+        {children}
+      </ul>
+    );
+  },
+  ol: ({ children, node: _node, className, ...props }) => {
+    const cn = Array.isArray(className) ? className.join(" ") : (className ?? "");
+    const isTaskList = typeof cn === "string" && cn.includes("contains-task-list");
+    return (
+      <ol className={`${isTaskList ? styles.tasks : styles.list}${cn ? ` ${cn}` : ""}`} {...props}>
+        {children}
+      </ol>
+    );
+  },
+  li: ({ children, node: _node, className, ...props }) => {
+    const cn = Array.isArray(className) ? className.join(" ") : (className ?? "");
+    const isTaskItem = typeof cn === "string" && cn.includes("task-list-item");
+    return (
+      <li
+        className={`${isTaskItem ? styles.taskItem : styles.listItem}${cn ? ` ${cn}` : ""}`}
+        {...props}
+        {...dirProps(children)}
+      >
+        {children}
+      </li>
+    );
+  },
   blockquote: ({ children, node: _node, ...props }) => (
     <blockquote className={styles.blockquote} {...props} {...dirProps(children)}>
       {children}
