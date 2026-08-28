@@ -282,24 +282,46 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef, epubReady 
           // (from before the fix) so they display correctly without re-translation.
           const raw = normalizeTranslatedMarkdown(rawJoined);
           if (sourceType === "epub") {
-            const images = epubRef.current?.getCurrentChapterExtraction()?.images;
-            if (images && images.length > 0) {
-              setMarkdown(replaceImageTokens(raw, images));
+            const needsImages = raw.includes("[IMG-");
+            if (!needsImages) {
+              // Image-less chapter — no need to wait for the viewer.
+              setMarkdown(raw);
+              setMarkdownUnitKey(unitKey);
+              setHasTranslation(true);
               setImagesPending(false);
               rawCachedMarkdownRef.current = null;
             } else {
-              // EPUB not ready yet — store raw markdown and wait.
-              rawCachedMarkdownRef.current = raw;
-              setMarkdown(null);
-              setImagesPending(true);
+              const images = epubRef.current?.getCurrentChapterExtraction()?.images;
+              const tokenCount = (raw.match(/\[IMG-\d+\]/g) || []).length;
+              const hasEnoughImages = !!images && images.length >= tokenCount && tokenCount > 0;
+              if (hasEnoughImages) {
+                setMarkdown(replaceImageTokens(raw, images));
+                setMarkdownUnitKey(unitKey);
+                setHasTranslation(true);
+                setImagesPending(false);
+                rawCachedMarkdownRef.current = null;
+              } else {
+                // Needs images but the viewer hasn't extracted them yet
+                // (initial load or a fast chapter switch). Keep the previous
+                // markdown on screen with a loading veil instead of clearing
+                // to null — clearing would flash "No translation yet" even
+                // though the cache exists (race seen after the
+                // display:none → visibility fix).
+                rawCachedMarkdownRef.current = raw;
+                setImagesPending(true);
+                setHasTranslation(true);
+                // Don't update markdown / markdownUnitKey yet — keep the
+                // stale markdown visible with `markdownLoading` veil until
+                // the viewer provides the correct images.
+              }
             }
           } else {
             setMarkdown(raw);
+            setMarkdownUnitKey(unitKey);
+            setHasTranslation(true);
             setImagesPending(false);
             rawCachedMarkdownRef.current = null;
           }
-          setMarkdownUnitKey(unitKey);
-          setHasTranslation(true);
         }
         setCacheReady(true);
       } catch (err) {
@@ -318,17 +340,58 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef, epubReady 
   /** Resolves image tokens in a cached translation once the EPUB viewer
    *  finishes loading. The cache-loading effect stores the raw markdown
    *  (with [IMG-n] tokens) in `rawCachedMarkdownRef` when the chapter DOM
-   *  is not yet available; this effect picks it up once `epubReady` flips. */
+   *  is not yet available; this effect picks it up once `epubReady` flips
+   *  or when a fast navigation left the viewer one frame behind. */
   useEffect(() => {
-    if (!epubReady || !imagesPending) return;
+    if (!imagesPending) return;
     const raw = rawCachedMarkdownRef.current;
     if (!raw) return;
-    const images = epubRef.current?.getCurrentChapterExtraction()?.images;
-    if (!images || images.length === 0) return;
-    rawCachedMarkdownRef.current = null;
-    setMarkdown(replaceImageTokens(raw, images));
-    setImagesPending(false);
-  }, [epubReady, imagesPending, epubRef]);
+    const needsImages = raw.includes("[IMG-");
+    if (!needsImages) {
+      const key = unitKeyRef.current;
+      rawCachedMarkdownRef.current = null;
+      if (key) {
+        setMarkdown(raw);
+        setMarkdownUnitKey(key);
+      } else {
+        setMarkdown(raw);
+      }
+      setImagesPending(false);
+      return;
+    }
+    if (!epubReady) return;
+    let cancelled = false;
+    let timer: number | undefined;
+    const tryResolve = () => {
+      if (cancelled) return;
+      const currentRaw = rawCachedMarkdownRef.current;
+      if (!currentRaw) return;
+      const images = epubRef.current?.getCurrentChapterExtraction()?.images;
+      if (!images || images.length === 0) {
+        timer = window.setTimeout(tryResolve, 150);
+        return;
+      }
+      const tokenCount = (currentRaw.match(/\[IMG-\d+\]/g) || []).length;
+      if (images.length < tokenCount) {
+        timer = window.setTimeout(tryResolve, 150);
+        return;
+      }
+      const key = unitKeyRef.current;
+      rawCachedMarkdownRef.current = null;
+      if (key) {
+        setMarkdown(replaceImageTokens(currentRaw, images));
+        setMarkdownUnitKey(key);
+      } else {
+        setMarkdown(replaceImageTokens(currentRaw, images));
+      }
+      setImagesPending(false);
+    };
+    tryResolve();
+    return () => {
+      cancelled = true;
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
+  }, [epubReady, imagesPending, epubRef, unitKey]);
 
   const setViewMode = useCallback((mode: TranslationViewMode) => {
     setViewModeState(mode);
@@ -793,6 +856,11 @@ markdown,
     /** True while waiting for the EPUB viewer to load so cached image tokens
      *  can be resolved into real image URLs. */
     imagesPending,
+    /** True once the cache lookup for the current unit has finished (whether
+     *  a translation was found or not). While false the DB fetch is still in
+     *  flight and the UI should keep a loading veil instead of flashing
+     *  "No translation yet". */
+    cacheReady,
     busy,
     status,
     error,

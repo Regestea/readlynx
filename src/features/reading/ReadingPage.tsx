@@ -344,21 +344,47 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
     book?.sourceType === "epub"
       ? Number(unitToChapter(translation.unitKey ?? epubUnitKey("0")))
       : null;
+  // Fall back to the viewer's live count when state hasn't been persisted yet
+  // (e.g. right after load) so the nav buttons are not stuck disabled.
+  const totalPages = pageCount || pdfRef.current?.getPageCount() || 0;
+  const totalChapters = chapterCount || epubRef.current?.getChapterCount() || 0;
   const canPrev = book?.sourceType === "pdf" ? (currentPdfPage ?? 1) > 1 : (currentChapter ?? 0) > 0;
   const canNext =
     book?.sourceType === "pdf"
-      ? (currentPdfPage ?? 1) < pageCount
-      : (currentChapter ?? 0) + 1 < chapterCount;
+      ? totalPages === 0
+        ? false
+        : (currentPdfPage ?? 1) < totalPages
+      : totalChapters === 0
+        ? false
+        : (currentChapter ?? 0) + 1 < totalChapters;
   const goUnit = useCallback(
     (delta: number) => {
       if (!book) return;
       if (book.sourceType === "pdf") {
         pdfRef.current?.goToPage((currentPdfPage ?? 1) + delta);
       } else {
-        epubRef.current?.goToChapter((currentChapter ?? 0) + delta);
+        // Mirror PDF: drive the viewer — it fires `onChapterChange` which
+        // updates `translation.unitKey` and loads the chapter's markdown.
+        // The viewer stays layout-capable while hidden (see .viewerHidden)
+        // so `rendition.display()` still triggers `relocated` like PDF's
+        // state update does.
+        const next = (currentChapter ?? 0) + delta;
+        const clamped =
+          totalChapters > 0 ? Math.min(Math.max(0, next), totalChapters - 1) : Math.max(0, next);
+        const viewer = epubRef.current;
+        if (viewer) {
+          viewer.goToChapter(clamped);
+        } else {
+          const fallback = String(Math.max(0, next));
+          setTranslationUnit(epubUnitKey(fallback));
+          void window.readlynx?.db.updateReadingState(bookId, {
+            currentChapter: fallback,
+            progressPercent: epubProgressRef.current,
+          });
+        }
       }
     },
-    [book, currentPdfPage, currentChapter, pdfRef, epubRef],
+    [book, bookId, currentPdfPage, currentChapter, totalChapters, setTranslationUnit],
   );
   const toolbarExtra =
     showTranslation && book ? (
@@ -375,8 +401,8 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
         </Button>
         <span className={styles.navLabel}>
           {book.sourceType === "pdf"
-            ? `Page ${currentPdfPage ?? 1} / ${pageCount || "…"}`
-            : `Chapter ${(currentChapter ?? 0) + 1} / ${chapterCount || "…"}`}
+            ? `Page ${currentPdfPage ?? 1} / ${totalPages || "…"}`
+            : `Chapter ${(currentChapter ?? 0) + 1} / ${totalChapters || "…"}`}
         </span>
         <Button
           variant="ghost"
@@ -539,7 +565,7 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
                 {translation.markdown ? (
                   <>
                     <Markdown content={translation.markdown} toolbar rawHtml={false} settingsBookId={bookId} className={styles.translationBody} onAskAi={setAiContext} toolbarExtra={toolbarExtra} />
-                    {translation.markdownLoading && (
+                    {(translation.markdownLoading || translation.imagesPending) && (
                       <div className={styles.markdownLoading} role="status" aria-label="Loading translation">
                         <Loader2 size={20} strokeWidth={2} className={styles.spinner} />
                       </div>
@@ -549,6 +575,11 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
                   <div className={styles.state} aria-label="Translating">
                     <Loader2 size={24} strokeWidth={2} className={styles.spinner} />
                     <span>{translation.status ?? "Translating…"}</span>
+                  </div>
+                ) : !translation.cacheReady || translation.imagesPending ? (
+                  <div className={styles.state} aria-label="Loading translation">
+                    <Loader2 size={24} strokeWidth={2} className={styles.spinner} />
+                    <span>Loading translation…</span>
                   </div>
                 ) : translation.error ? (
                   <div className={styles.state} role="alert">

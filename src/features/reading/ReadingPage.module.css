@@ -77,9 +77,17 @@
 }
 
 /* The viewer stays mounted while hidden so its canvas/iframe keeps the
- * rendered page available for OCR and AI vision capture. */
+ * rendered page available for OCR and AI vision capture. For EPUB it must
+ * stay layout-capable (visible size) so `rendition.display()` and
+ * `relocated` still fire — `display:none` collapses the iframe to 0×0 and
+ * breaks next-chapter navigation. Absolute + visibility keeps the size. */
 .viewerHidden {
-  display: none;
+  position: absolute;
+  inset: 0;
+  display: flex;
+  visibility: hidden;
+  pointer-events: none;
+  opacity: 0;
 }
 
 .translationStage {
