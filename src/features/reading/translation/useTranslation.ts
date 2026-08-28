@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { RefObject } from "react";
-import type { AiModel } from "../../../infrastructure/db/entities/AiModel.ts";
-import type { BookSourceType } from "../../../infrastructure/db/entities/types.ts";
+import type { AiModel } from "../../../infrastructure/db/entities";
+import type { BookSourceType } from "../../../infrastructure/db/entities";
 import type { PdfViewerHandle } from "../../../components/pdfViewer/PdfViewer.tsx";
 import type { EpubViewerHandle } from "../../../components/epubViewer/EpubViewer.tsx";
 import { replaceImageTokens } from "../../../shared/document/epubToMarkdown.ts";

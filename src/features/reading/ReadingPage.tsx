@@ -7,7 +7,7 @@ import { EpubViewer } from "../../components/epubViewer/EpubViewer";
 import type { EpubViewerHandle } from "../../components/epubViewer/EpubViewer";
 import { Markdown } from "../../components/markdown/Markdown";
 import { AiChatPanel } from "../../components/aiChat/AiChatPanel";
-import type { BookSourceType } from "../../infrastructure/db/entities/types";
+import type { BookSourceType } from "../../infrastructure/db/entities";
 import { TranslationSettingsPanel, TranslationToggle } from "./translation/TranslationPanel";
 import { useTranslation } from "./translation/useTranslation";
 import { epubUnitKey, methodFor, pdfUnitKey, unitToChapter, unitToPage } from "./translation/types";
