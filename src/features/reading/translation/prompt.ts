@@ -54,8 +54,16 @@ export function buildTranslationSystemPrompt(
     "- Do not translate executable source code.",
     "- Preserve code as code whenever possible.",
     "- Put code inside fenced Markdown code blocks with the appropriate language.",
-    "- Use inline backticks only for short identifiers, commands, or code fragments inside normal text.",
+    "- Use inline backticks only for short identifiers, commands, or code fragments inside normal text (typically under ~40 characters, no JSX/brackets/semicolons/newlines).",
+    "- If the source contains code that is long, contains JSX/HTML tags, braces, semicolons, arrow functions, or spans multiple tokens/lines, always use a fenced block — even if the source showed it inline. Promote long inline code to a fenced block.",
+    "- Detect code by its content (keywords like function/return/export/import/const, JSX tags, braces, etc.), not only by backticks or fences — EPUBs are inconsistent and code may appear without markers.",
     "- Preserve URLs, file paths, identifiers, commands, API names, version numbers, and similar technical tokens when appropriate.",
+    "- Example — a single-line component that looks short but contains JSX/brackets must be a block, not inline:",
+    "  Incorrect: `export function important() { return <div>This is really important!</div>; }`",
+    "  Correct:",
+    "  ```tsx",
+    "  export function important() { return <div>This is really important!</div>; }",
+    "  ```",
 
     "Mermaid and charts:",
     "- When the source contains a diagram or chart that can be meaningfully represented with Mermaid, prefer converting it into a Mermaid diagram instead of replacing it with a plain-text description.",
@@ -100,7 +108,8 @@ export function buildTranslationSystemPrompt(
   if (context.docType === "EPUB chapter") {
     lines.push(
         "The input is the plain text of a chapter with minimal structural markers. Reconstruct clean Markdown based on the structure and meaning of the source.",
-        "Do not invent formatting that is not supported by the source.",
+        "Do not invent formatting that is not supported by the source, except for promoting long code that appeared inline in the source into a proper fenced block as described in the Code rules above.",
+        "The input may contain code already marked as inline backticks or fenced blocks — keep short fragments inline and long/JSX/brace-heavy fragments as fenced blocks; if the input omitted code markers, infer them from the content and still produce the correct Markdown code formatting.",
         "The input may contain image placeholders such as [IMG-0] between paragraphs.",
         "Keep every image placeholder exactly as it is: do not translate, describe, explain, wrap, modify, or remove it.",
     );

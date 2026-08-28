@@ -348,7 +348,7 @@ const components: Components = {
     );
   },
   a: ({ href, children }) => (
-    <a href={href} className={styles.link} target="_blank" rel="noreferrer">
+    <a dir="ltr" href={href} className={styles.link} target="_blank" rel="noreferrer">
       {children}
     </a>
   ),
@@ -385,7 +385,7 @@ const components: Components = {
       }
       return <Code code={textContent(children)} language={match[1]} />;
     }
-    return <code className={styles.inlineCode}>{children}</code>;
+    return <code dir="ltr" className={styles.inlineCode}>{children}</code>;
   },
   pre: ({ children }) => <>{children}</>,
   th: ({ children, node: _node, ...props }) => (

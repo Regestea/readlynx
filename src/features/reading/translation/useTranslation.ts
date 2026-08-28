@@ -4,7 +4,10 @@ import type { AiModel } from "../../../infrastructure/db/entities";
 import type { BookSourceType } from "../../../infrastructure/db/entities";
 import type { PdfViewerHandle } from "../../../components/pdfViewer/PdfViewer.tsx";
 import type { EpubViewerHandle } from "../../../components/epubViewer/EpubViewer.tsx";
-import { replaceImageTokens } from "../../../shared/document/epubToMarkdown.ts";
+import {
+  normalizeTranslatedMarkdown,
+  replaceImageTokens,
+} from "../../../shared/document/epubToMarkdown.ts";
 import { getDefaultAiModel, resolveProviderBaseUrl } from "../../../infrastructure/ai/modelResolver";
 import { chunkChapter } from "./epubChunker.ts";
 import { buildTranslationSystemPrompt, buildTranslationUserPrompt } from "./prompt.ts";
@@ -271,10 +274,13 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef, epubReady 
           setImagesPending(false);
           rawCachedMarkdownRef.current = null;
         } else {
-          const raw =
+          const rawJoined =
             sourceType === "epub"
               ? rows.map((row) => row.markdown).join("\n\n")
               : rows[0].markdown;
+          // Normalize old cached rows that may have stored long code as inline
+          // (from before the fix) so they display correctly without re-translation.
+          const raw = normalizeTranslatedMarkdown(rawJoined);
           if (sourceType === "epub") {
             const images = epubRef.current?.getCurrentChapterExtraction()?.images;
             if (images && images.length > 0) {
@@ -568,8 +574,9 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef, epubReady 
           images: [image],
         });
       }
-      await saveRow({ method, pageNumber: page, chunkKey: "", markdown: result });
-      return result;
+      const normalized = normalizeTranslatedMarkdown(result);
+      await saveRow({ method, pageNumber: page, chunkKey: "", markdown: normalized });
+      return normalized;
     },
     [bookId, pdfRef, saveRow, chatWithFailover],
   );
@@ -706,18 +713,21 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef, epubReady 
           baseStatusRef.current = chunkStatus;
           setRateLimitRetry(null);
           setStatus(chunkStatus);
-          const chunk = await chatWithFailover({
+          const chunkRaw = await chatWithFailover({
             messages: [
               { role: "system", content: systemPrompt },
               { role: "user", content: buildTranslationUserPrompt(promptContext, chunks[index]) },
             ],
           });
+          // Normalize each chunk before persisting so cached rows are clean;
+          // the final joined result is normalized again after image replacement.
+          const chunk = normalizeTranslatedMarkdown(chunkRaw);
           setRateLimitRetry(null);
           baseStatusRef.current = null;
           await saveRow({ method, pageNumber: null, chunkKey: chunkKeyFor(chapterKey, index), markdown: chunk });
           results.push(chunk);
         }
-        result = replaceImageTokens(results.join("\n\n"), extraction.images);
+        result = normalizeTranslatedMarkdown(replaceImageTokens(results.join("\n\n"), extraction.images));
       } else {
         const page = unitToPage(key) ?? 1;
         setStatus(method === "ocr" ? "Recognizing page…" : "Translating page with AI vision…");

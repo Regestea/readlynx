@@ -4,9 +4,12 @@
  * headings, lists stay lists, quotes/emphasis/code/tables survive, etc.
  *
  * With `{ plain: true }` it produces translation input instead: inline
- * formatting markers (`**`, `*`, `~~`, `~`, `^`, backticks) and link syntax
- * are dropped so the AI rebuilds clean Markdown from plain text — only the
- * structural markers (`#`, `-`, `>`, tables, code fences) are kept.
+ * formatting markers (`**`, `*`, `~~`, `~`, `^`) and link syntax are dropped
+ * so the AI rebuilds clean Markdown from plain text — only the structural
+ * markers (`#`, `-`, `>`, tables, code fences) and code identity (backticks /
+ * fences) are kept. Code blocks are preserved as fenced blocks and short code
+ * fragments as inline backticks so the model can reconstruct the correct
+ * Markdown structure even when EPUBs use inconsistent HTML for code.
  *
  * Images are handled through `epubHtmlToPlainTextWithImages`: each `<img>` is
  * replaced by a `[IMG-n]` placeholder (so the AI never receives the image),
@@ -163,6 +166,32 @@ function imgMarkdown(src: string, alt: string): string {
   return `![${label}](${src})`;
 }
 
+/** Heuristic: whether a raw code string should be a fenced block rather than inline.
+ *  EPUBs use wildly different HTML for code — this is content-based so it
+ *  does not depend on a specific tag structure. [IMG-n] preservation is untouched.
+ *  Thresholds are intentionally conservative so short hooks like
+ *  `useState` or `const [x,setX]=useState(true)` stay inline, while JSX-heavy
+ *  or long statements become fenced blocks. */
+function isBlockCode(raw: string): boolean {
+  const trimmed = raw.trim();
+  if (!trimmed) return false;
+  if (trimmed.includes("\n")) return true;
+  // Persian example: `export function important() { return <div>...</div>; }` ~76 chars
+  if (trimmed.length > 70) return true;
+  // JSX / HTML tag inside code — needs a bit more length to avoid promoting tiny tags like `<br/>`
+  if (trimmed.length > 55 && /<\/?[a-zA-Z][^>]*>/.test(trimmed)) return true;
+  // Braces / semicolons — typical multi-statement JS line
+  if (trimmed.length > 60 && /[{};]/.test(trimmed) && /[A-Za-z]/.test(trimmed)) return true;
+  // Keyword-heavy line (function, return, export, etc.)
+  if (trimmed.length > 60 && /\b(function|return|export|import|const|let|var|class|interface|extends)\b/.test(trimmed))
+    return true;
+  return false;
+}
+
+function fenceFor(text: string): string {
+  return text.includes("```") ? "````" : "```";
+}
+
 /** Text for the inline content of a node (no block structure, no markers
  *  when `plain` is set). */
 function inline(node: Node, plain: boolean, images: EpubImageRef[] | null): string {
@@ -200,7 +229,22 @@ function inline(node: Node, plain: boolean, images: EpubImageRef[] | null): stri
     case "i":
       return plain ? text() : wrap("*");
     case "code":
-      return plain ? text() : codeSpan(el);
+    case "kbd":
+    case "samp":
+    case "tt":
+    case "var": {
+      if (!plain) return codeSpan(el);
+      const raw = (el.textContent ?? "").replace(/\r\n?/g, "\n").trim();
+      if (!raw) return "";
+      if (isBlockCode(raw)) {
+        const fence = fenceFor(raw);
+        // Surrounding blank lines ensure the fence is parsed as a block even
+        // when it was inline inside a <p> or <li>.
+        return `\n\n${fence}\n${raw}\n${fence}\n\n`;
+      }
+      const escaped = raw.includes("`") ? raw.replace(/`/g, "'") : raw;
+      return `\`${escaped}\``;
+    }
     case "del":
     case "s":
     case "strike":
@@ -219,8 +263,34 @@ function inline(node: Node, plain: boolean, images: EpubImageRef[] | null): stri
       const href = el.getAttribute("href");
       return href ? `[${inner}](${href})` : inner;
     }
-    default:
+    default: {
+      // EPUBs are inconsistent: code is sometimes <div class="code">,
+      // <span style="font-family:monospace">, <pre> without <code>, etc.
+      // Preserve code identity even without a <code> tag when the container
+      // looks code-like and its text is block-code. [IMG-n] stays untouched.
+      if (plain) {
+        const cls = `${el.getAttribute("class") ?? ""} ${el.getAttribute("id") ?? ""}`.toLowerCase();
+        const style = (el.getAttribute("style") ?? "").toLowerCase();
+        const looksCode =
+          /code|pre|syntax|highlight|hljs|language-|source-code|monospace|consolas|courier/.test(cls) ||
+          /monospace|consolas|courier|code/.test(style);
+        if (looksCode) {
+          const raw = (el.textContent ?? "").replace(/\r\n?/g, "\n").trim();
+          // Only promote when the whole element is code-like and block-sized;
+          // otherwise fall through to normal inlineChildren so prose is kept.
+          const isEntirelyCode =
+            raw &&
+            isBlockCode(raw) &&
+            // Avoid misfiring on a normal paragraph that merely contains the word "code"
+            (el.childElementCount === 0 || raw.length > 40);
+          if (isEntirelyCode) {
+            const fence = fenceFor(raw);
+            return `\n\n${fence}\n${raw}\n${fence}\n\n`;
+          }
+        }
+      }
       return inlineChildren(el, plain, images);
+    }
   }
 }
 
@@ -389,8 +459,9 @@ function joinBlocks(blocks: string[]): string {
 
 export interface EpubMarkdownOptions {
   /** Plain-text mode for AI translation input: inline formatting markers
-   *  (`**`, `*`, `~~`, `~`, `^`, backticks) and link syntax are dropped;
-   *  only structural markers (`#`, `-`, `>`, tables, code fences) remain. */
+   *  (`**`, `*`, `~~`, `~`, `^`) and link syntax are dropped; only the
+   *  structural markers (`#`, `-`, `>`, tables, code fences) and code identity
+   *  (short inline backticks / fenced blocks for long code) remain. */
   plain?: boolean;
 }
 
@@ -426,5 +497,47 @@ export function replaceImageTokens(markdown: string, images: EpubImageRef[]): st
   for (const image of images) {
     out = out.replaceAll(image.token, image.markdown);
   }
+  return out;
+}
+
+/** Whether an inline code span should have been a fenced block. Shared by
+ *  the plain-mode extractor and the post-translation normalizer so both use
+ *  the same content-based heuristic regardless of EPUB tag variance. */
+function shouldPromoteInlineCode(raw: string): boolean {
+  return isBlockCode(raw);
+}
+
+/** Post-processes translated Markdown: promotes long/code-like inline spans
+ *  (e.g. `` `export function important() { return <div>...</div>; }` ``) to
+ *  proper fenced blocks. This is model-agnostic — it fixes AI variance where
+ *  a long snippet was returned as inline despite the prompt.
+ *
+ *  Fenced blocks themselves are left untouched, and `[IMG-n]` placeholders
+ *  are preserved verbatim for the later `replaceImageTokens` step. */
+export function normalizeTranslatedMarkdown(markdown: string): string {
+  if (!markdown || !markdown.includes("`")) return markdown;
+  // Split by existing fenced blocks so we never rewrite inside them.
+  const fenceRe = /(````[\s\S]*?````|```[\s\S]*?```)/g;
+  const parts = markdown.split(fenceRe);
+  for (let i = 0; i < parts.length; i += 2) {
+    // Even indices are outside fences
+    const text = parts[i];
+    if (!text.includes("`")) continue;
+    parts[i] = text.replace(/`([^`\n]+?)`/g, (match, inner: string) => {
+      const raw = inner.trim();
+      if (!raw) return match;
+      if (!shouldPromoteInlineCode(raw)) return match;
+      const fence = raw.includes("```") ? "````" : "```";
+      // Light language hint: JSX-flavoured code gets tsx for nicer highlighting
+      const looksJsx = /<\/?[a-zA-Z][^>]*>/.test(raw) && /\b(function|return|const|let|export|import|class)\b/.test(raw);
+      const lang = looksJsx ? "tsx" : "";
+      return `\n\n${fence}${lang}\n${raw}\n${fence}\n\n`;
+    });
+  }
+  let out = parts.join("");
+  // Collapse the blank lines we introduced without touching intentional structure.
+  out = out.replace(/\n{4,}/g, "\n\n\n").replace(/[ \t]+$/gm, "").trim();
+  // Normalize 3+ newlines that may have appeared at promotion boundaries
+  out = out.replace(/\n{3,}/g, "\n\n");
   return out;
 }
