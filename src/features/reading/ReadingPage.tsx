@@ -51,6 +51,10 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
   const [pdfAskImages, setPdfAskImages] = useState<string[] | null>(null);
   const [chatError, setChatError] = useState<string | null>(null);
   const [pdfAskBusy, setPdfAskBusy] = useState(false);
+  /** True once the EPUB viewer has finished loading and its chapter DOM is
+   *  available for image extraction. Needed so cached translations can
+   *  resolve [IMG-n] tokens into real image URLs. */
+  const [epubReady, setEpubReady] = useState(false);
   const askPdfRef = useRef(false);
   const pdfRef = useRef<PdfViewerHandle | null>(null);
   const epubRef = useRef<EpubViewerHandle | null>(null);
@@ -79,6 +83,7 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
     sourceType: readyBook?.sourceType ?? "pdf",
     pdfRef,
     epubRef,
+    epubReady,
   });
   const { setUnit: setTranslationUnit } = translation;
 
@@ -515,7 +520,10 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
                   settingsBookId={bookId}
                   initialChapter={savedChapter}
                   className={styles.viewer}
-                  onReady={persistTotals}
+                  onReady={() => {
+                    persistTotals();
+                    setEpubReady(true);
+                  }}
                   onChapterChange={handleChapterChange}
                   onProgressChange={(progress) => {
                     epubProgressRef.current = progress;

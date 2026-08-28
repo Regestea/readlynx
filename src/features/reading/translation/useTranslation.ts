@@ -27,6 +27,9 @@ interface UseTranslationOptions {
   sourceType: BookSourceType;
   pdfRef: RefObject<PdfViewerHandle | null>;
   epubRef: RefObject<EpubViewerHandle | null>;
+  /** True once the EPUB viewer has finished loading and its chapter DOM is
+   *  available for image extraction. Irrelevant for PDF books. */
+  epubReady: boolean;
 }
 
 /** Chunk keys are ordered by their index, zero-padded so string ordering
@@ -45,7 +48,7 @@ class TranslationCancelledError extends Error {}
  * It stays independent of the viewers — it only talks to them through the
  * handles exposed by `PdfViewer` / `EpubViewer`.
  */
-export function useTranslation({ bookId, sourceType, pdfRef, epubRef }: UseTranslationOptions) {
+export function useTranslation({ bookId, sourceType, pdfRef, epubRef, epubReady }: UseTranslationOptions) {
   const [viewMode, setViewModeState] = useState<TranslationViewMode>("original");
   const [settings, setSettings] = useState<TranslationSettings>(DEFAULT_TRANSLATION_SETTINGS);
   const [unitKey, setUnitKey] = useState<TranslationUnitKey | null>(null);
@@ -65,6 +68,12 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef }: UseTrans
   const [refreshTick, setRefreshTick] = useState(0);
   /** Progress of a running page-range translation (null while idle). */
   const [rangeProgress, setRangeProgress] = useState<{ done: number; total: number } | null>(null);
+  /** True while waiting for the EPUB viewer to finish loading so cached
+   *  translation image tokens can be resolved into real image URLs. */
+  const [imagesPending, setImagesPending] = useState(false);
+  /** Raw cached markdown (with [IMG-n] tokens) stored while the EPUB viewer
+   *  finishes loading; resolved into real images once the DOM is available. */
+  const rawCachedMarkdownRef = useRef<string | null>(null);
 
   const [models, setModels] = useState<AiModel[]>([]);
   const [modelsError, setModelsError] = useState<string | null>(null);
@@ -255,19 +264,30 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef }: UseTrans
           setMarkdown(null);
           setMarkdownUnitKey(unitKey);
           setHasTranslation(false);
+          setImagesPending(false);
+          rawCachedMarkdownRef.current = null;
         } else {
           const raw =
             sourceType === "epub"
               ? rows.map((row) => row.markdown).join("\n\n")
               : rows[0].markdown;
-          const text =
-            sourceType === "epub"
-              ? replaceImageTokens(
-                  raw,
-                  epubRef.current?.getCurrentChapterExtraction()?.images ?? [],
-                )
-              : raw;
-          setMarkdown(text);
+          if (sourceType === "epub") {
+            const images = epubRef.current?.getCurrentChapterExtraction()?.images;
+            if (images && images.length > 0) {
+              setMarkdown(replaceImageTokens(raw, images));
+              setImagesPending(false);
+              rawCachedMarkdownRef.current = null;
+            } else {
+              // EPUB not ready yet — store raw markdown and wait.
+              rawCachedMarkdownRef.current = raw;
+              setMarkdown(null);
+              setImagesPending(true);
+            }
+          } else {
+            setMarkdown(raw);
+            setImagesPending(false);
+            rawCachedMarkdownRef.current = null;
+          }
           setMarkdownUnitKey(unitKey);
           setHasTranslation(true);
         }
@@ -284,6 +304,21 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef }: UseTrans
       cancelled = true;
     };
   }, [unitKey, bookId, sourceType, epubRef, refreshTick]);
+
+  /** Resolves image tokens in a cached translation once the EPUB viewer
+   *  finishes loading. The cache-loading effect stores the raw markdown
+   *  (with [IMG-n] tokens) in `rawCachedMarkdownRef` when the chapter DOM
+   *  is not yet available; this effect picks it up once `epubReady` flips. */
+  useEffect(() => {
+    if (!epubReady || !imagesPending) return;
+    const raw = rawCachedMarkdownRef.current;
+    if (!raw) return;
+    const images = epubRef.current?.getCurrentChapterExtraction()?.images;
+    if (!images || images.length === 0) return;
+    rawCachedMarkdownRef.current = null;
+    setMarkdown(replaceImageTokens(raw, images));
+    setImagesPending(false);
+  }, [epubReady, imagesPending, epubRef]);
 
   const setViewMode = useCallback((mode: TranslationViewMode) => {
     setViewModeState(mode);
@@ -665,6 +700,8 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef }: UseTrans
       setMarkdown(result);
       setMarkdownUnitKey(key);
       setHasTranslation(true);
+      setImagesPending(false);
+      rawCachedMarkdownRef.current = null;
       setStatus(null);
       // The user asked for the translation — take them to it once it's done
       // (no-op when the translation view is already showing).
@@ -713,6 +750,9 @@ markdown,
     /** True while the shown markdown belongs to the previous unit (the new
      *  unit's rows are being read) — the viewer stays mounted underneath. */
     markdownLoading: markdown !== null && markdownUnitKey !== unitKey,
+    /** True while waiting for the EPUB viewer to load so cached image tokens
+     *  can be resolved into real image URLs. */
+    imagesPending,
     busy,
     status,
     error,
