@@ -4,6 +4,7 @@ import { DbWorkerClient } from "./db/client.ts";
 import { registerAiIpc } from "./ipc/ai.ts";
 import { registerBackupIpc } from "./ipc/backup.ts";
 import { registerCoverProtocol, registerCoversIpc } from "./ipc/covers.ts";
+import { registerTranslationImageProtocol, registerTranslationImagesIpc } from "./ipc/translationImages.ts";
 import { registerDbIpc } from "./ipc/db.ts";
 import { registerFsIpc } from "./ipc/fs.ts";
 import { registerOcrIpc, terminateOcrWorker } from "./ipc/ocr.ts";
@@ -14,6 +15,10 @@ import { getStore } from "./store/storage.ts";
 protocol.registerSchemesAsPrivileged([
   {
     scheme: "readlynx-cover",
+    privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true },
+  },
+  {
+    scheme: "readlynx-translation-image",
     privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true },
   },
 ]);
@@ -93,6 +98,8 @@ app.whenReady().then(() => {
   const store = getStore();
 
   registerCoverProtocol({ getStore });
+  registerTranslationImageProtocol({ getStore });
+  registerTranslationImagesIpc({ getStore });
   session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
     callback((permission as string) === "font-access");
   });

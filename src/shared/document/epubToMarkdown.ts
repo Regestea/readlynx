@@ -500,6 +500,40 @@ export function replaceImageTokens(markdown: string, images: EpubImageRef[]): st
   return out;
 }
 
+/** Protocol URL prefix for translation images. */
+const TRANSLATION_IMG_PROTOCOL = "readlynx-translation-image://local/";
+
+/** Extracts the data-URL body from an `EpubImageRef` so it can be persisted
+ *  to the FileStore. Returns null if the src is not a data URL. */
+export function extractDataUrlFromImageRef(ref: EpubImageRef): string | null {
+  if (ref.src.startsWith("data:")) return ref.src;
+  return null;
+}
+
+/** Builds a protocol URL for a stored translation image. */
+export function translationImageUrl(bookId: string, chapterKey: string, imgIndex: number, ext: string): string {
+  return `${TRANSLATION_IMG_PROTOCOL}${bookId}/${chapterKey}/${imgIndex}.${ext}`;
+}
+
+/** Builds a translated markdown string with `[IMG-n]` tokens replaced by
+ *  protocol URLs pointing at persisted images. Use this when saving a
+ *  translation to the database so cached rows contain resolvable URLs. */
+export function replaceImageTokensWithProtocolUrls(
+  markdown: string,
+  images: EpubImageRef[],
+  protocolUrls: string[],
+): string {
+  let out = markdown;
+  for (let i = 0; i < images.length; i++) {
+    const url = protocolUrls[i];
+    if (!url) continue;
+    const alt = (images[i].alt || "image").replace(/\]/g, "\\]").replace(/\s+/g, " ").trim();
+    const md = `![${alt}](${url})`;
+    out = out.replaceAll(images[i].token, md);
+  }
+  return out;
+}
+
 /** Whether an inline code span should have been a fenced block. Shared by
  *  the plain-mode extractor and the post-translation normalizer so both use
  *  the same content-based heuristic regardless of EPUB tag variance. */

@@ -25,6 +25,7 @@ import {
 import { EMPTY_DOCUMENT_STATE } from "../../src/infrastructure/db/repositories/DocumentRepository.ts";
 import { migrateLegacyCovers, persistCoverImage, removeCoverFile } from "./covers.ts";
 import { removeSourceFile } from "./sources.ts";
+import { deleteAllBookTranslationImages, deleteTranslationImages } from "../store/translationImageStore.ts";
 import { FileStore } from "../store/FileStore.ts";
 
 /** Migrates existing absolute `BookSources.filePath` values to relative
@@ -195,6 +196,7 @@ function handleDeleteBook(bookId: string): boolean {
   })();
   removeCoverFile(book.coverImage, store);
   if (source) removeSourceFile(source.filePath, store);
+  deleteAllBookTranslationImages(store, bookId);
   return true;
 }
 
@@ -309,6 +311,9 @@ const handlers: Record<string, (payload: unknown) => unknown> = {
       chunkKeyPrefix?: string | null;
     };
     translations.deleteWhere(bookId, method ?? null, pageNumber ?? null, chunkKeyPrefix ?? null);
+    if (chunkKeyPrefix) {
+      deleteTranslationImages(store, bookId, chunkKeyPrefix);
+    }
     return true;
   },
   "custom-instructions-list": () => customInstructions.list(),

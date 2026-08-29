@@ -1,6 +1,6 @@
 import path from "node:path";
 
-export type BucketName = "covers" | "books" | "ocr" | "exports" | "temp";
+export type BucketName = "covers" | "books" | "ocr" | "exports" | "temp" | "translation-images";
 
 export interface BucketConfig {
   /** Allowed file extensions (without dot). Empty array = no restriction. */
@@ -22,6 +22,9 @@ export const BUCKETS: Record<BucketName, BucketConfig> = {
   },
   temp: {
     allowedExtensions: [],
+  },
+  "translation-images": {
+    allowedExtensions: ["png", "jpg", "jpeg", "webp", "svg"],
   },
 };
 

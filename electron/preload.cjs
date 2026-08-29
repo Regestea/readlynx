@@ -22,6 +22,11 @@ contextBridge.exposeInMainWorld("readlynx", {
     create: () => ipcRenderer.invoke("backup:create"),
     restore: () => ipcRenderer.invoke("backup:restore"),
   },
+  translationImages: {
+    save: (payload) => ipcRenderer.invoke("translation-images:save", payload),
+    delete: (payload) => ipcRenderer.invoke("translation-images:delete", payload),
+    deleteAllForBook: (bookId) => ipcRenderer.invoke("translation-images:delete-all-for-book", bookId),
+  },
   ocr: {
     getInfo: () => ipcRenderer.invoke("ocr:get-info"),
     downloadModel: (lang) => ipcRenderer.invoke("ocr:download-model", lang),

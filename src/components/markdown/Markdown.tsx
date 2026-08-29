@@ -39,7 +39,9 @@ function safeUrlTransform(url: string, key: string): string {
   try {
     const parsed = new URL(url, "https://example.com");
     const allowed =
-      /^(https|irc|ircs|mailto|xmpp)$/i.test(parsed.protocol) || (key === "src" && parsed.protocol === "data:");
+      /^(https|irc|ircs|mailto|xmpp)$/i.test(parsed.protocol) ||
+      (key === "src" && parsed.protocol === "data:") ||
+      (key === "src" && parsed.protocol === "readlynx-translation-image:");
     return allowed ? url : "";
   } catch {
     return "";

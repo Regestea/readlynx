@@ -7,6 +7,8 @@ import type { EpubViewerHandle } from "../../../components/epubViewer/EpubViewer
 import {
   normalizeTranslatedMarkdown,
   replaceImageTokens,
+  extractDataUrlFromImageRef,
+  replaceImageTokensWithProtocolUrls,
 } from "../../../shared/document/epubToMarkdown.ts";
 import { getDefaultAiModel, resolveProviderBaseUrl } from "../../../infrastructure/ai/modelResolver";
 import { chunkChapter } from "./epubChunker.ts";
@@ -282,9 +284,10 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef, epubReady 
           // (from before the fix) so they display correctly without re-translation.
           const raw = normalizeTranslatedMarkdown(rawJoined);
           if (sourceType === "epub") {
-            const needsImages = raw.includes("[IMG-");
+            const hasProtocolUrls = raw.includes("readlynx-translation-image://");
+            const needsImages = !hasProtocolUrls && raw.includes("[IMG-");
             if (!needsImages) {
-              // Image-less chapter — no need to wait for the viewer.
+              // Image-less chapter or already has persisted protocol URLs.
               setMarkdown(raw);
               setMarkdownUnitKey(unitKey);
               setHasTranslation(true);
@@ -790,7 +793,52 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef, epubReady 
           await saveRow({ method, pageNumber: null, chunkKey: chunkKeyFor(chapterKey, index), markdown: chunk });
           results.push(chunk);
         }
-        result = normalizeTranslatedMarkdown(replaceImageTokens(results.join("\n\n"), extraction.images));
+        // Save EPUB images to FileStore and replace [IMG-n] tokens with
+        // protocol URLs so the cached translation works without the viewer.
+        const joined = normalizeTranslatedMarkdown(results.join("\n\n"));
+        const hasImgTokens = joined.includes("[IMG-");
+        if (hasImgTokens && extraction.images.length > 0) {
+          const dataUrls = extraction.images.map((img) => extractDataUrlFromImageRef(img)).filter((d): d is string => d !== null);
+          if (dataUrls.length > 0) {
+            const protocolUrls = await window.readlynx?.translationImages?.save({
+              bookId,
+              chapterKey,
+              dataUrls,
+            });
+            if (protocolUrls) {
+              result = replaceImageTokensWithProtocolUrls(joined, extraction.images, protocolUrls);
+              // Update the saved chunks in the DB to use protocol URLs
+              // so cached translations work without re-resolving from the viewer.
+              for (let index = 0; index < chunks.length; index += 1) {
+                const chunkKey = chunkKeyFor(chapterKey, index);
+                const chunkWithUrls = replaceImageTokensWithProtocolUrls(
+                  results[index],
+                  extraction.images,
+                  protocolUrls,
+                );
+                await window.readlynx?.db.putTranslation({
+                  id: crypto.randomUUID(),
+                  bookId,
+                  sourceType,
+                  method,
+                  pageNumber: null,
+                  chunkKey,
+                  sourceLang: "",
+                  targetLang: currentSettings.targetLang,
+                  customPrompt: customPromptRef.current,
+                  markdown: chunkWithUrls,
+                  updatedAt: "",
+                });
+              }
+            } else {
+              result = replaceImageTokens(joined, extraction.images);
+            }
+          } else {
+            result = replaceImageTokens(joined, extraction.images);
+          }
+        } else {
+          result = joined;
+        }
       } else {
         const page = unitToPage(key) ?? 1;
         setStatus(method === "ocr" ? "Recognizing page…" : "Translating page with AI vision…");

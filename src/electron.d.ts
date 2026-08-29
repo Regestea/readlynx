@@ -60,6 +60,18 @@ declare global {
         create(): Promise<{ ok: boolean; path?: string; error?: string } | null>;
         restore(): Promise<{ ok: boolean; path?: string; error?: string } | null>;
       };
+      translationImages: {
+        save(payload: {
+          bookId: string;
+          chapterKey: string;
+          dataUrls: string[];
+        }): Promise<string[]>;
+        delete(payload: {
+          bookId: string;
+          chapterKeyPrefix?: string;
+        }): Promise<boolean>;
+        deleteAllForBook(bookId: string): Promise<boolean>;
+      };
       ocr: {
         getInfo(): Promise<{ dir: string; installed: string[] }>;
         downloadModel(lang: string): Promise<{
