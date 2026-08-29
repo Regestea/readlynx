@@ -2,8 +2,9 @@ import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import type Database from "better-sqlite3";
+import type { FileStore } from "../store/FileStore.ts";
 
-/** Directory name (relative to the database file) where cover images live. */
+/** Directory name (relative to the store root) where cover images live. */
 export const COVERS_DIR_NAME = "covers";
 
 const MIME_EXTENSIONS: Record<string, string> = {
@@ -16,11 +17,6 @@ const MIME_EXTENSIONS: Record<string, string> = {
   "image/avif": "avif",
 };
 
-/** Absolute directory for cover files, next to the database file. */
-export function coversDirectory(dbPath: string): string {
-  return path.join(path.dirname(dbPath), COVERS_DIR_NAME);
-}
-
 function decodeDataUrl(dataUrl: string): { data: Buffer; extension: string } | null {
   const match = /^data:([^;,]+);base64,([\s\S]+)$/.exec(dataUrl);
   if (!match) return null;
@@ -29,15 +25,14 @@ function decodeDataUrl(dataUrl: string): { data: Buffer; extension: string } | n
   return { data: Buffer.from(match[2], "base64"), extension };
 }
 
-/** Writes a data URL to the covers directory; returns `covers/<file>` or null. */
-function writeDataUrlFile(dataUrl: string, dbPath: string): string | null {
+/** Writes a data URL to the covers bucket; returns `covers/<file>` or null. */
+function writeDataUrlFile(dataUrl: string, store: FileStore): string | null {
   const decoded = decodeDataUrl(dataUrl);
   if (!decoded) return null;
-  const dir = coversDirectory(dbPath);
-  fs.mkdirSync(dir, { recursive: true });
   const fileName = `${randomUUID()}.${decoded.extension}`;
-  fs.writeFileSync(path.join(dir, fileName), decoded.data);
-  return `${COVERS_DIR_NAME}/${fileName}`;
+  const key = `${COVERS_DIR_NAME}/${fileName}`;
+  store.put("covers", fileName, decoded.data);
+  return key;
 }
 
 /** True when `rel` is a plain `covers/<file>` reference — no subpaths, so it
@@ -56,13 +51,10 @@ function isCoverPath(rel: string): boolean {
 }
 
 /** Deletes a cover file if it is a known `covers/<file>` reference. */
-export function removeCoverFile(rel: string | null, dbPath: string): void {
+export function removeCoverFile(rel: string | null, store: FileStore): void {
   if (!rel || !isCoverPath(rel)) return;
-  try {
-    fs.unlinkSync(path.join(coversDirectory(dbPath), path.basename(rel)));
-  } catch {
-    // already gone
-  }
+  const fileName = path.basename(rel);
+  store.delete("covers", fileName);
 }
 
 /** Normalizes the cover value coming from the renderer into the relative path
@@ -71,13 +63,13 @@ export function removeCoverFile(rel: string | null, dbPath: string): void {
  *  when the cover is replaced or removed. */
 export function persistCoverImage(
   incoming: string | null,
-  dbPath: string,
+  store: FileStore,
   previous: string | null,
 ): string | null {
   let next: string | null = null;
   if (incoming) {
     if (incoming.startsWith("data:")) {
-      next = writeDataUrlFile(incoming, dbPath);
+      next = writeDataUrlFile(incoming, store);
     } else {
       const protocolUrl = /^readlynx-cover:\/\/[^/]+\/(.+)$/.exec(incoming);
       const rel = protocolUrl ? decodeURIComponent(protocolUrl[1]) : incoming;
@@ -85,7 +77,7 @@ export function persistCoverImage(
     }
   }
   if (previous && previous !== next) {
-    removeCoverFile(previous, dbPath);
+    removeCoverFile(previous, store);
   }
   return next;
 }
@@ -93,14 +85,15 @@ export function persistCoverImage(
 /** Resolves a `readlynx-cover://` request URL to an absolute file path under
  *  the covers directory. Accepts both `covers/<file>` and bare `<file>` path
  *  forms; returns null for anything that escapes the directory. */
-export function resolveCoverUrl(dbPath: string, rawUrl: string): string | null {
+export function resolveCoverUrl(store: FileStore, rawUrl: string): string | null {
   try {
     const url = new URL(rawUrl);
     const rel = decodeURIComponent(url.pathname.replace(/^\/+/, ""))
       .replace(/^covers\//, "");
-    const root = path.resolve(coversDirectory(dbPath));
+    const root = path.resolve(store.rootPath, "covers");
     const filePath = path.resolve(root, rel);
     if (!filePath.startsWith(root + path.sep)) return null;
+    if (!fs.existsSync(filePath)) return null;
     return filePath;
   } catch {
     return null;
@@ -109,7 +102,7 @@ export function resolveCoverUrl(dbPath: string, rawUrl: string): string | null {
 
 /** Converts legacy inline data-URL covers (stored in the column before covers
  *  became files) into files, and nulls out anything unreadable. */
-export function migrateLegacyCovers(db: Database.Database, dbPath: string): void {
+export function migrateLegacyCovers(db: Database.Database, store: FileStore): void {
   const rows = db
     .prepare("SELECT id, coverImage FROM Books WHERE coverImage IS NOT NULL")
     .all() as Array<{ id: string; coverImage: unknown }>;
@@ -124,7 +117,7 @@ export function migrateLegacyCovers(db: Database.Database, dbPath: string): void
           : "";
     let next: string | null = null;
     if (text.startsWith("data:")) {
-      next = writeDataUrlFile(text, dbPath);
+      next = writeDataUrlFile(text, store);
     } else if (isCoverPath(text)) {
       next = `${COVERS_DIR_NAME}/${path.basename(text)}`;
     }

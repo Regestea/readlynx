@@ -1,30 +1,26 @@
-import { app, ipcMain } from "electron";
-import fs from "node:fs";
+import { ipcMain } from "electron";
 import path from "node:path";
 import Tesseract from "tesseract.js";
 import { fetchWithLog } from "../httpLog.ts";
-
-const tessdataDir = (): string => path.join(app.getPath("userData"), "tessdata");
+import type { FileStore } from "../store/FileStore.ts";
 
 /** Lazily-created tesseract worker shared across OCR requests. */
 let ocrWorker: Awaited<ReturnType<typeof Tesseract.createWorker>> | null = null;
 let ocrWorkerLangs = "";
 
-export function registerOcrIpc() {
+interface OcrIpcDeps {
+  getStore: () => FileStore;
+}
+
+export function registerOcrIpc({ getStore }: OcrIpcDeps) {
   ipcMain.handle("ocr:get-info", async () => {
-    const dir = tessdataDir();
-    await fs.promises.mkdir(dir, { recursive: true });
-    let files: string[] = [];
-    try {
-      files = await fs.promises.readdir(dir);
-    } catch {
-      // treat an unreadable directory as `no models installed`
-    }
+    const store = getStore();
+    const files = store.readDir("ocr");
     const installed = files
       .filter((file) => /\.traineddata(\.gz)?$/.test(file))
       .map((file) => file.replace(/\.traineddata(\.gz)?$/, ""))
       .sort();
-    return { dir, installed };
+    return { dir: path.join(store.rootPath, "ocr"), installed };
   });
 
   ipcMain.handle(
@@ -33,11 +29,10 @@ export function registerOcrIpc() {
       event,
       lang: string,
     ): Promise<{ ok: boolean; lang: string; bytes?: number; error?: string }> => {
-      const dir = tessdataDir();
-      await fs.promises.mkdir(dir, { recursive: true });
+      const store = getStore();
       const url = (model: string) =>
         `https://cdn.jsdelivr.net/npm/@tesseract.js-data/${lang}/${model}/${lang}.traineddata.gz`;
-      const dest = path.join(dir, `${lang}.traineddata.gz`);
+      const fileName = `${lang}.traineddata.gz`;
       try {
         // Prefer the higher-quality best_int models; fall back to the
         // standard 4.0.0 data for languages that don't ship them.
@@ -47,37 +42,34 @@ export function registerOcrIpc() {
         const total = Number(resp.headers.get("content-length")) || 0;
         if (!resp.body) throw new Error("Response body is empty");
         const reader = resp.body.getReader();
-        const out = await fs.promises.open(dest, "w");
+        const chunks: Uint8Array[] = [];
         let received = 0;
-        try {
-          for (;;) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            received += value.byteLength;
-            await out.write(value);
-            if (total > 0 && !event.sender.isDestroyed()) {
-              event.sender.send("ocr:download-progress", { lang, received, total });
-            }
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          received += value.byteLength;
+          chunks.push(value);
+          if (total > 0 && !event.sender.isDestroyed()) {
+            event.sender.send("ocr:download-progress", { lang, received, total });
           }
-        } finally {
-          await out.close();
         }
+        // Combine all chunks into a single buffer
+        const combined = Buffer.concat(chunks.map((c) => Buffer.from(c)));
+        store.put("ocr", fileName, combined);
         return { ok: true, lang, bytes: received };
       } catch (err) {
-        await fs.promises.unlink(dest).catch(() => undefined);
+        store.delete("ocr", fileName);
         return { ok: false, lang, error: err instanceof Error ? err.message : String(err) };
       }
     },
   );
 
   ipcMain.handle("ocr:delete-model", async (_event, lang: string) => {
-    const dest = path.join(tessdataDir(), `${lang}.traineddata.gz`);
-    try {
-      await fs.promises.unlink(dest);
-      return { ok: true, lang };
-    } catch {
-      return { ok: false, lang };
-    }
+    const store = getStore();
+    const fileName = `${lang}.traineddata.gz`;
+    const existed = store.exists("ocr", fileName);
+    store.delete("ocr", fileName);
+    return { ok: existed, lang };
   });
 
   ipcMain.handle(
@@ -89,14 +81,10 @@ export function registerOcrIpc() {
       const { dataUrl, langs } = payload;
       const langsKey = Array.from(new Set(langs.filter(Boolean))).join("+");
       if (!langsKey) return { error: "Select at least one language." };
-      const dir = tessdataDir();
-      await fs.promises.mkdir(dir, { recursive: true });
+      const store = getStore();
+      const storeDir = path.join(store.rootPath, "ocr");
       for (const lang of langsKey.split("+")) {
-        const exists = await fs.promises
-          .access(path.join(dir, `${lang}.traineddata.gz`))
-          .then(() => true)
-          .catch(() => false);
-        if (!exists) {
+        if (!store.exists("ocr", `${lang}.traineddata.gz`)) {
           return { error: `The "${lang}" model is not downloaded yet. Download it from the OCR panel first.` };
         }
       }
@@ -109,10 +97,10 @@ export function registerOcrIpc() {
         sendProgress(0);
         if (!ocrWorker) {
           ocrWorker = await Tesseract.createWorker(langsKey, Tesseract.OEM.LSTM_ONLY, {
-            langPath: dir,
+            langPath: storeDir,
             gzip: true,
             cacheMethod: "none",
-            cachePath: dir,
+            cachePath: storeDir,
             logger: (message) => {
               if (message.status === "recognizing text") sendProgress(message.progress);
             },

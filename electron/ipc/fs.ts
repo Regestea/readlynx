@@ -1,15 +1,25 @@
-import { app, BrowserWindow, dialog, ipcMain } from "electron";
+import { BrowserWindow, dialog, ipcMain } from "electron";
 import { randomUUID } from "node:crypto";
-import fs from "node:fs";
-import path from "node:path";
+import type { FileStore } from "../store/FileStore.ts";
 
 /** Cap for captured/edited cover images; PNG is used so quality stays at 100%. */
 const COVER_TARGET_WIDTH = 1240;
 
-export function registerFsIpc() {
+interface FsIpcDeps {
+  getStore: () => FileStore;
+}
+
+export function registerFsIpc({ getStore }: FsIpcDeps) {
   ipcMain.handle("fs:read-bytes", async (_event, filePath: string) => {
     try {
-      const data = await fs.promises.readFile(filePath);
+      const store = getStore();
+      const fs = await import("node:fs/promises");
+      // Try store first (relative key), then fall back to absolute path
+      const resolved = filePath.startsWith("books/") || filePath.startsWith("covers/")
+        ? store.resolve(filePath)
+        : filePath;
+      if (!resolved) return null;
+      const data = await fs.readFile(resolved);
       return data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
     } catch {
       return null;
@@ -47,8 +57,8 @@ export function registerFsIpc() {
     }
   });
 
-/** Copies the chosen PDF/EPUB into the app's books directory (next to the
- *  database) and returns the new path, or null when the file is missing. */
+  /** Copies the chosen PDF/EPUB into the books bucket and returns the
+   *  bucket-relative key (e.g. `"books/<uuid>.pdf"`), or null on error. */
   ipcMain.handle("fs:import-source", async (_event, options: { sourcePath: string; sourceType: string }) => {
     try {
       const extension =
@@ -58,11 +68,12 @@ export function registerFsIpc() {
             ? ".epub"
             : null;
       if (!extension) return null;
-      const dir = path.join(app.getPath("userData"), "books");
-      await fs.promises.mkdir(dir, { recursive: true });
-      const dest = path.join(dir, `${randomUUID()}${extension}`);
-      await fs.promises.copyFile(options.sourcePath, dest);
-      return dest;
+      const fs = await import("node:fs/promises");
+      const sourceData = await fs.readFile(options.sourcePath);
+      const store = getStore();
+      const key = `${randomUUID()}${extension}`;
+      store.put("books", key, sourceData);
+      return `books/${key}`;
     } catch {
       return null;
     }

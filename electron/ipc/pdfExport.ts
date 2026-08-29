@@ -1,7 +1,6 @@
 import { BrowserWindow, dialog, ipcMain } from "electron";
 import fs from "node:fs";
-import path from "node:path";
-import { app } from "electron";
+import type { FileStore } from "../store/FileStore.ts";
 
 interface ExportPdfOptions {
   defaultPath: string;
@@ -38,7 +37,11 @@ const PDF_PAGINATOR_SRC = `(() => {
   if (last) last.style.breakAfter = "auto";
 })();`;
 
-export function registerPdfExportIpc() {
+interface PdfExportIpcDeps {
+  getStore: () => FileStore;
+}
+
+export function registerPdfExportIpc({ getStore }: PdfExportIpcDeps) {
   ipcMain.handle("export-pdf", async (event, options: ExportPdfOptions) => {
     const win = BrowserWindow.fromWebContents(event.sender);
     if (!win) return null;
@@ -60,9 +63,11 @@ export function registerPdfExportIpc() {
     // Write the export HTML to a temp file rather than a `data:` URL: the
     // whole state is often > 2 MB (fonts/cover images) and Chromium rejects
     // data URLs over that with ERR_INVALID_URL.
-    const tempDir = await fs.promises.mkdtemp(path.join(app.getPath("temp"), "readlynx-export-"));
-    const htmlPath = path.join(tempDir, "document.html");
-    await fs.promises.writeFile(htmlPath, options.html, "utf8");
+    const store = getStore();
+    const tempKey = `document-${Date.now()}.html`;
+    store.put("temp", tempKey, Buffer.from(options.html, "utf8"));
+    const htmlPath = store.resolve(`temp/${tempKey}`);
+    if (!htmlPath) return null;
     try {
       pdfWin.webContents.on("console-message", (event) => {
         console.log(`[pdf-renderer] ${event.level}: ${event.message}`);
@@ -86,7 +91,7 @@ export function registerPdfExportIpc() {
       return filePath;
     } finally {
       pdfWin.destroy();
-      await fs.promises.rm(tempDir, { recursive: true, force: true }).catch(() => undefined);
+      store.delete("temp", tempKey);
     }
   });
 }

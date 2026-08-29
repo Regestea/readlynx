@@ -39,9 +39,9 @@ export class DbWorkerClient {
   >();
   private nextId = 0;
 
-  constructor(dbPath: string) {
+  constructor(dbPath: string, storeRoot: string) {
     this.worker = new Worker(new URL("./worker.ts", import.meta.url), {
-      workerData: { dbPath },
+      workerData: { dbPath, storeRoot },
     });
     this.worker.on("message", (response: DbResponse) => {
       const entry = this.pending.get(response.id);

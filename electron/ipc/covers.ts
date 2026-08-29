@@ -1,7 +1,7 @@
-import { app, ipcMain, nativeImage, protocol } from "electron";
+import { ipcMain, nativeImage, protocol } from "electron";
 import fs from "node:fs";
 import path from "node:path";
-import { resolveCoverUrl } from "../db/covers.ts";
+import type { FileStore } from "../store/FileStore.ts";
 
 const COVER_MIME_TYPES: Record<string, string> = {
   ".png": "image/png",
@@ -56,23 +56,28 @@ function downscaleCover(data: Buffer, ext: string): Buffer | null {
   return ext === ".jpg" || ext === ".jpeg" ? scaled.toJPEG(85) : scaled.toPNG();
 }
 
+interface CoversIpcDeps {
+  getStore: () => FileStore;
+}
+
 /** Serves cover image files referenced by relative paths in the database. */
-export function registerCoverProtocol() {
+export function registerCoverProtocol({ getStore }: CoversIpcDeps) {
   protocol.handle("readlynx-cover", async (request) => {
     try {
-      const dbPath = path.join(app.getPath("userData"), "readlynx.db");
-      const filePath = resolveCoverUrl(dbPath, request.url);
+      const store = getStore();
+      const filePath = resolveCoverUrlFromStore(store, request.url);
       if (!filePath) {
         return new Response("Forbidden", { status: 403 });
       }
-      const stat = await fs.promises.stat(filePath);
+      const fs = await import("node:fs/promises");
+      const stat = await fs.stat(filePath);
       const cached = coverCache.get(filePath);
       if (cached && cached.mtimeMs === stat.mtimeMs) {
         return new Response(cached.data, {
           headers: { "content-type": cached.type },
         });
       }
-      const raw = await fs.promises.readFile(filePath);
+      const raw = await fs.readFile(filePath);
       const ext = path.extname(filePath).toLowerCase();
       const type = COVER_MIME_TYPES[ext] ?? "application/octet-stream";
       const downscaled = downscaleCover(raw, ext);
@@ -86,20 +91,34 @@ export function registerCoverProtocol() {
   });
 }
 
-export function registerCoversIpc() {
+export function registerCoversIpc({ getStore }: CoversIpcDeps) {
   ipcMain.handle("cover:read-data-url", async (_event, relativePath: string) => {
     try {
-      const dbPath = path.join(app.getPath("userData"), "readlynx.db");
-      const root = path.resolve(path.dirname(dbPath), "covers");
+      const store = getStore();
       const rel = relativePath.replace(/^covers\//, "");
-      const filePath = path.resolve(root, rel);
-      if (!filePath.startsWith(root + path.sep)) return null;
-      const data = await fs.promises.readFile(filePath);
-      const ext = path.extname(filePath).toLowerCase();
-      const mime = COVER_MIME_TYPES[ext] ?? "application/octet-stream";
-      return `data:${mime};base64,${data.toString("base64")}`;
+      const fileName = path.basename(rel);
+      const meta = store.stat("covers", fileName);
+      const data = store.get("covers", fileName);
+      if (!data || !meta) return null;
+      return `data:${meta.contentType};base64,${data.toString("base64")}`;
     } catch {
       return null;
     }
   });
+}
+
+/** Resolves a readlynx-cover:// URL to an absolute file path via FileStore. */
+function resolveCoverUrlFromStore(store: FileStore, rawUrl: string): string | null {
+  try {
+    const url = new URL(rawUrl);
+    const rel = decodeURIComponent(url.pathname.replace(/^\/+/, ""))
+      .replace(/^covers\//, "");
+    const root = path.resolve(store.rootPath, "covers");
+    const filePath = path.resolve(root, rel);
+    if (!filePath.startsWith(root + path.sep)) return null;
+    if (!fs.existsSync(filePath)) return null;
+    return filePath;
+  } catch {
+    return null;
+  }
 }

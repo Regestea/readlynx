@@ -1,4 +1,6 @@
 import { randomUUID } from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
 import { parentPort, workerData } from "node:worker_threads";
 import { createConnection } from "../../src/infrastructure/db/connection.ts";
 import { applySchema } from "../../src/infrastructure/db/schema.ts";
@@ -23,9 +25,43 @@ import {
 import { EMPTY_DOCUMENT_STATE } from "../../src/infrastructure/db/repositories/DocumentRepository.ts";
 import { migrateLegacyCovers, persistCoverImage, removeCoverFile } from "./covers.ts";
 import { removeSourceFile } from "./sources.ts";
+import { FileStore } from "../store/FileStore.ts";
+
+/** Migrates existing absolute `BookSources.filePath` values to relative
+ *  store keys (e.g. `"books/<filename>"`). Moves the actual file from the
+ *  old absolute path into the store bucket when possible. */
+function migrateAbsoluteSourcePaths(db: import("better-sqlite3").Database.Database, store: FileStore): void {
+  const rows = db
+    .prepare("SELECT id, filePath FROM BookSources")
+    .all() as Array<{ id: string; filePath: string }>;
+  const needsMigration = rows.some((r) => path.isAbsolute(r.filePath));
+  if (!needsMigration) return;
+
+  const update = db.prepare("UPDATE BookSources SET filePath = ? WHERE id = ?");
+  db.transaction(() => {
+    for (const row of rows) {
+      if (!path.isAbsolute(row.filePath)) continue;
+      const fileName = path.basename(row.filePath);
+      const newKey = `books/${fileName}`;
+      // Move file from old absolute path into store if it still exists there
+      try {
+        if (fs.existsSync(row.filePath)) {
+          const data = fs.readFileSync(row.filePath);
+          store.put("books", fileName, data);
+          // Remove old file
+          fs.unlinkSync(row.filePath);
+        }
+      } catch {
+        // File may already be gone — the store copy takes priority
+      }
+      update.run(newKey, row.id);
+    }
+  })();
+}
 
 interface DbWorkerData {
   dbPath: string;
+  storeRoot: string;
 }
 
 interface DbRequest {
@@ -43,11 +79,14 @@ interface DbResponse {
 
 if (!parentPort) throw new Error("db worker must run as a worker thread");
 const port = parentPort;
-const { dbPath } = workerData as DbWorkerData;
+const { dbPath, storeRoot } = workerData as DbWorkerData;
 
 const db = createConnection(dbPath);
+const store = new FileStore(storeRoot);
+store.init();
 applySchema(db);
-migrateLegacyCovers(db, dbPath);
+migrateLegacyCovers(db, store);
+migrateAbsoluteSourcePaths(db, store);
 seedDatabase(db);
 
 const books = new BookRepository(db);
@@ -81,7 +120,7 @@ function handleCreateTranslatedBook(payload: CreateTranslatedBookPayload): {
   const bookId = randomUUID();
   const documentId = randomUUID();
   const sourceId = randomUUID();
-  const storedCover = persistCoverImage(payload.coverImage, dbPath, null);
+  const storedCover = persistCoverImage(payload.coverImage, store, null);
   db.transaction(() => {
     books.insert(bookId, payload.title);
     documents.insert(documentId, bookId);
@@ -97,7 +136,7 @@ function handleCreateTranslatedBook(payload: CreateTranslatedBookPayload): {
 function handleCreateReadingBook(payload: CreateReadingBookPayload): { bookId: string } {
   const bookId = randomUUID();
   const sourceId = randomUUID();
-  const storedCover = persistCoverImage(payload.coverImage, dbPath, null);
+  const storedCover = persistCoverImage(payload.coverImage, store, null);
   db.transaction(() => {
     books.insert(bookId, payload.title, "reading");
     if (storedCover) books.update(bookId, { title: payload.title, coverImage: storedCover });
@@ -111,7 +150,7 @@ function handleSaveDocument(payload: SaveDocumentPayload): { documentId: string 
   const book = books.findById(bookId);
   const document = documents.findByBookId(bookId);
   if (!book || !document) return null;
-  const storedCover = persistCoverImage(coverImage, dbPath, book.coverImage);
+  const storedCover = persistCoverImage(coverImage, store, book.coverImage);
   db.transaction(() => {
     documents.updateContent(document.id, contentJson);
     documentSettings.upsert(document.id, settings);
@@ -154,8 +193,8 @@ function handleDeleteBook(bookId: string): boolean {
   db.transaction(() => {
     books.remove(bookId);
   })();
-  removeCoverFile(book.coverImage, dbPath);
-  if (source) removeSourceFile(source.filePath, dbPath);
+  removeCoverFile(book.coverImage, store);
+  if (source) removeSourceFile(source.filePath, store);
   return true;
 }
 
@@ -165,7 +204,7 @@ function handleDeleteBook(bookId: string): boolean {
 function handleUpdateBook(payload: UpdateBookPayload): BookListItem | null {
   const book = books.findById(payload.bookId);
   if (!book) return null;
-  const storedCover = persistCoverImage(payload.coverImage, dbPath, book.coverImage);
+  const storedCover = persistCoverImage(payload.coverImage, store, book.coverImage);
   db.transaction(() => {
     books.update(book.id, { title: payload.title, coverImage: storedCover });
   })();

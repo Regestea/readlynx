@@ -9,6 +9,7 @@ import { registerFsIpc } from "./ipc/fs.ts";
 import { registerOcrIpc, terminateOcrWorker } from "./ipc/ocr.ts";
 import { registerPdfExportIpc } from "./ipc/pdfExport.ts";
 import { registerSystemFontsIpc } from "./ipc/systemFonts.ts";
+import { getStore } from "./store/storage.ts";
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -71,11 +72,12 @@ function createWindow() {
 
 let dbClient: DbWorkerClient | null = null;
 let dbPath = "";
+let storeRoot = "";
 
 /** Starts (or restarts, after a restore swapped the database file) the DB
  *  worker and its IPC handlers. */
 function openDb() {
-  dbClient = new DbWorkerClient(dbPath);
+  dbClient = new DbWorkerClient(dbPath, storeRoot);
   registerDbIpc(dbClient);
 }
 
@@ -87,7 +89,10 @@ function closeDb() {
 }
 
 app.whenReady().then(() => {
-  registerCoverProtocol();
+  // Initialize the file store singleton
+  const store = getStore();
+
+  registerCoverProtocol({ getStore });
   session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
     callback((permission as string) === "font-access");
   });
@@ -95,18 +100,20 @@ app.whenReady().then(() => {
     return (permission as string) === "font-access";
   });
   dbPath = path.join(app.getPath("userData"), "readlynx.db");
+  storeRoot = store.rootPath;
   openDb();
-  registerFsIpc();
-  registerOcrIpc();
+  registerFsIpc({ getStore });
+  registerOcrIpc({ getStore });
   registerAiIpc();
   registerSystemFontsIpc();
-  registerPdfExportIpc();
-  registerCoversIpc();
+  registerPdfExportIpc({ getStore });
+  registerCoversIpc({ getStore });
   registerBackupIpc({
     dbPath: () => dbPath,
     getClient: () => dbClient,
     closeDb,
     openDb,
+    getStore,
   });
   createWindow();
 });

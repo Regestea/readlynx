@@ -1,10 +1,10 @@
-import { app, BrowserWindow, dialog, ipcMain } from "electron";
+import { BrowserWindow, dialog, ipcMain } from "electron";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { unzipSync, zipSync } from "fflate";
 import type { DbWorkerClient } from "../db/client.ts";
-import { coversDirectory } from "../db/covers.ts";
-import { sourcesDirectory } from "../db/sources.ts";
+import type { FileStore } from "../store/FileStore.ts";
 
 const BACKUP_DB_NAME = "readlynx.db";
 const COVERS_PREFIX = "covers/";
@@ -61,6 +61,8 @@ export interface BackupIpcDeps {
   closeDb: () => void;
   /** Starts a fresh DB worker against the (swapped) database file. */
   openDb: () => void;
+  /** Returns the FileStore instance. */
+  getStore: () => FileStore;
 }
 
 /** Backup = a single zip with the SQLite snapshot (`readlynx.db`, produced by
@@ -68,7 +70,7 @@ export interface BackupIpcDeps {
  *  book-source directories. Restore = unzip, validate, stop the DB worker,
  *  swap the file and directories, then start the worker again on the restored
  *  database. */
-export function registerBackupIpc({ dbPath, getClient, closeDb, openDb }: BackupIpcDeps) {
+export function registerBackupIpc({ dbPath, getClient, closeDb, openDb, getStore }: BackupIpcDeps) {
   ipcMain.handle("backup:create", async (event): Promise<{ ok: boolean; path?: string; error?: string } | null> => {
     const win = BrowserWindow.fromWebContents(event.sender);
     if (!win) return null;
@@ -82,8 +84,9 @@ export function registerBackupIpc({ dbPath, getClient, closeDb, openDb }: Backup
     const client = getClient();
     if (!client) return { ok: false, error: "The database is not available." };
 
+    const store = getStore();
     const tempDir = await fs.promises.mkdtemp(
-      path.join(app.getPath("temp"), "readlynx-backup-"),
+      path.join(os.tmpdir(), "readlynx-backup-"),
     );
     try {
       const dbFile = path.join(tempDir, BACKUP_DB_NAME);
@@ -91,13 +94,15 @@ export function registerBackupIpc({ dbPath, getClient, closeDb, openDb }: Backup
       const files: Record<string, Uint8Array> = {
         [BACKUP_DB_NAME]: await fs.promises.readFile(dbFile),
       };
-      const coversDir = coversDirectory(dbPath());
+      // Read covers from store
+      const coversDir = path.join(store.rootPath, "covers");
       if (fs.existsSync(coversDir)) {
         for (const [name, bytes] of Object.entries(await readFilesFlat(coversDir))) {
           files[`${COVERS_PREFIX}${name}`] = bytes;
         }
       }
-      const booksDir = sourcesDirectory(dbPath());
+      // Read books from store
+      const booksDir = path.join(store.rootPath, "books");
       if (fs.existsSync(booksDir)) {
         for (const [name, bytes] of Object.entries(await readFilesFlat(booksDir))) {
           files[`${BOOKS_PREFIX}${name}`] = bytes;
@@ -138,8 +143,9 @@ export function registerBackupIpc({ dbPath, getClient, closeDb, openDb }: Backup
       return { ok: false, error: "The selected file is not a ReadLynx backup." };
     }
 
+    const store = getStore();
     const tempDir = await fs.promises.mkdtemp(
-      path.join(app.getPath("temp"), "readlynx-restore-"),
+      path.join(os.tmpdir(), "readlynx-restore-"),
     );
     const coversSrcDir = path.join(tempDir, "covers");
     const booksSrcDir = path.join(tempDir, "books");
@@ -178,15 +184,15 @@ export function registerBackupIpc({ dbPath, getClient, closeDb, openDb }: Backup
         await fs.promises.copyFile(path.join(tempDir, BACKUP_DB_NAME), liveDbPath);
         await fs.promises.rm(`${liveDbPath}-wal`, { force: true });
         await fs.promises.rm(`${liveDbPath}-shm`, { force: true });
-        const coversDir = coversDirectory(liveDbPath);
-        await fs.promises.rm(coversDir, { recursive: true, force: true });
+        // Replace covers bucket
+        store.clearBucket("covers");
         if (coverNames.length > 0) {
-          await fs.promises.cp(coversSrcDir, coversDir, { recursive: true });
+          store.copyToBucket("covers", coversSrcDir);
         }
-        const booksDir = sourcesDirectory(liveDbPath);
-        await fs.promises.rm(booksDir, { recursive: true, force: true });
+        // Replace books bucket
+        store.clearBucket("books");
         if (bookNames.length > 0) {
-          await fs.promises.cp(booksSrcDir, booksDir, { recursive: true });
+          store.copyToBucket("books", booksSrcDir);
         }
       } finally {
         openDb();
