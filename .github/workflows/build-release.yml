@@ -16,10 +16,12 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.next.outputs.version }}
+
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
+
       - name: Next patch version
         id: next
         run: echo "version=$(node .github/scripts/next-version.mjs)" >> "$GITHUB_OUTPUT"
@@ -28,6 +30,7 @@ jobs:
     name: Build (${{ matrix.platform }})
     needs: version
     runs-on: ${{ matrix.os }}
+
     strategy:
       fail-fast: false
       matrix:
@@ -38,10 +41,11 @@ jobs:
             platform: Linux
           - os: macos-latest
             platform: macOS
-    steps:
-      - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -71,18 +75,20 @@ jobs:
             release/*.AppImage
             release/*.deb
           if-no-files-found: error
+          retention-days: 1
 
   release:
     name: Create GitHub Release
     needs: [version, build]
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
       - name: Download installers
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           pattern: installers-*
           path: release-files
