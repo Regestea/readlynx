@@ -579,7 +579,7 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef, epubReady 
    *  and the page-range translation. Reads the toolbar settings at call
    *  time, so every page of a range is processed with the same choices. */
   const translatePdfPage = useCallback(
-    async (page: number, force: boolean): Promise<string> => {
+    async (page: number): Promise<string> => {
       const db = window.readlynx?.db;
       if (!db) throw new Error("The AI bridge is not available.");
       const currentSettings = settingsRef.current;
@@ -602,12 +602,10 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef, epubReady 
       if (cancelRequestedRef.current) {
         throw new TranslationCancelledError("Translation cancelled.");
       }
-      // Regenerate replaces the whole page translation: remove every row of
-      // this page (whatever pipeline produced it, so OCR and AI vision can
-      // never leave duplicates) before the fresh result is saved.
-      if (force) {
-        await db.deleteTranslations({ bookId, pageNumber: page });
-      }
+      // Always remove old rows for this page before saving the fresh result
+      // so that repeated translations (single-page, range, or regenerate)
+      // never leave duplicate rows in the database.
+      await db.deleteTranslations({ bookId, pageNumber: page });
       let result: string;
       if (method === "ocr") {
         const ocrResult = await window.readlynx?.ocr.recognize({
@@ -677,7 +675,7 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef, epubReady 
           // page keeps its fresh row, the rest are left untouched.
           if (cancelRequestedRef.current) break;
           setStatus(`Page ${page} of ${to}…`);
-          await translatePdfPage(page, false);
+          await translatePdfPage(page);
           done += 1;
           setRangeProgress({ done, total: count });
         }
@@ -759,12 +757,10 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef, epubReady 
           throw new Error("The chapter has no text to translate.");
         }
         const chapterKey = unitToChapter(key) ?? "chapter";
-        // Regenerate replaces the whole chapter: drop every cached chunk of
-        // this chapter (incl. stale chunks from earlier, differently-chunked
-        // generations) before the fresh chunks are written.
-        if (force) {
-          await window.readlynx?.db.deleteTranslations({ bookId, chunkKeyPrefix: chapterKey });
-        }
+        // Always drop every cached chunk of this chapter (incl. stale chunks
+        // from earlier, differently-chunked generations) before the fresh
+        // chunks are written — prevents duplicate rows when re-translating.
+        await window.readlynx?.db.deleteTranslations({ bookId, chunkKeyPrefix: chapterKey });
         const results: string[] = [];
         for (let index = 0; index < chunks.length; index += 1) {
           // Cancel checkpoint: stop at the chunk boundary — finished chunks
@@ -800,6 +796,9 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef, epubReady 
         if (hasImgTokens && extraction.images.length > 0) {
           const dataUrls = extraction.images.map((img) => extractDataUrlFromImageRef(img)).filter((d): d is string => d !== null);
           if (dataUrls.length > 0) {
+            // Remove old images for this chapter before saving new ones
+            // so regenerated chapters don't leave orphaned files.
+            await window.readlynx?.translationImages?.delete({ bookId, chapterKeyPrefix: chapterKey });
             const protocolUrls = await window.readlynx?.translationImages?.save({
               bookId,
               chapterKey,
@@ -807,8 +806,9 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef, epubReady 
             });
             if (protocolUrls) {
               result = replaceImageTokensWithProtocolUrls(joined, extraction.images, protocolUrls);
-              // Update the saved chunks in the DB to use protocol URLs
-              // so cached translations work without re-resolving from the viewer.
+              // Delete the initially saved chunks before overwriting with
+              // protocol-URL versions so each chunkKey has exactly one row.
+              await window.readlynx?.db.deleteTranslations({ bookId, chunkKeyPrefix: chapterKey });
               for (let index = 0; index < chunks.length; index += 1) {
                 const chunkKey = chunkKeyFor(chapterKey, index);
                 const chunkWithUrls = replaceImageTokensWithProtocolUrls(
@@ -842,7 +842,7 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef, epubReady 
       } else {
         const page = unitToPage(key) ?? 1;
         setStatus(method === "ocr" ? "Recognizing page…" : "Translating page with AI vision…");
-        result = await translatePdfPage(page, force);
+        result = await translatePdfPage(page);
       }
       setMarkdown(result);
       setMarkdownUnitKey(key);
