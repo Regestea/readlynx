@@ -1,5 +1,5 @@
 import { isValidElement, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { CSSProperties, ReactNode } from "react";
+import type { CSSProperties, ReactNode, Ref } from "react";
 import ReactMarkdown from "react-markdown";
 import type { Components } from "react-markdown";
 import { Maximize2, Minus, Minimize2, Palette, Plus } from "lucide-react";
@@ -139,8 +139,8 @@ interface MarkdownProps {
    *  AI-produced content so HTML/JSX snippets render as literal text. */
   rawHtml?: boolean;
   /** Book id for persisting reader settings (zoom, font, colors) in the
-   *  `ReaderSettings` table; the EPUB viewer uses the same book id with its
-   *  own viewer key. Omit in previews to keep settings in memory. */
+   *  `ReaderSettings` table; the EPUB viewer uses the same book id with
+   *  its own viewer key. Omit in previews to keep settings in memory. */
   settingsBookId?: string;
   /** When provided, a floating "Ask AI" bubble appears next to text
    *  selections and hands the selected text to the host. */
@@ -148,6 +148,9 @@ interface MarkdownProps {
   /** Extra controls rendered at the start of the reader toolbar — e.g. the
    *  reading view's page/chapter indicator and prev/next navigation. */
   toolbarExtra?: ReactNode;
+  /** Receives the scrollable content element so hosts can read or set the
+   *  scroll position (e.g. syncing with the original book view). */
+  scrollHostRef?: Ref<HTMLDivElement>;
 }
 
 /* ---------- RTL helpers ---------- */
@@ -486,6 +489,7 @@ export function Markdown({
   settingsBookId,
   onAskAi,
   toolbarExtra,
+  scrollHostRef,
 }: MarkdownProps) {
   const {
     zoomPct,
@@ -782,7 +786,7 @@ export function Markdown({
             </button>
           </div>
         )}
-        <div className={styles.body} style={{ zoom: zoomPct / 100 }}>
+        <div ref={scrollHostRef} className={`${styles.body}${toolbar ? ` ${styles.bodyScroll}` : ""}`} style={{ zoom: zoomPct / 100 }}>
           {documentElement}
         </div>
       </div>
