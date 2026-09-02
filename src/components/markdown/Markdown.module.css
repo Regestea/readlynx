@@ -254,9 +254,12 @@ ol.list ol ol {
   flex: 1;
   min-width: 0;
   min-height: 0;
+  padding: 0 0.5rem;
+}
+
+.bodyScroll {
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 0 0.5rem;
 }
 
 .toolButton {
