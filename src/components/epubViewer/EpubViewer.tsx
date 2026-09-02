@@ -279,6 +279,11 @@ export interface EpubViewerHandle {
   getChapterCount(): number;
   /** Jumps to a spine chapter by index (clamped to the book bounds). */
   goToChapter(index: number): void;
+  /** Current scroll offset and scrollable range (px) of the rendered chapter,
+   *  or null when no scrollable element exists. */
+  getChapterScroll(): { top: number; max: number } | null;
+  /** Sets the chapter scroll offset in px (clamped to the scrollable range). */
+  setChapterScroll(top: number): void;
 }
 
 export function EpubViewer({
@@ -393,6 +398,21 @@ export function EpubViewer({
     return { text, images };
   }, []);
 
+  /** Resolves the element that actually scrolls the rendered chapter. In the
+   *  `scrolled-doc` flow epub.js stretches the section iframe to the full
+   *  content height, so scrolling usually happens on the manager's
+   *  `.epub-container` wrapper; the iframe document is checked first in case
+   *  the content overflows inside it. */
+  const currentScrollElement = useCallback((): HTMLElement | null => {
+    const contents = renditionRef.current?.getContents() as unknown as Contents[] | undefined;
+    const doc = contents?.[0]?.document;
+    const inFrame = (doc?.scrollingElement ?? doc?.documentElement ?? doc?.body) as HTMLElement | null;
+    if (inFrame && inFrame.scrollHeight > inFrame.clientHeight + 1) return inFrame;
+    const container = hostRef.current?.querySelector<HTMLElement>(".epub-container");
+    if (container && container.scrollHeight > container.clientHeight + 1) return container;
+    return null;
+  }, []);
+
   useImperativeHandle(ref, () => ({
     getCurrentChapterMarkdown: currentChapterMarkdown,
     getCurrentChapterText: currentChapterText,
@@ -406,6 +426,18 @@ export function EpubViewer({
         ?.length;
       if (!rendition || !count) return;
       void rendition.display(Math.min(Math.max(0, index), count - 1));
+    },
+    getChapterScroll: () => {
+      const element = currentScrollElement();
+      if (!element) return null;
+      return { top: element.scrollTop, max: element.scrollHeight - element.clientHeight };
+    },
+    setChapterScroll: (top: number) => {
+      const element = currentScrollElement();
+      if (!element) return;
+      const max = element.scrollHeight - element.clientHeight;
+      if (max <= 0) return;
+      element.scrollTop = Math.min(max, Math.max(0, top));
     },
   }));
 
