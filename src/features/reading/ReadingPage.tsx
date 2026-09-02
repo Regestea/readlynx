@@ -58,6 +58,22 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
   const askPdfRef = useRef(false);
   const pdfRef = useRef<PdfViewerHandle | null>(null);
   const epubRef = useRef<EpubViewerHandle | null>(null);
+  /** Scrollable content element of the translation Markdown — used to read /
+   *  set the scroll position when toggling between the original and
+   *  translation views (EPUB scroll sync). */
+  const translationScrollRef = useRef<HTMLDivElement | null>(null);
+  /** Exact pixel scroll offset captured from the EPUB viewer while its
+   *  translation was still loading; applied (for the same chapter only) once
+   *  it is ready. */
+  const pendingEpubScrollRef = useRef<{ unitKey: string; top: number } | null>(null);
+  /** Last scroll offset handed to the EPUB viewer on a toggle. When the user
+   *  toggles back without scrolling (within a small px tolerance), this exact
+   *  value is reused instead of a ratio computed from rounded scroll offsets
+   *  — which would otherwise drift towards the top on every toggle. */
+  const lastEpubScrollRef = useRef<number | null>(null);
+  /** Translation scroll offset at the moment it was last synced, so a
+   *  scroll inside the translation can be detected on toggle-back. */
+  const lastTranslationScrollRef = useRef<number | null>(null);
   /** Last position write still in flight, so closing waits for the worker to
    *  finish it before the app quits. */
   const lastPositionWriteRef = useRef<Promise<unknown> | null>(null);
@@ -334,6 +350,93 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
   const book = state.status === "ready" ? state.book : null;
   const showTranslation = translation.viewMode === "translation";
 
+  /** Applies a saved pixel offset to the translation Markdown. Two frames of
+   *  delay so the view has committed and the zoomed content height is final
+   *  before measuring `scrollHeight`. */
+  const applyTranslationScroll = useCallback((top: number) => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const element = translationScrollRef.current;
+        if (!element) return;
+        const max = element.scrollHeight - element.clientHeight;
+        if (max <= 0) return;
+        element.scrollTop = Math.min(max, Math.max(0, top));
+      });
+    });
+  }, []);
+
+  /** Toggling between the original EPUB view and the translation carries the
+   *  reading position over as an exact pixel offset. When the user toggles
+   *  back without scrolling, the last exact offset is reused — recomputing it
+   *  from rounded `scrollTop` values would drift towards the top each time.
+   *  When the translation is still loading, the offset waits in
+   *  `pendingEpubScrollRef` and is applied once the content is ready (same
+   *  chapter only). */
+  const toggleViewMode = useCallback(() => {
+    const nextMode = showTranslation ? "original" : "translation";
+    if (book?.sourceType === "epub") {
+      if (nextMode === "translation") {
+        const scroll = epubRef.current?.getChapterScroll();
+        const unitKey = translation.unitKey;
+        if (scroll && scroll.max > 0 && unitKey) {
+          const reused =
+            lastEpubScrollRef.current !== null &&
+            Math.abs(scroll.top - lastEpubScrollRef.current) < 2;
+          const top = reused ? lastEpubScrollRef.current : Math.round(scroll.top);
+          if (!reused) lastEpubScrollRef.current = top;
+          lastTranslationScrollRef.current = null;
+          pendingEpubScrollRef.current = { unitKey, top };
+        }
+      } else {
+        const element = translationScrollRef.current;
+        if (element && lastEpubScrollRef.current !== null) {
+          const max = element.scrollHeight - element.clientHeight;
+          if (max > 0) {
+            const scrolledInTranslation =
+              lastTranslationScrollRef.current !== null &&
+              Math.abs(element.scrollTop - lastTranslationScrollRef.current) >= 2;
+            if (scrolledInTranslation) {
+              // The user moved inside the translation: carry the new position
+              // over by ratio and remember the exact EPUB offset it produced.
+              const top = Math.round((element.scrollTop / max) * (epubRef.current?.getChapterScroll()?.max ?? 0));
+              lastEpubScrollRef.current = top;
+              epubRef.current?.setChapterScroll(top);
+            } else {
+              // No movement: reuse the exact offset captured when leaving the
+              // EPUB view so repeated toggles never drift.
+              epubRef.current?.setChapterScroll(lastEpubScrollRef.current);
+            }
+            lastTranslationScrollRef.current = element.scrollTop;
+          }
+        }
+      }
+    }
+    translation.setViewMode(nextMode);
+  }, [book?.sourceType, showTranslation, translation]);
+
+  /** Applies the pending EPUB scroll offset once the translation content for
+   *  the same chapter has finished loading into the view. */
+  useEffect(() => {
+    const pending = pendingEpubScrollRef.current;
+    if (!pending || !showTranslation) return;
+    if (pending.unitKey !== translation.unitKey) {
+      pendingEpubScrollRef.current = null;
+      lastEpubScrollRef.current = null;
+      return;
+    }
+    if (!translation.markdown || translation.markdownLoading || translation.imagesPending) return;
+    applyTranslationScroll(pending.top);
+    lastTranslationScrollRef.current = pending.top;
+    pendingEpubScrollRef.current = null;
+  }, [
+    showTranslation,
+    translation.unitKey,
+    translation.markdown,
+    translation.markdownLoading,
+    translation.imagesPending,
+    applyTranslationScroll,
+  ]);
+
   /** Reader-mode navigation: which unit the translation view is showing and
    *  prev/next movement through the document (PDF pages / EPUB chapters).
    *  Only shown inside the Markdown viewer's toolbar — the Markdown component
@@ -564,7 +667,7 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
               <div className={styles.translationStage}>
                 {translation.markdown ? (
                   <>
-                    <Markdown content={translation.markdown} toolbar rawHtml={false} settingsBookId={bookId} className={styles.translationBody} onAskAi={setAiContext} toolbarExtra={toolbarExtra} />
+                    <Markdown content={translation.markdown} toolbar rawHtml={false} settingsBookId={bookId} className={styles.translationBody} onAskAi={setAiContext} toolbarExtra={toolbarExtra} scrollHostRef={translationScrollRef} />
                     {(translation.markdownLoading || translation.imagesPending) && (
                       <div className={styles.markdownLoading} role="status" aria-label="Loading translation">
                         <Loader2 size={20} strokeWidth={2} className={styles.spinner} />
@@ -603,7 +706,7 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
 
             <TranslationToggle
               active={showTranslation}
-              onClick={() => translation.setViewMode(showTranslation ? "original" : "translation")}
+              onClick={toggleViewMode}
             />
           </>
         ) : null}
