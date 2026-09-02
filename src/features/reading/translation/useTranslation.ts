@@ -90,6 +90,10 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef, epubReady 
   const [downloadProgress, setDownloadProgress] = useState<number | null>(null);
 
   const busyRef = useRef(false);
+  /** Tracks which unit key is currently being translated by `translate`.
+   *  Allows the old chapter's translation to continue in the background
+   *  while a new chapter starts its own translation independently. */
+  const busyUnitRef = useRef<TranslationUnitKey | null>(null);
   /** Set by the toolbar's Cancel button; checked at every pipeline
    *  checkpoint so a running translation stops at the next safe point. */
   const cancelRequestedRef = useRef(false);
@@ -250,6 +254,12 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef, epubReady 
     setError(null);
     setStatus(null);
   }
+
+  /** Allow auto-translate to fire for the new unit even if the previous
+   *  unit's translate was still in flight when the user navigated away. */
+  useEffect(() => {
+    autoTriedRef.current = null;
+  }, [unitKey]);
 
   /** Refresh the cached translation whenever the unit (PDF page / EPUB
    *  chapter) changes. The lookup is method-agnostic — one translation per
@@ -663,6 +673,7 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef, epubReady 
       }
 
       busyRef.current = true;
+      busyUnitRef.current = unitKeyRef.current;
       setBusy(true);
       setError(null);
       setStatus(null);
@@ -699,6 +710,7 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef, epubReady 
         }
       } finally {
         busyRef.current = false;
+        busyUnitRef.current = null;
         setBusy(false);
       }
     },
@@ -715,12 +727,15 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef, epubReady 
   /** Translates the current unit. With `force`, regeneration bypasses the
    *  cache and overwrites the stored rows. */
   const translate = useCallback(async (force = false) => {
-    if (busyRef.current) return;
     const key = unitKeyRef.current;
     if (!key) {
       setError("Nothing to translate yet — open the book first.");
       return;
     }
+    // Prevent duplicate concurrent translates for the same unit, but allow
+    // different units to translate independently (e.g. the old chapter's
+    // translate continues in the background while a new chapter starts).
+    if (busyUnitRef.current === key) return;
     if (!force && hasTranslationRef.current) return;
 
     if (orderedModelCandidates().length === 0) {
@@ -739,7 +754,7 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef, epubReady 
     };
     const systemPrompt = buildTranslationSystemPrompt(promptContext);
 
-    busyRef.current = true;
+    busyUnitRef.current = key;
     setBusy(true);
     setError(null);
     setStatus(null);
@@ -874,8 +889,12 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef, epubReady 
       setRateLimitRetry(null);
       baseStatusRef.current = null;
     } finally {
-      busyRef.current = false;
-      setBusy(false);
+      // Only clear if this unit is still the one we were translating —
+      // a newer translate call may have taken over.
+      if (busyUnitRef.current === key) {
+        busyUnitRef.current = null;
+        setBusy(false);
+      }
     }
   }, [epubRef, saveRow, translatePdfPage, sourceType, bookId, chatWithFailover, orderedModelCandidates]);
 
@@ -887,13 +906,17 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef, epubReady 
    *  current unit has no cached result yet. */
   useEffect(() => {
     if (viewMode !== "translation") return;
-    if (!unitKey || busy || !cacheReady || hasTranslation || error) return;
+    if (!unitKey || !cacheReady || hasTranslation || error) return;
+    // Don't start if this exact unit is already being translated.
+    if (busyUnitRef.current === unitKey) return;
+    // Don't start if a range translation is in progress for any unit.
+    if (busyRef.current) return;
     if (autoTriedRef.current === unitKey) return;
     autoTriedRef.current = unitKey;
     void translate(false);
     // Intentionally re-checked whenever these inputs change; the
     // `autoTriedRef` guard keeps it from re-running per unit.
-  }, [viewMode, unitKey, busy, cacheReady, hasTranslation, error, translate]);
+  }, [viewMode, unitKey, cacheReady, hasTranslation, error, translate]);
 
   return {
     viewMode,
