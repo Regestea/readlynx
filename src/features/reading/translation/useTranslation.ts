@@ -772,14 +772,14 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef, epubReady 
           throw new Error("The chapter has no text to translate.");
         }
         const chapterKey = unitToChapter(key) ?? "chapter";
-        // Always drop every cached chunk of this chapter (incl. stale chunks
-        // from earlier, differently-chunked generations) before the fresh
-        // chunks are written — prevents duplicate rows when re-translating.
-        await window.readlynx?.db.deleteTranslations({ bookId, chunkKeyPrefix: chapterKey });
+        // A partially translated chapter is useless: chunk results stay in
+        // memory and are only written to the database once every chunk has
+        // been translated, so a cancel or failure mid-chapter leaves the
+        // previously cached (complete) translation untouched.
         const results: string[] = [];
         for (let index = 0; index < chunks.length; index += 1) {
-          // Cancel checkpoint: stop at the chunk boundary — finished chunks
-          // keep their rows, the rest are left untouched.
+          // Cancel checkpoint: stop at the chunk boundary — nothing has been
+          // written yet, so the cache is untouched.
           if (cancelRequestedRef.current) {
             throw new TranslationCancelledError("Translation cancelled.");
           }
@@ -796,18 +796,18 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef, epubReady 
               { role: "user", content: buildTranslationUserPrompt(promptContext, chunks[index]) },
             ],
           });
-          // Normalize each chunk before persisting so cached rows are clean;
-          // the final joined result is normalized again after image replacement.
+          // Normalize each chunk so the rows written below are clean; the
+          // final joined result is normalized again after image replacement.
           const chunk = normalizeTranslatedMarkdown(chunkRaw);
           setRateLimitRetry(null);
           baseStatusRef.current = null;
-          await saveRow({ method, pageNumber: null, chunkKey: chunkKeyFor(chapterKey, index), markdown: chunk });
           results.push(chunk);
         }
         // Save EPUB images to FileStore and replace [IMG-n] tokens with
         // protocol URLs so the cached translation works without the viewer.
         const joined = normalizeTranslatedMarkdown(results.join("\n\n"));
         const hasImgTokens = joined.includes("[IMG-");
+        let chunkMarkdowns = results;
         if (hasImgTokens && extraction.images.length > 0) {
           const dataUrls = extraction.images.map((img) => extractDataUrlFromImageRef(img)).filter((d): d is string => d !== null);
           if (dataUrls.length > 0) {
@@ -821,30 +821,9 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef, epubReady 
             });
             if (protocolUrls) {
               result = replaceImageTokensWithProtocolUrls(joined, extraction.images, protocolUrls);
-              // Delete the initially saved chunks before overwriting with
-              // protocol-URL versions so each chunkKey has exactly one row.
-              await window.readlynx?.db.deleteTranslations({ bookId, chunkKeyPrefix: chapterKey });
-              for (let index = 0; index < chunks.length; index += 1) {
-                const chunkKey = chunkKeyFor(chapterKey, index);
-                const chunkWithUrls = replaceImageTokensWithProtocolUrls(
-                  results[index],
-                  extraction.images,
-                  protocolUrls,
-                );
-                await window.readlynx?.db.putTranslation({
-                  id: crypto.randomUUID(),
-                  bookId,
-                  sourceType,
-                  method,
-                  pageNumber: null,
-                  chunkKey,
-                  sourceLang: "",
-                  targetLang: currentSettings.targetLang,
-                  customPrompt: customPromptRef.current,
-                  markdown: chunkWithUrls,
-                  updatedAt: "",
-                });
-              }
+              chunkMarkdowns = results.map((chunk) =>
+                replaceImageTokensWithProtocolUrls(chunk, extraction.images, protocolUrls),
+              );
             } else {
               result = replaceImageTokens(joined, extraction.images);
             }
@@ -853,6 +832,27 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef, epubReady 
           }
         } else {
           result = joined;
+        }
+        // The complete chapter is ready: drop every cached chunk of this
+        // chapter (incl. stale chunks from earlier, differently-chunked
+        // generations) and write the fresh set in one pass — prevents
+        // duplicate rows when re-translating and never leaves a partial
+        // chapter in the database.
+        await window.readlynx?.db.deleteTranslations({ bookId, chunkKeyPrefix: chapterKey });
+        for (let index = 0; index < chunks.length; index += 1) {
+          await window.readlynx?.db.putTranslation({
+            id: crypto.randomUUID(),
+            bookId,
+            sourceType,
+            method,
+            pageNumber: null,
+            chunkKey: chunkKeyFor(chapterKey, index),
+            sourceLang: "",
+            targetLang: currentSettings.targetLang,
+            customPrompt: customPromptRef.current,
+            markdown: chunkMarkdowns[index],
+            updatedAt: "",
+          });
         }
       } else {
         const page = unitToPage(key) ?? 1;
