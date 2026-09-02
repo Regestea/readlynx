@@ -844,17 +844,24 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef, epubReady 
         setStatus(method === "ocr" ? "Recognizing page…" : "Translating page with AI vision…");
         result = await translatePdfPage(page);
       }
-      setMarkdown(result);
-      setMarkdownUnitKey(key);
-      setHasTranslation(true);
-      setImagesPending(false);
-      rawCachedMarkdownRef.current = null;
+      // Only update the displayed markdown if the user hasn't navigated
+      // away — otherwise the old chapter's result would overwrite the
+      // current view and cause a stuck loading spinner.
+      if (unitKeyRef.current === key) {
+        setMarkdown(result);
+        setMarkdownUnitKey(key);
+        setHasTranslation(true);
+        setImagesPending(false);
+        rawCachedMarkdownRef.current = null;
+      }
       setStatus(null);
       setRateLimitRetry(null);
       baseStatusRef.current = null;
-      // The user asked for the translation — take them to it once it's done
-      // (no-op when the translation view is already showing).
-      setViewModeState("translation");
+      // The user asked for the translation — take them to it once it's done,
+      // but only if they haven't navigated to a different unit in the meantime.
+      if (unitKeyRef.current === key) {
+        setViewModeState("translation");
+      }
     } catch (err) {
       // Previous translations are kept untouched — rows are only written
       // after a successful generation.
