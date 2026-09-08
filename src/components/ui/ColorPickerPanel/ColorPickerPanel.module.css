@@ -105,6 +105,12 @@
   gap: var(--space-2);
 }
 
+.sectionFooter {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
 /* "No color" (empty value) swatch: transparent with a diagonal slash. */
 .noneSwatch {
   position: relative;

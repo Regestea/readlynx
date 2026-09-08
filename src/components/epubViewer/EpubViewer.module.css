@@ -155,6 +155,28 @@
   align-items: center;
 }
 
+.hardOverride {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+
+.hardOverride:hover {
+  color: var(--color-text);
+}
+
+.hardOverrideCheckbox {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: var(--color-primary);
+  cursor: pointer;
+}
+
 .toolButtonActive,
 .toolButtonActive:hover {
   background: var(--color-active);

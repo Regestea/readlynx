@@ -10,6 +10,9 @@ export interface ReaderSettingsInput {
   customBg?: string | null;
   /** Custom text color override (null = follow the app theme). */
   customText?: string | null;
+  /** EPUB-only hard text-color override (1/true = force onto every element
+   *  with `!important`, 0/false = normal themed rules). Omitted = keep. */
+  textHardOverride?: number | boolean | null;
   /** PDF viewer background (null = app default paper). */
   pdfBackground?: string | null;
 }
@@ -37,21 +40,24 @@ export class ReaderSettingsRepository {
       .prepare(
         `INSERT INTO ReaderSettings (
            bookId, viewer, zoomPct, fontFamily, customBg, customText,
-           pdfBackground, updatedAt
+           textHardOverride, pdfBackground, updatedAt
          ) VALUES (
            @bookId, @viewer,
            COALESCE(@zoomPct, 100),
            COALESCE(@fontFamily, ''),
-           @customBg, @customText, @pdfBackground,
+           @customBg, @customText,
+           COALESCE(@textHardOverride, 0),
+           @pdfBackground,
            datetime('now')
          )
          ON CONFLICT(bookId, viewer) DO UPDATE SET
-           zoomPct       = COALESCE(@zoomPct,       ReaderSettings.zoomPct),
-           fontFamily    = COALESCE(@fontFamily,    ReaderSettings.fontFamily),
-           customBg      = @customBg,
-           customText    = @customText,
-           pdfBackground = @pdfBackground,
-           updatedAt     = datetime('now')`,
+           zoomPct          = COALESCE(@zoomPct,          ReaderSettings.zoomPct),
+           fontFamily       = COALESCE(@fontFamily,       ReaderSettings.fontFamily),
+           customBg         = @customBg,
+           customText       = @customText,
+           textHardOverride = COALESCE(@textHardOverride, ReaderSettings.textHardOverride, 0),
+           pdfBackground    = @pdfBackground,
+           updatedAt        = datetime('now')`,
       )
       .run({
         bookId,
@@ -60,6 +66,12 @@ export class ReaderSettingsRepository {
         fontFamily: settings.fontFamily ?? null,
         customBg: settings.customBg ?? null,
         customText: settings.customText ?? null,
+        textHardOverride:
+          settings.textHardOverride == null
+            ? null
+            : typeof settings.textHardOverride === "boolean"
+              ? (settings.textHardOverride ? 1 : 0)
+              : settings.textHardOverride,
         pdfBackground: settings.pdfBackground ?? null,
       });
   }

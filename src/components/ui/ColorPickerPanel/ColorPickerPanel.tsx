@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { X } from "lucide-react";
 import { Button } from "../Button/Button";
 import { ColorSelect } from "../ColorSelect/ColorSelect";
@@ -26,6 +27,9 @@ export interface ColorPickerSection {
   palette?: ColorSwatch[] | null;
   /** Label for the "no color" (empty value) swatch; hidden when omitted. */
   noneLabel?: string;
+  /** Extra content rendered below the swatch row (e.g. the EPUB reader's
+   *  "hard override" checkbox under its text-color section). */
+  footer?: ReactNode;
 }
 
 interface ColorPickerPanelProps {
@@ -142,6 +146,7 @@ export function ColorPickerPanel({
                 label={section.label}
               />
             </div>
+            {section.footer && <div className={styles.sectionFooter}>{section.footer}</div>}
           </div>
         );
       })}

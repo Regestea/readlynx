@@ -63,14 +63,15 @@ CREATE TABLE IF NOT EXISTS ReadingState (
 -- serves the EPUB viewer ('epub'), the translation Markdown view ('markdown')
 -- and the PDF viewer's reading theme ('pdf').
 CREATE TABLE IF NOT EXISTS ReaderSettings (
-  bookId        TEXT NOT NULL REFERENCES Books(id) ON DELETE CASCADE,
-  viewer        TEXT NOT NULL,
-  zoomPct       REAL NOT NULL DEFAULT 100,
-  fontFamily    TEXT NOT NULL DEFAULT '',
-  customBg      TEXT,
-  customText    TEXT,
-  pdfBackground TEXT,
-  updatedAt     TEXT NOT NULL DEFAULT (datetime('now')),
+  bookId           TEXT NOT NULL REFERENCES Books(id) ON DELETE CASCADE,
+  viewer           TEXT NOT NULL,
+  zoomPct          REAL NOT NULL DEFAULT 100,
+  fontFamily       TEXT NOT NULL DEFAULT '',
+  customBg         TEXT,
+  customText       TEXT,
+  textHardOverride INTEGER NOT NULL DEFAULT 0,
+  pdfBackground    TEXT,
+  updatedAt        TEXT NOT NULL DEFAULT (datetime('now')),
   PRIMARY KEY (bookId, viewer)
 );
 
@@ -178,6 +179,7 @@ export function applySchema(db: Database.Database): void {
     ensureAiModelDefaultColumn(db);
     ensureTranslationLookupIndex(db);
     ensureAppSettingsChatZoomColumn(db);
+    ensureReaderSettingsHardOverrideColumn(db);
   });
 }
 
@@ -563,4 +565,13 @@ function ensureAppSettingsChatZoomColumn(db: Database.Database): void {
   const columns = db.pragma("table_info(AppSettings)") as Array<{ name: string }>;
   if (columns.some((entry) => entry.name === "chatZoom")) return;
   db.exec("ALTER TABLE AppSettings ADD COLUMN chatZoom INTEGER NOT NULL DEFAULT 100");
+}
+
+/** Databases created before the EPUB hard text-color override existed lack
+ *  `textHardOverride` on `ReaderSettings`. Adds it defaulting to off (0);
+ *  existing books keep their saved colors. */
+function ensureReaderSettingsHardOverrideColumn(db: Database.Database): void {
+  const columns = db.pragma("table_info(ReaderSettings)") as Array<{ name: string }>;
+  if (columns.some((entry) => entry.name === "textHardOverride")) return;
+  db.exec("ALTER TABLE ReaderSettings ADD COLUMN textHardOverride INTEGER NOT NULL DEFAULT 0");
 }

@@ -6,6 +6,9 @@ export interface ReaderSettings {
   fontFamily: string;
   customBg: string | null;
   customText: string | null;
+  /** EPUB-only hard text-color override (true = force the text color onto
+   *  every element with `!important`). */
+  hardOverrideText: boolean;
 }
 
 /** Defaults used when the book has no saved row yet. */
@@ -14,6 +17,7 @@ const DEFAULT_SETTINGS: ReaderSettings = {
   fontFamily: "",
   customBg: null,
   customText: null,
+  hardOverrideText: false,
 };
 
 /** Per-book, per-viewer reader settings persisted in the `ReaderSettings`
@@ -29,6 +33,9 @@ export function useReaderSettings(bookId: string | undefined, viewer: ReaderView
   const [fontFamily, setFontFamily] = useState(DEFAULT_SETTINGS.fontFamily);
   const [customBg, setCustomBg] = useState<string | null>(DEFAULT_SETTINGS.customBg);
   const [customText, setCustomText] = useState<string | null>(DEFAULT_SETTINGS.customText);
+  const [hardOverrideText, setHardOverrideText] = useState<boolean>(
+    DEFAULT_SETTINGS.hardOverrideText,
+  );
 
   /** Loads the saved settings once per (book, viewer) pair. */
   useEffect(() => {
@@ -44,6 +51,7 @@ export function useReaderSettings(bookId: string | undefined, viewer: ReaderView
         if (typeof row.fontFamily === "string") setFontFamily(row.fontFamily);
         setCustomBg(row.customBg ?? null);
         setCustomText(row.customText ?? null);
+        setHardOverrideText(Number(row.textHardOverride ?? 0) === 1);
       } catch {
         // keep defaults
       } finally {
@@ -66,8 +74,9 @@ export function useReaderSettings(bookId: string | undefined, viewer: ReaderView
       fontFamily,
       customBg,
       customText,
+      textHardOverride: hardOverrideText ? 1 : 0,
     });
-  }, [bookId, viewer, loaded, zoomPct, fontFamily, customBg, customText]);
+  }, [bookId, viewer, loaded, zoomPct, fontFamily, customBg, customText, hardOverrideText]);
 
   return useMemo(
     () => ({
@@ -79,7 +88,9 @@ export function useReaderSettings(bookId: string | undefined, viewer: ReaderView
       setCustomBg,
       customText,
       setCustomText,
+      hardOverrideText,
+      setHardOverrideText,
     }),
-    [zoomPct, fontFamily, customBg, customText],
+    [zoomPct, fontFamily, customBg, customText, hardOverrideText],
   );
 }

@@ -15,6 +15,9 @@ export interface ReaderSettingsEntity {
   customBg: string | null;
   /** Custom text color override (null = follow the app theme). */
   customText: string | null;
+  /** EPUB-only hard text-color override (1 = force `customText`/theme text
+   *  color onto every element with `!important`, 0 = normal themed rules). */
+  textHardOverride: number;
   /** PDF viewer background ("" / null = app default paper). */
   pdfBackground: string | null;
   updatedAt: string;

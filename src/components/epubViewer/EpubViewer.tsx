@@ -317,6 +317,8 @@ export function EpubViewer({
     setCustomBg,
     customText,
     setCustomText,
+    hardOverrideText,
+    setHardOverrideText,
   } = useReaderSettings(settingsBookId, "epub");
   const [book, setBook] = useState<Book | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -695,7 +697,9 @@ export function EpubViewer({
   }, [book]);
 
   /** Matches the EPUB page (background + text) to the app theme, unless the
-   *  user picked custom colors which then take precedence. */
+   *  user picked custom colors which then take precedence. When the hard
+   *  text-color override is on, the chosen text color is forced onto every
+   *  element with `!important`, regardless of the book's own styling. */
   useEffect(() => {
     const rendition = renditionRef.current;
     if (!rendition) return;
@@ -718,9 +722,20 @@ export function EpubViewer({
       // range at any zoom level while the surrounding text still zooms.
       `img { max-width: 100% !important; height: auto !important; }`,
       highlightCssFor(background),
+      // Hard override: force the text color onto every element, no matter
+      // what the book styles. `* !important` beats any non-important book
+      // rule (including inline `style=` colors); the higher-specificity
+      // code-token rule below also beats our own `!important` highlight
+      // colors so code follows the override too. Kept last so it wins.
+      ...(hardOverrideText
+        ? [
+            `* { color: ${text} !important; }`,
+            `pre.source-code code.hljs, pre.source-code code.hljs * { color: ${text} !important; }`,
+          ]
+        : []),
     ].join("\n");
     (rendition.getContents() as unknown as Contents[]).forEach((content) => injectFontStyle(content));
-  }, [theme, book, customBg, customText, backgroundColorOverride, textColorOverride, injectFontStyle]);
+  }, [theme, book, customBg, customText, hardOverrideText, backgroundColorOverride, textColorOverride, injectFontStyle]);
 
   /** Closes the color picker on outside click or Escape. */
   useEffect(() => {
@@ -745,6 +760,7 @@ export function EpubViewer({
   const handleResetSettings = () => {
     setCustomBg(null);
     setCustomText(null);
+    setHardOverrideText(false);
     setColorOpen(false);
   };
 
@@ -899,6 +915,18 @@ export function EpubViewer({
                 label: "Text color",
                 value: customText ?? textColor,
                 onChange: setCustomText,
+                footer: (
+                  <label className={styles.hardOverride} title="Force this color onto every text element">
+                    <input
+                      type="checkbox"
+                      className={styles.hardOverrideCheckbox}
+                      checked={hardOverrideText}
+                      onChange={(event) => setHardOverrideText(event.target.checked)}
+                      aria-label="hard override"
+                    />
+                    <span>hard override</span>
+                  </label>
+                ),
               },
             ]}
             resetLabel="Reset to theme"
