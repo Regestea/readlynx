@@ -9,7 +9,11 @@ export type { BookSourceType };
 export type TranslationViewMode = "original" | "translation";
 
 /** What the AI was asked to translate (part of every request). */
-export type TranslationDocType = "EPUB chapter" | "PDF OCR text" | "PDF image";
+export type TranslationDocType = "EPUB chapter" | "EPUB HTML" | "PDF OCR text" | "PDF image";
+
+/** Which EPUB extraction is sent to the AI: converted Markdown (default) or
+ *  the chapter's cleaned original HTML tags. */
+export type EpubExtractionMode = "markdown" | "html";
 
 /** Per-book translation preferences (mirrors the `ReadingState` columns). */
 export interface TranslationSettings {

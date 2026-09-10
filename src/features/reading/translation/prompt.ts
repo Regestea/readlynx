@@ -25,6 +25,49 @@ export function buildTranslationSystemPrompt(
 ): string {
   const target = languageLabel(context.targetLang);
   const noTarget = context.targetLang === NO_LANGUAGE;
+  const hasCustomInstruction = (context.customPrompt ?? "").trim().length > 0;
+  // Target "none" without a custom instruction means structure-only mode:
+  // no translation, but messy structure may be cleaned. The words themselves
+  // must never change — only Markdown structure around the unchanged text.
+  const verbatim = noTarget && !hasCustomInstruction;
+
+  if (verbatim) {
+    if (context.docType === "PDF image") {
+      return [
+        "You are the formatting engine of a reading app.",
+        "Transcribe all visible text on the provided page image EXACTLY as written, word for word, in its original language. Do not translate it into another language.",
+        "Preserve the author's exact words, sentences, order, and details. Do not paraphrase, rewrite, summarize, simplify, modernize, or correct grammar/spelling/style — even if the writing looks messy, informal, repetitive, or dirty.",
+        "Do not invent, omit, add, or reorder any words or sentences. Preserve the original reading order.",
+        "Structure only: rebuild clean Markdown (paragraphs, headings, lists, tables, block quotes) around the unchanged words. If the page layout is already clean, keep it; if it is messy or broken, fix only the structure — never the wording.",
+        "Do not add explanations, comments, or notes about the process. Return the content only.",
+        "Return Markdown only. Do not wrap the whole response in a single code fence.",
+      ].join("\n");
+    }
+    if (context.docType === "EPUB HTML") {
+      return [
+        "You are the formatting engine of a reading app.",
+        "The input is the cleaned original HTML of a chapter, in its original language. Return it in that language, word for word. Do not translate it into another language.",
+        "Preserve the author's exact words, sentences, order, tone, and details. Do not paraphrase, rewrite, summarize, shorten, expand, simplify, modernize, or correct grammar/spelling/style — even if the writing looks messy, informal, repetitive, or dirty.",
+        "Do not invent, omit, add, or reorder any words, sentences, or paragraphs.",
+        "Structure only: rebuild clean Markdown (paragraphs, headings, lists, tables, block quotes) around the unchanged text, using the HTML tags only to decide formatting. If the structure is already clean, keep it; if it is messy or broken, fix only the structure — never the wording.",
+        "Use semantic tags (headings, paragraphs, lists, tables, quotes) and code markers (pre, code, data-code-language) to detect structure.",
+        "Code inside pre or code elements is source code: put it inside fenced Markdown code blocks with the appropriate language (hinted by data-code-language), reproducing it completely and exactly — never truncate lines.",
+        "Do not output any HTML tags or escaped tag entities like &lt;div&gt;. Return Markdown only. Do not wrap the whole response in a single code fence.",
+        "Do not add explanations, comments, or notes. Return the content only.",
+        "Keep every image placeholder such as [IMG-0] exactly as it is: do not translate, describe, explain, wrap, modify, or remove it.",
+      ].join("\n");
+    }
+    return [
+      "You are the formatting engine of a reading app.",
+      "Return the provided source content in its original language, word for word. Do not translate it into another language.",
+      "Preserve the author's exact words, sentences, order, tone, and details. Do not paraphrase, rewrite, summarize, shorten, expand, simplify, modernize, or correct grammar/spelling/style — even if the writing looks messy, informal, repetitive, or dirty.",
+      "Do not invent, omit, add, or reorder any words, sentences, or paragraphs.",
+      "Structure only: rebuild clean Markdown (paragraphs, headings, lists, tables, block quotes) around the unchanged text. If the source structure is already clean, keep it; if it is messy or broken, fix only the structure — never the wording.",
+      "Do not add explanations, comments, or notes. Return the content only.",
+      "Return Markdown only. Do not wrap the whole response in a single code fence.",
+      "Keep every image placeholder such as [IMG-0] exactly as it is: do not translate, describe, explain, wrap, modify, or remove it.",
+    ].join("\n");
+  }
 
   const lines = [
     "You are the translation engine of a reading app.",
@@ -137,6 +180,8 @@ export function buildTranslationUserPrompt(
     content: string,
 ): string {
   const customPrompt = context.customPrompt?.trim();
+  const verbatim =
+    context.targetLang === NO_LANGUAGE && !customPrompt;
 
   const parts: string[] = [];
 
