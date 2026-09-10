@@ -205,11 +205,22 @@ export function buildTranslationUserPrompt(
 
   if (context.docType === "PDF image") {
     parts.push(
-        "Process the text and visual content visible in the provided image according to the system instructions.",
+      verbatim
+        ? "Transcribe the text and visual content visible in the provided image according to the system instructions. Keep every word exactly as written; fix only messy structure."
+        : "Process the text and visual content visible in the provided image according to the system instructions.",
+    );
+  } else if (context.docType === "EPUB HTML") {
+    parts.push(
+      verbatim
+        ? "Clean up only the structure of the following raw chapter HTML according to the system instructions. Keep every word exactly as written; never output HTML tags:"
+        : "Convert the following raw chapter HTML to Markdown according to the system instructions:",
+        content,
     );
   } else {
     parts.push(
-        "Process the following source content according to the system instructions:",
+      verbatim
+        ? "Clean up only the structure of the following source content according to the system instructions. Keep every word exactly as written:"
+        : "Process the following source content according to the system instructions:",
         content,
     );
   }
