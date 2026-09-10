@@ -5,7 +5,8 @@ import ePub from "epubjs";
 import type { Book, Contents, Location, Rendition } from "epubjs";
 import { useTheme } from "../../app/providers/theme/ThemeContext";
 import { useReaderSettings } from "../../hooks/useReaderSettings.ts";
-import { epubHtmlToMarkdown, epubHtmlToPlainTextWithImages } from "../../shared/document/epubToMarkdown";
+import { epubHtmlToCleanedHtmlWithImages, epubHtmlToMarkdown, epubHtmlToPlainTextWithImages } from "../../shared/document/epubToMarkdown";
+import type { EpubHtmlExtraction } from "../../shared/document/epubToMarkdown";
 import type { EpubImageRef } from "../../shared/document/epubToMarkdown";
 import { getSelectionEndRect } from "../../shared/selection";
 import { FontFamilySelect } from "../FontFamilySelect/FontFamilySelect";
@@ -275,6 +276,10 @@ export interface EpubViewerHandle {
    *  `[IMG-n]` tokens so the AI never receives them, and are re-inserted into
    *  the translated Markdown afterwards. */
   getCurrentChapterExtraction(): EpubExtraction | null;
+  /** Cleaned original chapter HTML (scripts/styles/hidden content removed,
+   *  images replaced by `[IMG-n]` tokens) split into request-sized chunks of
+   *  complete elements — used when the book opts into Original-HTML mode. */
+  getCurrentChapterHtmlExtraction(): EpubHtmlExtraction | null;
   /** Total spine chapters of the loaded book (0 before it loads). */
   getChapterCount(): number;
   /** Jumps to a spine chapter by index (clamped to the book bounds). */
@@ -400,6 +405,18 @@ export function EpubViewer({
     return { text, images };
   }, []);
 
+  /** Chapter HTML + image references for Original-HTML translation mode. */
+  const currentChapterHtmlExtraction = useCallback((): EpubHtmlExtraction | null => {
+    const rendition = renditionRef.current;
+    if (!rendition || !bookRef.current) return null;
+    const contents = rendition.getContents() as unknown as Contents[];
+    const doc = contents[0]?.document;
+    if (!doc?.body) return null;
+    const { chunks, images } = epubHtmlToCleanedHtmlWithImages(doc.body);
+    if (chunks.length === 0) return null;
+    return { chunks, images };
+  }, []);
+
   /** Resolves the element that actually scrolls the rendered chapter. In the
    *  `scrolled-doc` flow epub.js stretches the section iframe to the full
    *  content height, so scrolling usually happens on the manager's
@@ -419,6 +436,7 @@ export function EpubViewer({
     getCurrentChapterMarkdown: currentChapterMarkdown,
     getCurrentChapterText: currentChapterText,
     getCurrentChapterExtraction: currentChapterExtraction,
+    getCurrentChapterHtmlExtraction: currentChapterHtmlExtraction,
     // `spineItems` exists at runtime but is missing from epubjs's typings.
     getChapterCount: () =>
       (bookRef.current?.spine as { spineItems?: unknown[] } | undefined)?.spineItems?.length ?? 0,

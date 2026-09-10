@@ -159,6 +159,17 @@ export function buildTranslationSystemPrompt(
     );
   }
 
+  if (context.docType === "EPUB HTML") {
+    lines.push(
+        "The input is the cleaned original HTML of a chapter (scripts, styles, hidden content, and noisy attributes removed; images replaced by placeholders). Translate the text nodes in document order into clean Markdown.",
+        "Use semantic tags (headings, paragraphs, lists, tables, quotes) only to decide structure.",
+        "Never output HTML tags or escaped tag entities like &lt;div&gt; — the output must be Markdown only.",
+        "Code inside pre or code elements is source code: do not translate it; put it inside fenced Markdown code blocks with the appropriate language (hinted by data-code-language), reproducing it completely and exactly.",
+        "The input may contain image placeholders such as [IMG-0] between elements.",
+        "Keep every image placeholder exactly as it is: do not translate, describe, explain, wrap, modify, or remove it.",
+    );
+  }
+
   lines.push(
       noTarget
         ? "The user may provide an additional instruction describing how they want the content processed, such as summarization, simplification, explanation, restructuring, tone, or level of detail. Follow that instruction as part of the requested transformation while keeping the content in its original language and preserving valid Markdown output."

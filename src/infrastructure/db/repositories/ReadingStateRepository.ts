@@ -67,6 +67,8 @@ export interface ReadingStateInput {
   customPromptId?: string;
   /** PDF translation pipeline ("ocr" / "vision"); EPUB books keep "ocr". */
   pdfMethod?: TranslationMethod;
+  /** EPUB extraction sent to the AI ("markdown" / "html"); PDF books ignore it. */
+  epubExtraction?: "markdown" | "html";
   /** Ordered AI model ids for translation, in failover order (empty = app
    *  default). */
   modelIds?: string[];
@@ -134,7 +136,7 @@ export class ReadingStateRepository {
       .prepare(
         `INSERT INTO ReadingState (
            bookId, currentPage, currentChapter, ocrLangs, sourceLang,
-           targetLang, modelId, customPromptId, pdfMethod, modelIds, totalPages, totalChapters,
+           targetLang, modelId, customPromptId, pdfMethod, epubExtraction, modelIds, totalPages, totalChapters,
            progressPercent, maxProgress, updatedAt
          ) VALUES (
            @bookId,
@@ -146,6 +148,7 @@ export class ReadingStateRepository {
            COALESCE(@modelId, ''),
            COALESCE(@customPromptId, ''),
            COALESCE(@pdfMethod, 'ocr'),
+           COALESCE(@epubExtraction, 'markdown'),
            COALESCE(@modelIds, '[]'),
            COALESCE(@totalPages, 0),
            COALESCE(@totalChapters, 0),
@@ -165,6 +168,7 @@ export class ReadingStateRepository {
            modelId        = COALESCE(@modelId,        ReadingState.modelId),
            customPromptId = COALESCE(@customPromptId, ReadingState.customPromptId),
            pdfMethod      = COALESCE(@pdfMethod,      ReadingState.pdfMethod),
+           epubExtraction = COALESCE(@epubExtraction, ReadingState.epubExtraction),
            modelIds       = COALESCE(@modelIds,       ReadingState.modelIds),
            totalPages     = COALESCE(@totalPages,     ReadingState.totalPages),
            totalChapters  = COALESCE(@totalChapters,  ReadingState.totalChapters),
@@ -187,6 +191,7 @@ export class ReadingStateRepository {
         modelId: state.modelId ?? null,
         customPromptId: state.customPromptId ?? null,
         pdfMethod: state.pdfMethod ?? null,
+        epubExtraction: state.epubExtraction ?? null,
         modelIds: state.modelIds !== undefined ? JSON.stringify(state.modelIds) : null,
         totalPages: state.totalPages ?? null,
         totalChapters: state.totalChapters ?? null,

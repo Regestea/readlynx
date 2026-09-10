@@ -324,6 +324,24 @@ export function TranslationSettingsPanel({
         title="Custom instruction layered on the translation"
       />
 
+      {!isPdf && (
+        <label
+          className={styles.htmlToggle}
+          title="Enhance translation: check this if the translation is not displaying correctly — for example, broken or missing code blocks or tables. It sends more detail about the chapter to the AI, but uses more data and can be slower."
+        >
+          <input
+            type="checkbox"
+            checked={settings.epubExtraction === "html"}
+            onChange={(event) =>
+              onSettingsChange({ epubExtraction: event.target.checked ? "html" : "markdown" })
+            }
+            disabled={busy}
+            aria-label="Enhance translation"
+          />
+          <span>Enhance translation</span>
+        </label>
+      )}
+
       {(status || error) && (
         <span
           className={error ? styles.errorText : rateLimitRetry ? styles.retryWarning : styles.statusText}

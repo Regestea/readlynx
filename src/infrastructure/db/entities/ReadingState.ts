@@ -21,6 +21,9 @@ export interface ReadingStateEntity {
   /** PDF translation pipeline ("ocr" = tesseract + AI, "vision" = AI
    *  reads the page image directly). Irrelevant for EPUB books. */
   pdfMethod: "ocr" | "vision";
+  /** EPUB extraction sent to the AI ("markdown" = converted, "html" = the
+   *  chapter's cleaned original tags). Irrelevant for PDF books. */
+  epubExtraction: "markdown" | "html";
   /** Ordered AI model ids used for translation, in failover order (the next
    *  one takes over when the previous fails; empty = app default). The
    *  legacy single-choice `modelId` column still exists for old readers. */

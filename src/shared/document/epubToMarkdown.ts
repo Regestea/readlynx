@@ -536,6 +536,161 @@ export function epubHtmlToPlainTextWithImages(container: HTMLElement): {
   return { text: joinBlocks(blocks), images };
 }
 
+/** Upper bound for one cleaned-HTML AI request (serialized characters).
+ *  HTML carries tag overhead around the same words, so the budget is larger
+ *  than the plain-text chunker's — chapters usually still fit in one chunk. */
+const MAX_HTML_CHUNK = 20000;
+
+/** Cleaned chapter HTML plus the images replaced by `[IMG-n]` tokens. */
+export interface EpubHtmlExtraction {
+  /** Cleaned-HTML chunks: sequences of complete elements, never
+   *  cut mid-tag, one AI request each. */
+  chunks: string[];
+  /** Images found in the chapter, keyed by their placeholder token. */
+  images: EpubImageRef[];
+}
+
+/** Attributes worth sending to the AI. Everything else — `class`, `id`,
+ *  inline styles, event handlers, `epub:type`, `title`, the rest of `data-*`
+ *  — is noise the model tends to echo back into its output, so it is
+ *  stripped. Structural signal survives through the tags themselves. */
+const KEPT_HTML_ATTRIBUTES = new Set([
+  "href",
+  "src",
+  "lang",
+  "xml:lang",
+  "dir",
+  "start",
+  "colspan",
+  "rowspan",
+  "data-code-language",
+]);
+
+function stripNoisyAttributes(el: Element): void {
+  for (const attr of Array.from(el.attributes)) {
+    if (!KEPT_HTML_ATTRIBUTES.has(attr.name.toLowerCase())) el.removeAttribute(attr.name);
+  }
+}
+
+/** Moves a `language-*` / `lang-*` class hint onto `data-code-language`
+ *  before classes are stripped, so the code language survives as the one
+ *  attribute the model is told to read. Only for `pre` / `code` elements
+ *  that do not already carry an explicit hint. */
+function promoteCodeLanguage(el: Element): void {
+  if (el.hasAttribute("data-code-language")) return;
+  const tag = el.tagName.toLowerCase();
+  if (tag !== "pre" && tag !== "code") return;
+  for (const cls of Array.from(el.classList)) {
+    const match = cls.match(/^(?:language|lang)-([a-zA-Z0-9_+-]+)$/);
+    if (match) {
+      el.setAttribute("data-code-language", match[1]);
+      return;
+    }
+  }
+}
+
+/** Neutral wrappers with no semantics of their own (their attributes are
+ *  stripped anyway): when one exceeds the chunk budget, its children become
+ *  separate items instead of forcing the whole subtree into a single chunk.
+ *  Distinct from `CONTAINER_TAGS` above — semantic elements (lists, tables,
+ *  code, quotes, figures, notes) always stay whole, even when oversized, so
+ *  a request never receives half a table or half a code block. */
+const SPLITTABLE_CONTAINER_TAGS = new Set(["article", "div", "footer", "header", "main", "section"]);
+
+/** Translation input for EPUB chapters that skips Markdown conversion: the
+ *  chapter's cleaned original HTML (scripts, styles and hidden content
+ *  removed, images replaced by `[IMG-n]` tokens), split into request-sized
+ *  chunks of complete top-level elements. The live DOM is never mutated —
+ *  everything happens on a detached clone. */
+export function epubHtmlToCleanedHtmlWithImages(container: HTMLElement): EpubHtmlExtraction {
+  const images: EpubImageRef[] = [];
+  const clone = container.cloneNode(true) as HTMLElement;
+  // Paired walk over the live tree and the clone (same structure, so child
+  // indices correspond): rasterization reads the rendered originals while
+  // all edits land on the clone.
+  const clean = (origParent: Node, copyParent: Node): void => {
+    const origKids = Array.from(origParent.childNodes);
+    const copyKids = Array.from(copyParent.childNodes);
+    for (let index = 0; index < copyKids.length; index += 1) {
+      const orig = origKids[index];
+      const copy = copyKids[index];
+      if (!orig || !copy) continue;
+      if (copy.nodeType !== Node.ELEMENT_NODE || orig.nodeType !== Node.ELEMENT_NODE) continue;
+      const origEl = orig as Element;
+      const copyEl = copy as Element;
+      const tag = copyEl.tagName.toLowerCase();
+      if (SKIPPED_TAGS.has(tag) || isHidden(origEl)) {
+        copyParent.removeChild(copy);
+        continue;
+      }
+      if (tag === "img") {
+        const src = imgSrcForDisplay(origEl);
+        const doc = copyEl.ownerDocument;
+        if (src) {
+          const alt = origEl.getAttribute("alt") ?? "";
+          const token = `[IMG-${images.length}]`;
+          images.push({ token, src, alt, markdown: imgMarkdown(src, alt) });
+          copyParent.replaceChild(doc.createTextNode(token), copy);
+        } else {
+          copyParent.replaceChild(doc.createTextNode(origEl.getAttribute("alt") ?? ""), copy);
+        }
+        continue;
+      }
+      promoteCodeLanguage(copyEl);
+      stripNoisyAttributes(copyEl);
+      clean(origEl, copyEl);
+    }
+  };
+  clean(container, clone);
+
+  // Flatten oversized neutral wrappers (a chapter wrapped in one giant
+  // <div> is the norm, not the exception): their children become separate
+  // items, so long chapters still split into several requests and the UI
+  // keeps showing per-chunk progress. Anything semantic stays whole.
+  const items: string[] = [];
+  const collectItems = (parent: Node): void => {
+    for (const child of Array.from(parent.childNodes)) {
+      if (child.nodeType === Node.TEXT_NODE) {
+        const text = child.textContent ?? "";
+        if (text.trim()) items.push(text);
+        continue;
+      }
+      if (child.nodeType !== Node.ELEMENT_NODE) continue;
+      const el = child as Element;
+      const serialized = el.outerHTML;
+      if (
+        SPLITTABLE_CONTAINER_TAGS.has(el.tagName.toLowerCase()) &&
+        serialized.length > MAX_HTML_CHUNK &&
+        el.childNodes.length > 0
+      ) {
+        collectItems(el);
+        continue;
+      }
+      // A single oversized element stays whole — splitting it mid-tag would
+      // produce broken markup and defeat the purpose of this mode.
+      items.push(serialized);
+    }
+  };
+  collectItems(clone);
+
+  const chunks: string[] = [];
+  let current: string[] = [];
+  let currentSize = 0;
+  const flush = (): void => {
+    if (current.length === 0) return;
+    chunks.push(current.join("\n\n"));
+    current = [];
+    currentSize = 0;
+  };
+  for (const item of items) {
+    if (currentSize > 0 && currentSize + item.length + 2 > MAX_HTML_CHUNK) flush();
+    current.push(item);
+    currentSize += item.length + 2;
+  }
+  flush();
+  return { chunks, images };
+}
+
 /** Replaces each `[IMG-n]` placeholder in AI output with the image's markdown,
  *  in order. Placeholders the model dropped are skipped; ones it duplicated
  *  repeat the image. */

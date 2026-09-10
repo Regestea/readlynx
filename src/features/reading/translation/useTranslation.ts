@@ -9,7 +9,9 @@ import {
   replaceImageTokens,
   extractDataUrlFromImageRef,
   replaceImageTokensWithProtocolUrls,
+  stripLeakedHtmlTags,
 } from "../../../shared/document/epubToMarkdown.ts";
+import type { EpubImageRef } from "../../../shared/document/epubToMarkdown.ts";
 import { getDefaultAiModel, resolveProviderBaseUrl } from "../../../infrastructure/ai/modelResolver";
 import { chunkChapter } from "./epubChunker.ts";
 import { buildTranslationSystemPrompt, buildTranslationUserPrompt } from "./prompt.ts";
@@ -169,6 +171,7 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef, epubReady 
             modelIds: validIds,
             customPromptId: state.customPromptId ?? "",
             pdfMethod: state.pdfMethod === "vision" ? "vision" : "ocr",
+            epubExtraction: state.epubExtraction === "html" ? "html" : "markdown",
           });
         }
         if (modelRows.length === 0) {
@@ -745,7 +748,7 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef, epubReady 
 
     const currentSettings = settingsRef.current;
     const method = methodFor(sourceType, currentSettings.pdfMethod);
-    const docType = docTypeFor(sourceType, currentSettings.pdfMethod);
+    const docType = docTypeFor(sourceType, currentSettings.pdfMethod, currentSettings.epubExtraction);
     const promptContext = {
       docType,
       ocrLangs: currentSettings.ocrLangs,
@@ -763,11 +766,29 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef, epubReady 
     try {
       let result: string;
       if (method === "chapter") {
-        const extraction = epubRef.current?.getCurrentChapterExtraction();
-        if (!extraction || !extraction.text) {
-          throw new Error("The chapter text is not available yet.");
+        // Original-HTML mode sends the chapter's cleaned tags instead of
+        // converted Markdown (chunked by element, never mid-tag); the
+        // default mode sends the extracted plain text as usual.
+        let chunks: string[];
+        let images: EpubImageRef[];
+        // Original-HTML mode primes the model with tags, so echoed markup
+        // is stripped from its output (outside code) before saving.
+        const cleanLeaks = currentSettings.epubExtraction === "html";
+        if (cleanLeaks) {
+          const htmlExtraction = epubRef.current?.getCurrentChapterHtmlExtraction();
+          if (!htmlExtraction || htmlExtraction.chunks.length === 0) {
+            throw new Error("The chapter HTML is not available yet.");
+          }
+          chunks = htmlExtraction.chunks;
+          images = htmlExtraction.images;
+        } else {
+          const extraction = epubRef.current?.getCurrentChapterExtraction();
+          if (!extraction || !extraction.text) {
+            throw new Error("The chapter text is not available yet.");
+          }
+          chunks = chunkChapter(extraction.text);
+          images = extraction.images;
         }
-        const chunks = chunkChapter(extraction.text);
         if (chunks.length === 0) {
           throw new Error("The chapter has no text to translate.");
         }
@@ -808,8 +829,8 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef, epubReady 
         const joined = normalizeTranslatedMarkdown(results.join("\n\n"));
         const hasImgTokens = joined.includes("[IMG-");
         let chunkMarkdowns = results;
-        if (hasImgTokens && extraction.images.length > 0) {
-          const dataUrls = extraction.images.map((img) => extractDataUrlFromImageRef(img)).filter((d): d is string => d !== null);
+        if (hasImgTokens && images.length > 0) {
+          const dataUrls = images.map((img) => extractDataUrlFromImageRef(img)).filter((d): d is string => d !== null);
           if (dataUrls.length > 0) {
             // Remove old images for this chapter before saving new ones
             // so regenerated chapters don't leave orphaned files.
@@ -820,15 +841,15 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef, epubReady 
               dataUrls,
             });
             if (protocolUrls) {
-              result = replaceImageTokensWithProtocolUrls(joined, extraction.images, protocolUrls);
+              result = replaceImageTokensWithProtocolUrls(joined, images, protocolUrls);
               chunkMarkdowns = results.map((chunk) =>
-                replaceImageTokensWithProtocolUrls(chunk, extraction.images, protocolUrls),
+                replaceImageTokensWithProtocolUrls(chunk, images, protocolUrls),
               );
             } else {
-              result = replaceImageTokens(joined, extraction.images);
+              result = replaceImageTokens(joined, images);
             }
           } else {
-            result = replaceImageTokens(joined, extraction.images);
+            result = replaceImageTokens(joined, images);
           }
         } else {
           result = joined;

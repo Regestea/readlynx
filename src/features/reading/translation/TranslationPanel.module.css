@@ -14,6 +14,39 @@
   max-width: 180px;
 }
 
+/* EPUB-only enhance-translation toggle: the native checkbox shows the state,
+ *  so the border only highlights on hover and never stays blue. */
+.htmlToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-small);
+  background: var(--color-glass);
+  color: var(--color-text);
+  font-size: var(--font-size-sm);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: border-color var(--transition-base) ease;
+}
+
+.htmlToggle:hover {
+  border-color: var(--color-primary);
+}
+
+.htmlToggle input {
+  margin: 0;
+  accent-color: var(--color-primary);
+  cursor: pointer;
+}
+
+.htmlToggle:has(input:disabled) {
+  opacity: 0.55;
+  cursor: default;
+}
+
 .modelWarning {
   padding: 5px 10px;
   border-radius: var(--radius-full);

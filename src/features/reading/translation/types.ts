@@ -32,6 +32,9 @@ export interface TranslationSettings {
   /** PDF pipeline ("ocr" = tesseract + AI, "vision" = AI reads the page
    *  image directly); EPUB books always use `chapter`. */
   pdfMethod: TranslationMethod;
+  /** EPUB extraction sent to the AI ("markdown" = converted, "html" =
+   *  the chapter's cleaned original tags); PDF books ignore it. */
+  epubExtraction: EpubExtractionMode;
 }
 
 export const DEFAULT_TRANSLATION_SETTINGS: TranslationSettings = {
@@ -40,6 +43,7 @@ export const DEFAULT_TRANSLATION_SETTINGS: TranslationSettings = {
   modelIds: [],
   customPromptId: "",
   pdfMethod: "ocr",
+  epubExtraction: "markdown",
 };
 
 /** Identifies the unit of content currently on screen: `pdf:<page>` or
@@ -74,7 +78,8 @@ export function methodFor(sourceType: BookSourceType, pdfMethod: TranslationMeth
 export function docTypeFor(
   sourceType: BookSourceType,
   pdfMethod: TranslationMethod,
+  epubExtraction: EpubExtractionMode = "markdown",
 ): TranslationDocType {
-  if (sourceType === "epub") return "EPUB chapter";
+  if (sourceType === "epub") return epubExtraction === "html" ? "EPUB HTML" : "EPUB chapter";
   return pdfMethod === "vision" ? "PDF image" : "PDF OCR text";
 }
