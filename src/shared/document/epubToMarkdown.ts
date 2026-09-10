@@ -419,18 +419,65 @@ function renderQuote(blockquote: Element, plain: boolean, images: EpubImageRef[]
   );
 }
 
-function renderCodeBlock(pre: Element): string {
-  const codeEl = pre.querySelector("code");
-  const target = codeEl ?? pre;
-  let language = "";
-  for (const cls of Array.from(target.classList)) {
-    const match = cls.match(/^language-([a-zA-Z0-9_+-]+)$/);
-    if (match) {
-      language = match[1];
-      break;
+/** Language of a `<pre>` code block. Books disagree where it lives: a
+ *  `language-*` class on a wrapping `<code>` child, data attributes
+ *  (`data-code-language`, `data-language`, …) or a `lang` attribute on the
+ *  `<pre>` itself. Syntax-highlight token classes (`kr`, `nx`, `o`, …) are
+ *  not languages and are ignored. */
+function detectCodeLanguage(pre: Element, code: Element | null): string {
+  const fromClasses = (el: Element | null): string => {
+    if (!el) return "";
+    for (const cls of Array.from(el.classList)) {
+      const match = cls.match(/^(?:language|lang)-([a-zA-Z0-9_+-]+)$/);
+      if (match) return match[1];
     }
-  }
-  const text = (target.textContent ?? "").replace(/\r\n?/g, "\n").replace(/[ \t]+$/gm, "");
+    return "";
+  };
+  return (
+    fromClasses(code) ||
+    fromClasses(pre) ||
+    pre.getAttribute("data-code-language")?.trim() ||
+    pre.getAttribute("data-language")?.trim() ||
+    pre.getAttribute("data-lang")?.trim() ||
+    pre.getAttribute("lang")?.trim() ||
+    ""
+  );
+}
+
+/** Text of a `<pre>` block with `<br>` elements kept as newlines
+ *  (`textContent` alone would swallow them and join lines together). */
+function preTextContent(pre: Element): string {
+  let out = "";
+  const walk = (node: Node): void => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      out += node.textContent ?? "";
+    } else if (node.nodeType === Node.ELEMENT_NODE) {
+      const el = node as Element;
+      if (el.tagName.toLowerCase() === "br") out += "\n";
+      else for (const child of Array.from(el.childNodes)) walk(child);
+    }
+  };
+  for (const child of Array.from(pre.childNodes)) walk(child);
+  return out;
+}
+
+function renderCodeBlock(pre: Element): string {
+  // Highlighted books split code token-by-token into many sibling `<code>`
+  // spans (`<code class="kr">const</code> <code class="nx">http</code> …).
+  // Only treat a `<code>` child as the block when it alone wraps the whole
+  // content — otherwise `querySelector("code")` returns just the first token
+  // ("const") and the rest of the code is silently dropped.
+  const codeEls = Array.from(pre.querySelectorAll("code"));
+  const singleWrapper =
+    codeEls.length === 1 &&
+    (pre.textContent ?? "").trim() === (codeEls[0].textContent ?? "").trim();
+  const code = singleWrapper ? codeEls[0] : null;
+  const language = detectCodeLanguage(pre, code);
+  const text = preTextContent(pre)
+    .replace(/\r\n?/g, "\n")
+    .replace(/[ \t]+$/gm, "")
+    .replace(/^\n+/, "")
+    .replace(/\n+$/, "");
   const fence = text.includes("```") ? "````" : "```";
   return `${fence}${language}\n${text}\n${fence}`;
 }
