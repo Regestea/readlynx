@@ -777,3 +777,50 @@ export function normalizeTranslatedMarkdown(markdown: string): string {
   out = out.replace(/\n{3,}/g, "\n\n");
   return out;
 }
+
+/** Block-level tags: a leaked one marks a paragraph boundary, so it becomes
+ *  a blank line instead of gluing the surrounding words together. */
+const LEAKED_BLOCK_TAG_RE =
+  /<\/?(?:p|div|h[1-6]|table|thead|tbody|tfoot|tr|td|th|ul|ol|li|blockquote|pre|section|article|header|footer|figure|figcaption|aside|main|nav|hr|br)(?:\s[^<>]*)?\/?>/gi;
+
+/** Any other tag shape (`<span …>`, `</a>`, …): its inner text (if any) is
+ *  already in the flow, so only the markup itself is dropped. The strict
+ *  tag-name pattern keeps autolinks (`<https://…>`) and math (`a < b`)
+ *  untouched. */
+const LEAKED_INLINE_TAG_RE = /<\/?[a-zA-Z][a-zA-Z0-9-]*(?:\s[^<>]*)?\/?>/g;
+
+/** Entity-encoded tags (`&lt;div&gt;`) some models emit instead of literal
+ *  markup: decoded back to tag shape first, so the rules above catch them.
+ *  Only complete tag patterns are touched — `&lt;3` or `a &lt; b` survive. */
+const LEAKED_ENTITY_TAG_RE = /&lt;(\/?[a-zA-Z][a-zA-Z0-9-]*(?:\s[^;<>]*)?\/?)&gt;/g;
+
+function stripLeakedTagsOutsideCode(text: string): string {
+  // Inline code spans may legitimately show tags as teaching examples
+  // (`` `<div>` ``) — only the prose around them is cleaned.
+  const bits = text.split(/(`[^`\n]*?`)/g);
+  for (let i = 0; i < bits.length; i += 2) {
+    let seg = bits[i].replace(/<!--[\s\S]*?-->/g, "");
+    seg = seg.replace(LEAKED_ENTITY_TAG_RE, "<$1>");
+    seg = seg.replace(LEAKED_BLOCK_TAG_RE, "\n\n");
+    seg = seg.replace(LEAKED_INLINE_TAG_RE, "");
+    bits[i] = seg.replace(/\n{3,}/g, "\n\n").replace(/[ \t]+$/gm, "");
+  }
+  return bits.join("");
+}
+
+/** Removes HTML tags a model echoed into its Markdown output despite being
+ *  told not to (e.g. `<h6>`, `epub:type="note">` fragments, `&lt;table&gt;`
+ *  entities, stray `</div>`). Fenced code blocks and inline code spans are
+ *  left untouched — a `<div>` inside code is legitimate content, not a leak.
+ *  `[IMG-n]` placeholders contain no angle brackets and pass through. */
+export function stripLeakedHtmlTags(markdown: string): string {
+  if (!markdown || (!markdown.includes("<") && !markdown.includes("&lt;"))) return markdown;
+  // Split by existing fenced blocks so code examples are never rewritten.
+  const fenceRe = /(````[\s\S]*?````|```[\s\S]*?```)/g;
+  const parts = markdown.split(fenceRe);
+  for (let i = 0; i < parts.length; i += 2) {
+    // Even indices are outside fences
+    parts[i] = stripLeakedTagsOutsideCode(parts[i]);
+  }
+  return parts.join("");
+}

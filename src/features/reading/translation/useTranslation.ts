@@ -819,7 +819,8 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef, epubReady 
           });
           // Normalize each chunk so the rows written below are clean; the
           // final joined result is normalized again after image replacement.
-          const chunk = normalizeTranslatedMarkdown(chunkRaw);
+          const normalized = normalizeTranslatedMarkdown(chunkRaw);
+          const chunk = cleanLeaks ? stripLeakedHtmlTags(normalized) : normalized;
           setRateLimitRetry(null);
           baseStatusRef.current = null;
           results.push(chunk);
