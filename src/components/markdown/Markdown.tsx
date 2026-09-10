@@ -333,6 +333,16 @@ const components: Components = {
       {children}
     </h4>
   ),
+  h5: ({ children, node: _node, ...props }) => (
+    <h5 className={styles.h5} {...props} {...dirProps(children)}>
+      {children}
+    </h5>
+  ),
+  h6: ({ children, node: _node, ...props }) => (
+    <h6 className={styles.h6} {...props} {...dirProps(children)}>
+      {children}
+    </h6>
+  ),
   div: ({ children, node: _node, ...props }) => (
     <div {...props} {...dirProps(children)}>
       {children}
