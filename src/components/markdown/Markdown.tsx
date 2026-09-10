@@ -19,6 +19,7 @@ import { AiSelectionBubble } from "../AiSelectionBubble/AiSelectionBubble";
 import { useReaderSettings } from "../../hooks/useReaderSettings.ts";
 import { getSelectionEndRect } from "../../shared/selection";
 import { MermaidDiagram } from "./MermaidDiagram";
+import { safeUrlTransform } from "./safeUrl";
 import styles from "./Markdown.module.css";
 
 const ZOOM_STEP = 10;
@@ -31,22 +32,6 @@ const ZOOM_MAX = 200;
 const REMARK_PLUGINS = [remarkGfm, remarkMath];
 const REHYPE_PLUGINS = [rehypeRaw, rehypeKatex, sanitizeRawHtml];
 const REHYPE_PLUGINS_NO_RAW = [rehypeKatex];
-
-/** Default react-markdown behaviour (http/https/irc/mailto only) stripped the
- *  translator's data: image URLs — keep them for image sources, everything
- *  else stays restricted. */
-function safeUrlTransform(url: string, key: string): string {
-  try {
-    const parsed = new URL(url, "https://example.com");
-    const allowed =
-      /^(https|irc|ircs|mailto|xmpp)$/i.test(parsed.protocol) ||
-      (key === "src" && parsed.protocol === "data:") ||
-      (key === "src" && parsed.protocol === "readlynx-translation-image:");
-    return allowed ? url : "";
-  } catch {
-    return "";
-  }
-}
 
 /** Attribute names allowed on raw-HTML elements. Anything else — e.g. names
  *  mangled by markdown emphasis inside a tag (`**classname`, `border-**`) —
@@ -373,11 +358,19 @@ const components: Components = {
       </p>
     );
   },
-  a: ({ href, children }) => (
-    <a dir="ltr" href={href} className={styles.link} target="_blank" rel="noreferrer">
-      {children}
-    </a>
-  ),
+  a: ({ href, children }) => {
+    // No destination (or a non-website one, already blanked above): render
+    // plain text with no link affordance, so clicking does nothing instead
+    // of yanking the app window to a blank page.
+    if (!href) {
+      return <span>{children}</span>;
+    }
+    return (
+      <a dir="ltr" href={href} className={styles.link} target="_blank" rel="noreferrer">
+        {children}
+      </a>
+    );
+  },
   ul: ({ children, node: _node, className, ...props }) => {
     const cn = Array.isArray(className) ? className.join(" ") : (className ?? "");
     const isTaskList = typeof cn === "string" && cn.includes("contains-task-list");
