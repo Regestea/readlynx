@@ -9,6 +9,10 @@ export interface TranslationPromptContext {
   targetLang: string;
   /** Optional user instruction layered on top of the default translation behavior. */
   customPrompt?: string;
+  /** Numbered page sections visible as red boxes on the PDF image
+   *  (`id` + section kind). Only set for annotated vision requests — the
+   *  model answers with `[REGION-n]` ids, never with coordinates. */
+  regions?: Array<{ id: number; label: string }>;
 }
 
 /**
@@ -33,7 +37,7 @@ export function buildTranslationSystemPrompt(
 
   if (verbatim) {
     if (context.docType === "PDF image") {
-      return [
+      const base = [
         "You are the formatting engine of a reading app.",
         "Transcribe all visible text on the provided page image EXACTLY as written, word for word, in its original language. Do not translate it into another language.",
         "Preserve the author's exact words, sentences, order, and details. Do not paraphrase, rewrite, summarize, simplify, modernize, or correct grammar/spelling/style — even if the writing looks messy, informal, repetitive, or dirty.",
@@ -41,7 +45,13 @@ export function buildTranslationSystemPrompt(
         "Structure only: rebuild clean Markdown (paragraphs, headings, lists, tables, block quotes) around the unchanged words. If the page layout is already clean, keep it; if it is messy or broken, fix only the structure — never the wording.",
         "Do not add explanations, comments, or notes about the process. Return the content only.",
         "Return Markdown only. Do not wrap the whole response in a single code fence.",
-      ].join("\n");
+      ];
+      if (context.regions && context.regions.length > 0) {
+        base.push(
+          "The image shows red numbered boxes around each page section. Transcribe heading and text sections as normal Markdown text in numeric order. Where a figure, diagram or photo belongs in the flow, emit its token exactly as `[REGION-n]` on its own line and keep it verbatim — the app replaces it with the real image. An output with no images is fine; never invent a `[REGION-n]` id that was not listed.",
+        );
+      }
+      return base.join("\n");
     }
     if (context.docType === "EPUB HTML") {
       return [
@@ -83,6 +93,7 @@ export function buildTranslationSystemPrompt(
   if (!noTarget) {
     lines.push(
         `The output must be written entirely in ${target}: headings, paragraphs, lists, table cells, captions, and notes. Do not leave any part of the source untranslated and do not mix in words from the source language. If the source is already in ${target}, return it in ${target} as-is.`,
+        `Language lock — this is a hard requirement, not a preference: never answer in the source language, not even partially. If you catch yourself writing any sentence in another language, stop and rewrite it in ${target} before continuing. The only exception is executable source code, which is never translated.`,
     );
   }
 
@@ -141,6 +152,19 @@ export function buildTranslationSystemPrompt(
     lines.push(
         "The input is an image of a page. First read and understand all visible text and visual structure on the image, then translate and reconstruct the content as Markdown.",
     );
+    if (context.regions && context.regions.length > 0) {
+      lines.push(
+        "Numbered sections:",
+        "- The image shows red numbered boxes around each page section: headings, text blocks, figures/charts, tables.",
+        "- Heading and text sections are ordinary translatable content: translate them as normal Markdown text in numeric (reading) order. Never turn text into an image, screenshot, or placeholder — easily translatable text always stays as translated text.",
+        "- Only figures, diagrams, photos and charts that cannot be translated stay visual: where one belongs in the flow, emit its token exactly as `[REGION-n]` (e.g. `[REGION-3]`) on its own line. The app replaces the token with the real image. For boxed figure sections this overrides the Mermaid rules below — always use the token, never redraw the figure as Mermaid.",
+        "- Do not describe images, do not transcribe text inside figures, and never invent coordinates.",
+        "- Use each `[REGION-n]` token at most ONCE in the whole output. Repeating the same image multiple times is wrong — if a figure matters in two places, keep it where it first belongs and refer to it with words afterwards.",
+        "- Never emit a token for a section whose content you already translated as text. Images are only for figures, diagrams, photos and charts — translated text never needs an image next to it.",
+        "- An output with no images at all is perfectly fine — return translation only when nothing visual is needed. Never invent a `[REGION-n]` id that was not listed for this page.",
+        "- Keep every `[REGION-n]` token exactly as it is: do not translate, wrap, modify, or remove it. Drop a token only when that section is pure decoration with no content value.",
+      );
+    }
   }
 
   if (context.docType === "PDF OCR text") {
@@ -180,6 +204,32 @@ export function buildTranslationSystemPrompt(
 }
 
 /**
+ * Follow-up repair for vision output that came back in the wrong language
+ * (the model was busy placing image tokens and dropped the language
+ * constraint). Text-only on purpose — no image to distract it this time.
+ * Image tokens and code survive verbatim; everything else is rewritten in
+ * the target language.
+ */
+export function buildLanguageRepairPrompts(targetLang: string): {
+  system: string;
+  user: (content: string) => string;
+} {
+  const target = languageLabel(targetLang);
+  const system = [
+    "You are the translation engine of a reading app.",
+    `Rewrite the following Markdown entirely in ${target}. It was translated from another language but came out in the wrong language — your only job is to fix the language while preserving everything else.`,
+    "Keep the exact same structure, order, headings, lists, tables and meaning. Do not summarize, shorten, or add explanations.",
+    "Keep every `[REGION-n]` and `[IMG-n]` token exactly as it is, in the same place: do not translate, wrap, modify, or remove them. Use each token at most once; delete accidental duplicates.",
+    "Do not translate executable source code — fenced code blocks stay exactly as they are.",
+    "Return Markdown only. Do not wrap the whole response in a single code fence.",
+    `Language lock: every word must be in ${target}. If you catch yourself writing another language, stop and rewrite in ${target}.`,
+  ].join("\n");
+  const user = (content: string): string =>
+    `Rewrite the following Markdown entirely in ${target} according to the system instructions:\n\n${content}`;
+  return { system, user };
+}
+
+/**
  * The user-level request sent to the model.
  *
  * This is intentionally separate from the system prompt so that
@@ -193,8 +243,19 @@ export function buildTranslationUserPrompt(
   const customPrompt = context.customPrompt?.trim();
   const verbatim =
     context.targetLang === NO_LANGUAGE && !customPrompt;
+  const noTarget = context.targetLang === NO_LANGUAGE;
+  const target = languageLabel(context.targetLang);
 
   const parts: string[] = [];
+
+  // Restates the target language in the user message itself: vision models
+  // anchor on the image's language, so a system-only instruction is what lets
+  // source-language answers slip through.
+  if (!verbatim && !noTarget) {
+    parts.push(
+      `Write the ENTIRE output in ${target}. Before finishing, verify every sentence is in ${target}; rewrite any part that came out in another language. Executable source code stays unchanged.`,
+    );
+  }
 
   if (customPrompt) {
     parts.push(
@@ -204,10 +265,14 @@ export function buildTranslationUserPrompt(
   }
 
   if (context.docType === "PDF image") {
+    const legend =
+      context.regions && context.regions.length > 0
+        ? `Sections on this page: ${context.regions.map((r) => `${r.id}=${r.label}`).join(", ")}.`
+        : "";
     parts.push(
       verbatim
-        ? "Transcribe the text and visual content visible in the provided image according to the system instructions. Keep every word exactly as written; fix only messy structure."
-        : "Process the text and visual content visible in the provided image according to the system instructions.",
+        ? `Transcribe the text and visual content visible in the provided image according to the system instructions. Keep every word exactly as written; fix only messy structure. ${legend}`.trim()
+        : `Process the text and visual content visible in the provided image according to the system instructions. ${legend}`.trim(),
     );
   } else if (context.docType === "EPUB HTML") {
     parts.push(

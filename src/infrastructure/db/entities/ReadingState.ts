@@ -24,6 +24,10 @@ export interface ReadingStateEntity {
   /** EPUB extraction sent to the AI ("markdown" = converted, "html" = the
    *  chapter's cleaned original tags). Irrelevant for PDF books. */
   epubExtraction: "markdown" | "html";
+  /** PDF AI-vision figure handling (1 = detect untranslatable figures and
+   *  splice them into the translation, 0 = plain page-image translation).
+   *  Irrelevant for EPUB books. */
+  pdfAutoFigures: number;
   /** Ordered AI model ids used for translation, in failover order (the next
    *  one takes over when the previous fails; empty = app default). The
    *  legacy single-choice `modelId` column still exists for old readers. */

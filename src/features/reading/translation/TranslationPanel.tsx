@@ -352,6 +352,22 @@ export function TranslationSettingsPanel({
         </span>
       )}
 
+      {isPdf && pdfMethod === "vision" && (
+        <label
+          className={styles.htmlToggle}
+          title="Auto include required pictures: figures, diagrams, photos and charts that can't be translated are detected automatically and placed into the translation at the right spot. Text-only pages are unaffected. Experimental — results may be unstable."
+        >
+          <input
+            type="checkbox"
+            checked={settings.pdfAutoFigures}
+            onChange={(event) => onSettingsChange({ pdfAutoFigures: event.target.checked })}
+            disabled={busy}
+            aria-label="Auto include required pictures"
+          />
+          <span>Auto include required pictures</span>
+        </label>
+      )}
+
       <Button
         variant="primary"
         className={styles.action}

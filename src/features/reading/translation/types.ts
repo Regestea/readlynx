@@ -35,6 +35,10 @@ export interface TranslationSettings {
   /** EPUB extraction sent to the AI ("markdown" = converted, "html" =
    *  the chapter's cleaned original tags); PDF books ignore it. */
   epubExtraction: EpubExtractionMode;
+  /** PDF AI-vision only: detect figures/diagrams that cannot be translated
+   *  and splice them into the translation as images (with the section
+   *  prompts). Off = plain page-image translation, no figure handling. */
+  pdfAutoFigures: boolean;
 }
 
 export const DEFAULT_TRANSLATION_SETTINGS: TranslationSettings = {
@@ -44,6 +48,7 @@ export const DEFAULT_TRANSLATION_SETTINGS: TranslationSettings = {
   customPromptId: "",
   pdfMethod: "ocr",
   epubExtraction: "markdown",
+  pdfAutoFigures: true,
 };
 
 /** Identifies the unit of content currently on screen: `pdf:<page>` or

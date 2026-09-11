@@ -7,6 +7,8 @@ import type { PDFDocumentLoadingTask, PDFDocumentProxy, PDFPageProxy, RenderTask
 import type { PDFLinkService } from "pdfjs-dist/types/web/pdf_link_service";
 import { OcrPanel } from "./OcrPanel";
 import { AiSelectionBubble } from "../AiSelectionBubble/AiSelectionBubble";
+import { annotateRegions, extractPdfRegions } from "../../features/reading/translation/pdfRegions";
+import type { PdfRegionSnapshot } from "../../features/reading/translation/pdfRegions";
 import { usePdfTheme } from "./theme/PdfThemeContext";
 import { applyPdfTheme } from "./theme/PdfThemeManager";
 import { PdfThemeProvider } from "./theme/PdfThemeProvider";
@@ -31,6 +33,10 @@ export interface PdfViewerHandle {
   /** PNG data URL of an arbitrary page rendered offscreen at a fixed
    *  resolution, or null when the document or page is unavailable. */
   getPageImage(page: number): Promise<string | null>;
+  /** Clean + AI-annotated (red numbered section boxes) renders of a page
+   *  with the locally detected sections. Null when unavailable; regions may
+   *  be empty when detection fails — callers must fall back to `getPageImage`. */
+  getRegionPageImage(page: number): Promise<PdfRegionSnapshot | null>;
   /** Jumps to a page (clamped to the document bounds). */
   goToPage(page: number): void;
   /** Total page count of the loaded document (0 before it loads). */
@@ -194,6 +200,35 @@ function PdfViewerInner({
         if (!snapCtx) return null;
         await pageProxy.render({ canvas: snap, viewport }).promise;
         return snap.toDataURL("image/png");
+      } catch {
+        return null;
+      }
+    },
+    getRegionPageImage: async (page: number) => {
+      const pdf = docRef.current;
+      if (!pdf) return null;
+      try {
+        const pageProxy = await pdf.getPage(page);
+        const base = pageProxy.getViewport({ scale: 1 });
+        const snapshotScale = 1240 / base.width;
+        const viewport = pageProxy.getViewport({ scale: snapshotScale });
+        const snap = document.createElement("canvas");
+        snap.width = Math.floor(viewport.width);
+        snap.height = Math.floor(viewport.height);
+        const snapCtx = snap.getContext("2d");
+        if (!snapCtx) return null;
+        await pageProxy.render({ canvas: snap, viewport }).promise;
+        // Section boxes are detected locally (pdf.js text + image operators)
+        // — the model only returns integer ids, never coordinates.
+        const regions = await extractPdfRegions(pageProxy, viewport).catch(() => []);
+        const annotated = annotateRegions(snap, regions);
+        return {
+          clean: snap.toDataURL("image/png"),
+          annotated: annotated.toDataURL("image/png"),
+          regions,
+          width: snap.width,
+          height: snap.height,
+        };
       } catch {
         return null;
       }

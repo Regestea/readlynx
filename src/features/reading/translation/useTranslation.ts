@@ -14,7 +14,21 @@ import {
 import type { EpubImageRef } from "../../../shared/document/epubToMarkdown.ts";
 import { getDefaultAiModel, resolveProviderBaseUrl } from "../../../infrastructure/ai/modelResolver";
 import { chunkChapter } from "./epubChunker.ts";
-import { buildTranslationSystemPrompt, buildTranslationUserPrompt } from "./prompt.ts";
+import {
+  buildLanguageRepairPrompts,
+  buildTranslationSystemPrompt,
+  buildTranslationUserPrompt,
+} from "./prompt.ts";
+import { languageLabel } from "./languages.ts";
+import { passesLanguageGate } from "./languageGate.ts";
+import {
+  REGION_TOKEN_RE,
+  collectRegionTokenIds,
+  cropRegionToDataUrl,
+  pdfRegionPageKey,
+  replaceRegionTokens,
+} from "./pdfRegions.ts";
+import type { PdfRegionSnapshot } from "./pdfRegions.ts";
 import {
   DEFAULT_TRANSLATION_SETTINGS,
   docTypeFor,
@@ -48,6 +62,70 @@ function chunkKeyFor(chapterKey: string, index: number): string {
 /** Thrown inside the pipeline when the user cancels a running translation;
  *  caught by the callers and surfaced as a status message, not an error. */
 class TranslationCancelledError extends Error {}
+
+/**
+ * Resolves `[REGION-n]` tokens in vision output into persisted figure images.
+ * Crops are cut from the clean page image with the locally detected boxes
+ * (the model only supplies ids), saved to the FileStore like EPUB images,
+ * and spliced back as Markdown. Figures the model never referenced are
+ * appended in reading order so no figure is silently lost. Returns the
+ * markdown with tokens replaced (tokens without a successful crop are
+ * dropped, keeping the text).
+ */
+async function resolvePdfRegionCrops(
+  bookId: string,
+  page: number,
+  snapshot: PdfRegionSnapshot,
+  markdown: string,
+): Promise<string> {
+  const byId = new Map(snapshot.regions.map((region) => [region.id, region]));
+  const referenced = collectRegionTokenIds(markdown).filter((id) => byId.has(id));
+  const missing = snapshot.regions
+    .filter(
+      (region) =>
+        (region.label === "figure" || region.label === "table") && !referenced.includes(region.id),
+    )
+    .map((region) => region.id);
+  const ordered = [...referenced, ...missing];
+  if (ordered.length === 0) return markdown;
+
+  const chapterKey = pdfRegionPageKey(page);
+  const crops = await Promise.all(
+    ordered.map((id) => {
+      const region = byId.get(id);
+      if (!region) return Promise.resolve(null);
+      return cropRegionToDataUrl(snapshot.clean, region.bbox, snapshot.width, snapshot.height);
+    }),
+  );
+  const keptIds: number[] = [];
+  const keptUrls: string[] = [];
+  crops.forEach((dataUrl, index) => {
+    if (dataUrl) {
+      keptIds.push(ordered[index]);
+      keptUrls.push(dataUrl);
+    }
+  });
+  if (keptIds.length === 0) return markdown.replace(REGION_TOKEN_RE, "");
+
+  const protocolUrls =
+    (await window.readlynx?.translationImages?.save({
+      bookId,
+      chapterKey,
+      dataUrls: keptUrls,
+    })) ?? keptUrls;
+  const markdownById = new Map<number, string>();
+  keptIds.forEach((id, index) => {
+    markdownById.set(id, `![figure ${id}](${protocolUrls[index] ?? keptUrls[index]})`);
+  });
+  // Referenced tokens are replaced in place; unreferenced figures (cropped
+  // above so they are persisted) are appended in reading order.
+  let out = replaceRegionTokens(markdown, markdownById);
+  for (const id of missing) {
+    const fragment = markdownById.get(id);
+    if (fragment) out += `\n\n${fragment}`;
+  }
+  return out;
+}
 
 /**
  * Orchestrates reading-mode translation: cached per-page / per-chapter
@@ -172,6 +250,7 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef, epubReady 
             customPromptId: state.customPromptId ?? "",
             pdfMethod: state.pdfMethod === "vision" ? "vision" : "ocr",
             epubExtraction: state.epubExtraction === "html" ? "html" : "markdown",
+            pdfAutoFigures: (state.pdfAutoFigures ?? 1) !== 0,
           });
         }
         if (modelRows.length === 0) {
@@ -488,6 +567,32 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef, epubReady 
     [orderedModelCandidates],
   );
 
+  /** Safety net for vision output: when the model is busy placing image
+   *  tokens it sometimes answers in the source language. The gate detects
+   *  that (script ratio) and one text-only repair pass rewrites the output
+   *  in the target language — tokens and code survive verbatim. */
+  const ensureTargetLanguage = useCallback(
+    async (markdown: string): Promise<string> => {
+      const targetLang = settingsRef.current.targetLang;
+      if (passesLanguageGate(markdown, targetLang)) return markdown;
+      if (cancelRequestedRef.current) {
+        throw new TranslationCancelledError("Translation cancelled.");
+      }
+      setStatus(
+        `Output came back in the wrong language — rewriting in ${languageLabel(targetLang)}…`,
+      );
+      const repair = buildLanguageRepairPrompts(targetLang);
+      const fixed = await chatWithFailover({
+        messages: [
+          { role: "system", content: repair.system },
+          { role: "user", content: repair.user(markdown) },
+        ],
+      });
+      return fixed.trim() ? fixed : markdown;
+    },
+    [chatWithFailover],
+  );
+
   /** Loads cached rows for a unit and exposes them (used by the panel). */
   const refreshModels = useCallback(async () => {
     const info = await window.readlynx?.ocr.getInfo();
@@ -617,8 +722,13 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef, epubReady 
       }
       // Always remove old rows for this page before saving the fresh result
       // so that repeated translations (single-page, range, or regenerate)
-      // never leave duplicate rows in the database.
+      // never leave duplicate rows in the database. Region crops from a
+      // previous vision run are removed too so stale figures never linger.
       await db.deleteTranslations({ bookId, pageNumber: page });
+      await window.readlynx?.translationImages?.delete({
+        bookId,
+        chapterKeyPrefix: pdfRegionPageKey(page),
+      });
       let result: string;
       if (method === "ocr") {
         const ocrResult = await window.readlynx?.ocr.recognize({
@@ -643,19 +753,60 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef, epubReady 
         if (cancelRequestedRef.current) {
           throw new TranslationCancelledError("Translation cancelled.");
         }
-        result = await chatWithFailover({
-          messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: buildTranslationUserPrompt(promptContext, "") },
-          ],
-          images: [image],
-        });
+        // Numbered-section vision (only when "Auto include required
+        // pictures" is on): sections are detected locally and burned into
+        // the image as red numbered boxes; the model answers with [REGION-n]
+        // ids (never coordinates) and crops are cut from the clean render.
+        // Falls back to the plain single-image request when the toggle is
+        // off or detection yields no sections / no visual sections.
+        const autoFigures = currentSettings.pdfAutoFigures;
+        const snapshot = autoFigures
+          ? await (pdfRef.current?.getRegionPageImage
+              ? pdfRef.current.getRegionPageImage(page)
+              : Promise.resolve(null)
+            ).catch(() => null)
+          : null;
+        const hasVisuals =
+          !!snapshot &&
+          snapshot.regions.some(
+            (region) => region.label === "figure" || region.label === "table",
+          );
+        if (!snapshot || snapshot.regions.length === 0 || !hasVisuals) {
+          const raw = await chatWithFailover({
+            messages: [
+              { role: "system", content: systemPrompt },
+              { role: "user", content: buildTranslationUserPrompt(promptContext, "") },
+            ],
+            images: [image],
+          });
+          result = await ensureTargetLanguage(raw);
+        } else {
+          const regionPromptContext = {
+            ...promptContext,
+            regions: snapshot.regions.map((region) => ({ id: region.id, label: region.label })),
+          };
+          const raw = await chatWithFailover({
+            messages: [
+              {
+                role: "system",
+                content: buildTranslationSystemPrompt(regionPromptContext),
+              },
+              { role: "user", content: buildTranslationUserPrompt(regionPromptContext, "") },
+            ],
+            images: [snapshot.annotated],
+          });
+          if (cancelRequestedRef.current) {
+            throw new TranslationCancelledError("Translation cancelled.");
+          }
+          const repaired = await ensureTargetLanguage(raw);
+          result = await resolvePdfRegionCrops(bookId, page, snapshot, repaired);
+        }
       }
       const normalized = normalizeTranslatedMarkdown(result);
       await saveRow({ method, pageNumber: page, chunkKey: "", markdown: normalized });
       return normalized;
     },
-    [bookId, pdfRef, saveRow, chatWithFailover],
+    [bookId, pdfRef, saveRow, chatWithFailover, ensureTargetLanguage],
   );
 
   /** Translates a contiguous range of PDF pages in ascending order, applying

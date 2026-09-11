@@ -49,6 +49,7 @@ CREATE TABLE IF NOT EXISTS ReadingState (
   customPromptId TEXT NOT NULL DEFAULT '',
   pdfMethod      TEXT NOT NULL DEFAULT 'ocr',
   epubExtraction TEXT NOT NULL DEFAULT 'markdown',
+  pdfAutoFigures INTEGER NOT NULL DEFAULT 1,
   modelIds       TEXT NOT NULL DEFAULT '[]',
   totalPages     INTEGER NOT NULL DEFAULT 0,
   totalChapters  INTEGER NOT NULL DEFAULT 0,
@@ -170,6 +171,7 @@ export function applySchema(db: Database.Database): void {
     ensureReadingStatePdfMethodColumn(db);
     ensureReadingStateModelIdsColumn(db);
     ensureReadingStateEpubExtractionColumn(db);
+    ensureReadingStatePdfAutoFiguresColumn(db);
     ensureReadingStateProgressColumns(db);
     ensureCascadeForeignKeys(db);
     ensureReadingStateV2(db);
@@ -271,6 +273,7 @@ function ensureCascadeForeignKeys(db: Database.Database): void {
         customPromptId TEXT NOT NULL DEFAULT '',
         pdfMethod      TEXT NOT NULL DEFAULT 'ocr',
         epubExtraction TEXT NOT NULL DEFAULT 'markdown',
+        pdfAutoFigures INTEGER NOT NULL DEFAULT 1,
         modelIds       TEXT NOT NULL DEFAULT '[]',
         totalPages     INTEGER NOT NULL DEFAULT 0,
         totalChapters  INTEGER NOT NULL DEFAULT 0,
@@ -282,11 +285,11 @@ function ensureCascadeForeignKeys(db: Database.Database): void {
       );
       INSERT INTO ReadingState_new (
         bookId, currentPage, ocrLangs, sourceLang, targetLang,
-        modelId, customPromptId, pdfMethod, epubExtraction, modelIds, maxProgress,
+        modelId, customPromptId, pdfMethod, epubExtraction, pdfAutoFigures, modelIds, maxProgress,
         finished, updatedAt
       )
         SELECT bookId, currentPage, ocrLangs, sourceLang, targetLang,
-               modelId, customPromptId, pdfMethod, epubExtraction, modelIds, maxProgress,
+               modelId, customPromptId, pdfMethod, epubExtraction, pdfAutoFigures, modelIds, maxProgress,
                finished, updatedAt
         FROM ReadingState;
       DROP TABLE ReadingState;
@@ -391,6 +394,18 @@ function ensureReadingStateEpubExtractionColumn(db: Database.Database): void {
   db.exec("ALTER TABLE ReadingState ADD COLUMN epubExtraction TEXT NOT NULL DEFAULT 'markdown'");
 }
 
+/** Databases created before the AI-vision figure handling existed lack the
+ *  `pdfAutoFigures` column on `ReadingState` (1 = splice untranslatable
+ *  figures into the translation, 0 = plain page-image translation). Adds it
+ *  defaulting to on (1); existing rows keep the current behavior. Runs
+ *  before the `ReadingState` rebuilds so their data copy carries the column
+ *  over. */
+function ensureReadingStatePdfAutoFiguresColumn(db: Database.Database): void {
+  const columns = db.pragma("table_info(ReadingState)") as Array<{ name: string }>;
+  if (columns.some((entry) => entry.name === "pdfAutoFigures")) return;
+  db.exec("ALTER TABLE ReadingState ADD COLUMN pdfAutoFigures INTEGER NOT NULL DEFAULT 1");
+}
+
 /** Databases created before the v2 `ReadingState` schema carry the removed
  *  `scrollPosition` / `customPrompt` columns and lack `currentChapter` /
  *  `lastOpenedAt`. Rebuilds the table to the final shape; the position and
@@ -414,6 +429,7 @@ function ensureReadingStateV2(db: Database.Database): void {
         customPromptId TEXT NOT NULL DEFAULT '',
         pdfMethod      TEXT NOT NULL DEFAULT 'ocr',
         epubExtraction TEXT NOT NULL DEFAULT 'markdown',
+        pdfAutoFigures INTEGER NOT NULL DEFAULT 1,
         modelIds       TEXT NOT NULL DEFAULT '[]',
         totalPages     INTEGER NOT NULL DEFAULT 0,
         totalChapters  INTEGER NOT NULL DEFAULT 0,
@@ -425,11 +441,11 @@ function ensureReadingStateV2(db: Database.Database): void {
       );
       INSERT INTO ReadingState_new (
         bookId, currentPage, ocrLangs, sourceLang, targetLang,
-        modelId, customPromptId, pdfMethod, epubExtraction, modelIds, maxProgress,
+        modelId, customPromptId, pdfMethod, epubExtraction, pdfAutoFigures, modelIds, maxProgress,
         finished, updatedAt
       )
         SELECT bookId, currentPage, ocrLangs, sourceLang, targetLang,
-               modelId, customPromptId, pdfMethod, epubExtraction, modelIds, maxProgress,
+               modelId, customPromptId, pdfMethod, epubExtraction, pdfAutoFigures, modelIds, maxProgress,
                finished, updatedAt
         FROM ReadingState;
       DROP TABLE ReadingState;
@@ -475,6 +491,7 @@ function ensureReadingStateDropsReadingSeconds(db: Database.Database): void {
         customPromptId TEXT NOT NULL DEFAULT '',
         pdfMethod      TEXT NOT NULL DEFAULT 'ocr',
         epubExtraction TEXT NOT NULL DEFAULT 'markdown',
+        pdfAutoFigures INTEGER NOT NULL DEFAULT 1,
         modelIds       TEXT NOT NULL DEFAULT '[]',
         totalPages     INTEGER NOT NULL DEFAULT 0,
         totalChapters  INTEGER NOT NULL DEFAULT 0,
@@ -486,12 +503,12 @@ function ensureReadingStateDropsReadingSeconds(db: Database.Database): void {
       );
       INSERT INTO ReadingState_new (
         bookId, currentPage, ocrLangs, sourceLang, targetLang,
-        modelId, customPromptId, pdfMethod, epubExtraction, modelIds, totalPages,
+        modelId, customPromptId, pdfMethod, epubExtraction, pdfAutoFigures, modelIds, totalPages,
         totalChapters, progressPercent, maxProgress, finished,
         lastOpenedAt, updatedAt
       )
         SELECT bookId, currentPage, ocrLangs, sourceLang, targetLang,
-               modelId, customPromptId, pdfMethod, epubExtraction, modelIds, totalPages,
+               modelId, customPromptId, pdfMethod, epubExtraction, pdfAutoFigures, modelIds, totalPages,
                totalChapters, progressPercent, maxProgress, finished,
                lastOpenedAt, updatedAt
         FROM ReadingState;
