@@ -194,11 +194,7 @@ export function FirstPageCover({
                   <div
                     className={`${styles.coverPlaceholder} ${COVER_CLASSES[paletteCover]}`}
                     aria-hidden="true"
-                  >
-                    <span className={styles.coverPlaceholderTitle}>
-                      {title?.trim() || "Untitled"}
-                    </span>
-                  </div>
+                  />
                 )}
                 {coverImage && (
                   <img src={coverImage} alt="Edited cover" className={styles.coverPreview} />

@@ -60,18 +60,6 @@
   pointer-events: none;
 }
 
-.coverPlaceholderTitle {
-  position: relative;
-  z-index: 1;
-  line-clamp: 3;
-  overflow: hidden;
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-semibold);
-  line-height: 1.3;
-  color: var(--color-on-cover);
-  text-shadow: 0 1px 4px rgb(0 0 0 / 25%);
-}
-
 .coverForest {
   background: var(--cover-forest);
 }
@@ -90,11 +78,6 @@
 
 .coverSand {
   background: var(--cover-sand);
-}
-
-.coverSand .coverPlaceholderTitle {
-  color: var(--color-dark);
-  text-shadow: none;
 }
 
 .coverMoon {
