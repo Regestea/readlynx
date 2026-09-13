@@ -99,7 +99,6 @@ export function ReadingGoalModal({
                 />
               );
             })}
-            <circle className={styles.cap} cx="110" cy="110" r="6" />
           </svg>
           <div className={styles.readout}>
             <strong className={styles.readoutTime}>{formatGoal(minutes)}</strong>

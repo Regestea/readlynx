@@ -46,10 +46,6 @@
   opacity: 0.55;
 }
 
-.cap {
-  fill: var(--color-primary);
-}
-
 .readout {
   position: absolute;
   display: flex;
