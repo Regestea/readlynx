@@ -9,7 +9,10 @@
  *   `MAX_CHUNK` — small chapters become a single request.
  * - A single oversized section is split at paragraph boundaries (never in
  *   the middle of a paragraph, list, table or code block), with a hard
- *   fallback that truncates pathological single paragraphs.
+ *   fallback that truncates pathological single paragraphs. A buffer below
+ *   `MIN_CHUNK` (e.g. a lone heading line) is never split off on its own.
+ * - A final pass glues any leftover tiny fragment into a neighbor, so no AI
+ *   request is wasted on a context-free sliver.
  *
  * The output depends only on the chapter content, so chunk boundaries (and
  * therefore cache keys) are stable across runs.
@@ -64,7 +67,10 @@ function toSections(markdown: string): Section[] {
   return sections;
 }
 
-/** Splits an oversized section at paragraph boundaries (blank lines). */
+/** Splits an oversized section at paragraph boundaries (blank lines). A
+ *  buffer below `MIN_CHUNK` (e.g. a lone heading line) is never split off on
+ *  its own — it stays glued to the following paragraphs so no AI request is
+ *  wasted on a tiny fragment without context. */
 function splitSectionByParagraphs(section: Section): string[] {
   const paragraphs = section.content
     .split(/\n\s*\n/)
@@ -73,7 +79,7 @@ function splitSectionByParagraphs(section: Section): string[] {
   const parts: string[] = [];
   let buffer = "";
   for (const paragraph of paragraphs) {
-    if (buffer && buffer.length + paragraph.length + 2 > MAX_CHUNK) {
+    if (buffer && buffer.length + paragraph.length + 2 > MAX_CHUNK && buffer.length >= MIN_CHUNK) {
       parts.push(buffer);
       buffer = paragraph;
     } else {
@@ -118,10 +124,33 @@ function mergeSections(sections: Section[]): string[] {
   return chunks;
 }
 
+/** Merges tiny fragments (below `MIN_CHUNK`) into a neighbor so no AI request
+ *  is wasted on a context-free sliver (a lone heading, a short tail section,
+ *  …). A merge only happens when the combination still fits comfortably
+ *  (under `HARD_MAX`); pathological leftovers stay separate. Merging is
+ *  backward (into the previous chunk), except a tiny leading chunk which
+ *  naturally glues forward into whatever follows it. */
+function mergeTinyChunks(chunks: string[]): string[] {
+  const out: string[] = [];
+  for (const chunk of chunks) {
+    const prev = out[out.length - 1];
+    if (
+      prev !== undefined &&
+      (prev.length < MIN_CHUNK || chunk.length < MIN_CHUNK) &&
+      prev.length + chunk.length + 2 <= HARD_MAX
+    ) {
+      out[out.length - 1] = `${prev}\n\n${chunk}`;
+    } else {
+      out.push(chunk);
+    }
+  }
+  return out;
+}
+
 /** Chunks a chapter into AI-request-sized pieces (see module comment). */
 export function chunkChapter(markdown: string): string[] {
   const trimmed = markdown.trim();
   if (!trimmed) return [];
   if (trimmed.length <= MAX_CHUNK) return [trimmed];
-  return mergeSections(toSections(trimmed));
+  return mergeTinyChunks(mergeSections(toSections(trimmed)));
 }
