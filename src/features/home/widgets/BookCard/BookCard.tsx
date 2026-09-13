@@ -45,6 +45,18 @@ function handleActionKeyDown(event: KeyboardEvent, onAction: () => void) {
   }
 }
 
+/** Titles longer than this get a hover tooltip with the full name (shorter
+ *  titles always fit, so no tooltip is needed for them). Roughly matches the
+ *  visible width of a two-line truncated shelf title. */
+const TITLE_TOOLTIP_THRESHOLD = 40;
+
+/** Full-title tooltip props for a truncated title — absent for short titles
+ *  that always fit. The visible text keeps the complete title, so screen
+ *  readers are unaffected and the tooltip is purely visual. */
+function fullTitleProps(title: string): { "data-full-title"?: string } {
+  return title.length > TITLE_TOOLTIP_THRESHOLD ? { "data-full-title": title } : {};
+}
+
 export function BookCard({
   book,
   layout = "vertical",
@@ -117,10 +129,8 @@ export function BookCard({
               decoding="async"
             />
           )}
-          <span className={styles.coverTitle}>{book.title}</span>
-          <span className={styles.coverAuthor}>{book.author}</span>
         </div>
-        <div className={styles.hInfo}>
+        <div className={styles.hInfo} {...fullTitleProps(book.title)}>
           <h3 className={styles.hTitle}>{book.title}</h3>
           <p className={styles.hAuthor}>{book.author}</p>
           {typeof book.progress === "number" && (
@@ -152,12 +162,10 @@ export function BookCard({
           />
         )}
         {book.kind && <span className={styles.badge}>{BADGE_LABELS[book.kind]}</span>}
-        <span className={styles.coverTitle}>{book.title}</span>
-        <span className={styles.coverAuthor}>{book.author}</span>
       </div>
       {editButton}
       {deleteButton}
-      <div className={styles.meta}>
+      <div className={styles.meta} {...fullTitleProps(book.title)}>
         <h3 className={styles.metaTitle}>{book.title}</h3>
         <p className={styles.metaAuthor}>{book.author}</p>
       </div>

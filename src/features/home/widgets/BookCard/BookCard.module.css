@@ -40,25 +40,6 @@
   border-radius: inherit;
 }
 
-.coverTitle {
-  position: relative;
-  z-index: 1;
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-semibold);
-  line-height: 1.3;
-  color: var(--color-on-cover);
-  text-shadow: 0 1px 4px rgb(0 0 0 / 25%);
-}
-
-.coverAuthor {
-  position: relative;
-  z-index: 1;
-  margin-top: 2px;
-  font-size: 11px;
-  color: var(--color-on-cover);
-  opacity: 0.75;
-}
-
 .badge {
   position: absolute;
   top: 8px;
@@ -148,12 +129,6 @@
   background: var(--cover-sand);
 }
 
-.coverSand .coverTitle,
-.coverSand .coverAuthor {
-  color: var(--color-dark);
-  text-shadow: none;
-}
-
 .coverMoon {
   background: var(--cover-moon);
 }
@@ -174,6 +149,7 @@
 }
 
 .meta {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -185,8 +161,39 @@
   font-weight: var(--font-weight-semibold);
   line-height: 1.35;
   color: var(--color-text);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   line-clamp: 2;
   overflow: hidden;
+}
+
+/* Full-title tooltip for truncated titles (only long titles carry the
+ * `data-full-title` attribute, placed on the info wrapper — never on the
+ * title itself, whose `overflow: hidden` would clip the box). Shows above
+ * the title on hover, and on keyboard focus within the card since keyboard
+ * users cannot hover. */
+.meta[data-full-title]:hover::after,
+.hInfo[data-full-title]:hover::after,
+.vertical:focus-within .meta[data-full-title]::after,
+.horizontal:focus-within .hInfo[data-full-title]::after {
+  content: attr(data-full-title);
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  z-index: 10;
+  max-width: 240px;
+  padding: 6px 10px;
+  border-radius: var(--radius-small);
+  background: var(--color-text);
+  color: var(--color-page);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.4;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  box-shadow: var(--shadow-md);
+  pointer-events: none;
 }
 
 .metaAuthor {
@@ -222,15 +229,8 @@
   box-shadow: var(--shadow-sm);
 }
 
-.coverSmall .coverTitle {
-  font-size: 10px;
-}
-
-.coverSmall .coverAuthor {
-  font-size: 8px;
-}
-
 .hInfo {
+  position: relative;
   flex: 1;
   min-width: 0;
   display: flex;
