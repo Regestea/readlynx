@@ -7,6 +7,7 @@ import type {
 import mermaid from "mermaid";
 import { RotateCcw, ZoomIn, ZoomOut } from "lucide-react";
 import { useTheme } from "../../app/providers/theme/ThemeContext";
+import type { MarkdownBlockTheme } from "../../infrastructure/db/entities/ReaderSettings.ts";
 import styles from "./MermaidDiagram.module.css";
 
 const MIN_SCALE = 0.1;
@@ -189,10 +190,15 @@ function fixLabelContrast(host: HTMLElement): void {
 
 interface MermaidDiagramProps {
   chart: string;
+  /** Fixed diagram theme; null/undefined = follow the app theme. */
+  themeOverride?: MarkdownBlockTheme | null;
+  /** Fixed card background; null/undefined = follow the theme card. */
+  background?: string | null;
 }
 
-export function MermaidDiagram({ chart }: MermaidDiagramProps) {
+export function MermaidDiagram({ chart, themeOverride, background }: MermaidDiagramProps) {
   const { theme } = useTheme();
+  const effectiveTheme = themeOverride ?? theme;
   const diagramRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const naturalSizeRef = useRef<{ width: number; height: number } | null>(null);
@@ -233,11 +239,11 @@ export function MermaidDiagram({ chart }: MermaidDiagramProps) {
     updateTransform(nextScale, { x: 0, y: 0 });
   }, []);
 
-  /** Renders the chart into the container; re-runs when the chart or the app
-   *  theme changes because mermaid bakes the colors into the svg at render
-   *  time. */
+  /** Renders the chart into the container; re-runs when the chart or the
+   *  effective theme changes because mermaid bakes the colors into the svg
+   *  at render time. */
   useEffect(() => {
-    const config = theme === "dark" ? MERMAID_DARK_THEME : MERMAID_LIGHT_THEME;
+    const config = effectiveTheme === "dark" ? MERMAID_DARK_THEME : MERMAID_LIGHT_THEME;
     mermaid.initialize({ startOnLoad: false, ...config });
     let cancelled = false;
     mermaid
@@ -272,7 +278,7 @@ export function MermaidDiagram({ chart }: MermaidDiagramProps) {
     return () => {
       cancelled = true;
     };
-  }, [chart, theme, fitToContainer]);
+  }, [chart, effectiveTheme, fitToContainer]);
 
   const resetTransform = () => updateTransform(fitScaleRef.current, { x: 0, y: 0 });
 
@@ -365,6 +371,7 @@ export function MermaidDiagram({ chart }: MermaidDiagramProps) {
     <div
       ref={containerRef}
       className={containerClasses}
+      style={background ? { backgroundColor: background } : undefined}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={stopDragging}

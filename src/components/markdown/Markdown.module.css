@@ -82,6 +82,35 @@
   font-size: 0.9em;
 }
 
+/* Fenced or indented code blocks without a language: rendered as a plain
+ * block (the syntax-highlighted `Code` component needs a language), so they
+ * never collapse into the inline pill style above. */
+.blockCode {
+  margin: 0;
+  padding: var(--space-4) var(--space-5);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-medium);
+  background: var(--color-glass);
+  overflow-x: auto;
+  font-family:
+    ui-monospace,
+    "Cascadia Mono",
+    "SF Mono",
+    Consolas,
+    Menlo,
+    Vazirmatn,
+    "Noto Sans Arabic",
+    "Segoe UI",
+    monospace;
+  font-size: 0.9em;
+  line-height: 1.6;
+  white-space: pre;
+}
+
+.blockCode code {
+  font-family: inherit;
+}
+
 .blockquote {
   margin: var(--space-4) 0;
   padding: var(--space-3) var(--space-5);
@@ -337,4 +366,138 @@ ol.list ol ol {
   position: relative;
   display: flex;
   align-items: center;
+}
+
+/* ---------- Code & diagram appearance panel (toolbar) ---------- */
+
+.blocksPanel {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: var(--z-popover);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 240px;
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-card);
+  box-shadow: var(--shadow-md);
+}
+
+.blocksTitle {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+}
+
+.blockGroup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.blockLabel {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+}
+
+.segment {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 10px;
+  background: var(--color-glass);
+  border: 1px solid var(--color-border);
+}
+
+.segmentButton {
+  flex: 1;
+  padding: 5px 8px;
+  border-radius: 8px;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-muted);
+  transition:
+    background-color var(--transition-base) ease,
+    color var(--transition-base) ease;
+}
+
+.segmentButton:hover {
+  color: var(--color-primary);
+}
+
+.segmentActive,
+.segmentActive:hover {
+  background: var(--color-active);
+  color: var(--color-primary);
+}
+
+.blockColorRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.blockColorInput {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid rgb(0 0 0 / 25%);
+  border-radius: 50%;
+  background: none;
+  cursor: pointer;
+}
+
+.blockColorInput::-webkit-color-swatch-wrapper {
+  padding: 2px;
+}
+
+.blockColorInput::-webkit-color-swatch {
+  border: none;
+  border-radius: 50%;
+}
+
+.blockColorInput::-moz-color-swatch {
+  border: none;
+  border-radius: 50%;
+}
+
+.blockColorValue {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.blockFollow {
+  padding: 4px 10px;
+  border-radius: 8px;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-muted);
+}
+
+.blockFollow:hover {
+  background: var(--color-hover);
+  color: var(--color-primary);
+}
+
+.blocksReset {
+  align-self: flex-end;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-muted);
+}
+
+.blocksReset:hover {
+  background: var(--color-hover);
+  color: var(--color-primary);
 }

@@ -2,6 +2,7 @@ import type { CSSProperties } from "react";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark, oneLight } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { useTheme } from "../../../app/providers/theme/ThemeContext";
+import type { MarkdownBlockTheme } from "../../../infrastructure/db/entities/ReaderSettings.ts";
 import styles from "./Code.module.css";
 
 interface CodeProps {
@@ -9,6 +10,10 @@ interface CodeProps {
   language?: string;
   showLineNumbers?: boolean;
   className?: string;
+  /** Fixed syntax theme; null/undefined = follow the app theme. */
+  themeOverride?: MarkdownBlockTheme | null;
+  /** Fixed block background; null/undefined = follow the theme card. */
+  background?: string | null;
 }
 
 export function Code({
@@ -16,9 +21,12 @@ export function Code({
   language = "typescript",
   showLineNumbers = false,
   className = "",
+  themeOverride,
+  background,
 }: CodeProps) {
   const { theme } = useTheme();
-  const prismStyle = theme === "dark" ? oneDark : oneLight;
+  const effective = themeOverride ?? theme;
+  const prismStyle = effective === "dark" ? oneDark : oneLight;
   const classes = [styles.host, className].filter(Boolean).join(" ");
 
   const customStyle: CSSProperties = {
@@ -29,8 +37,12 @@ export function Code({
     lineHeight: 1.6,
   };
 
+  const hostStyle: CSSProperties | undefined = background
+    ? { backgroundColor: background }
+    : undefined;
+
   return (
-    <div className={classes}>
+    <div className={classes} style={hostStyle}>
       <SyntaxHighlighter
         language={language}
         style={prismStyle}

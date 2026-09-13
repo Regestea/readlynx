@@ -2,7 +2,7 @@ import { isValidElement, useCallback, useEffect, useMemo, useRef, useState } fro
 import type { CSSProperties, ReactNode, Ref } from "react";
 import ReactMarkdown from "react-markdown";
 import type { Components } from "react-markdown";
-import { Maximize2, Minus, Minimize2, Palette, Plus } from "lucide-react";
+import { Braces, Maximize2, Minus, Minimize2, Palette, Plus } from "lucide-react";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
@@ -17,10 +17,148 @@ import { FontFamilySelect } from "../FontFamilySelect/FontFamilySelect";
 import { ColorPickerPanel } from "../ui/ColorPickerPanel/ColorPickerPanel";
 import { AiSelectionBubble } from "../AiSelectionBubble/AiSelectionBubble";
 import { useReaderSettings } from "../../hooks/useReaderSettings.ts";
+import type { MarkdownBlockTheme } from "../../hooks/useReaderSettings.ts";
 import { getSelectionEndRect } from "../../shared/selection";
 import { MermaidDiagram } from "./MermaidDiagram";
 import { safeUrlTransform } from "./safeUrl";
 import styles from "./Markdown.module.css";
+
+interface BlockAppearance {
+  codeTheme: MarkdownBlockTheme | null;
+  diagramTheme: MarkdownBlockTheme | null;
+  codeBackground: string | null;
+  diagramBackground: string | null;
+}
+
+/** Builds the react-markdown component map with code/diagram renderers bound
+ *  to the effective block appearance. Split out from `baseComponents` so a
+ *  code/diagram theme change rebuilds only these two renderers — the rest of
+ *  the map (headings, lists, tables, …) stays shared. */
+function createBlockComponents(appearance: BlockAppearance): Pick<Components, "code" | "pre"> {
+  const { codeTheme, diagramTheme, codeBackground, diagramBackground } = appearance;
+  return {
+    code: ({ className, children }) => {
+      const match = /language-(\w+)/.exec(className ?? "");
+      if (match) {
+        const language = match[1].toLowerCase();
+        if (language === "mermaid") {
+          return (
+            <MermaidDiagram
+              chart={textContent(children).trim()}
+              themeOverride={diagramTheme}
+              background={diagramBackground}
+            />
+          );
+        }
+        return (
+          <Code
+            code={textContent(children)}
+            language={match[1]}
+            themeOverride={codeTheme}
+            background={codeBackground}
+          />
+        );
+      }
+      return <code dir="ltr" className={styles.inlineCode}>{children}</code>;
+    },
+    pre: ({ children, node }) => {
+      const root = toMdNode(node);
+      const kids = (root?.children ?? []).filter(
+        (child) => child.type !== "text" || (child.value ?? "").trim(),
+      );
+      if (kids.length === 1 && kids[0]?.tagName === "code") {
+        const codeEl = kids[0];
+        const cls = codeEl.properties?.className;
+        const cn = Array.isArray(cls) ? cls.join(" ") : String(cls ?? "");
+        if (!/language-(\w+)/.test(cn)) {
+          const text = (codeEl.children ?? []).map((child) => mdText(child)).join("");
+          return (
+            <pre
+              className={styles.blockCode}
+              style={codeBackground ? { backgroundColor: codeBackground } : undefined}
+            >
+              <code>{text}</code>
+            </pre>
+          );
+        }
+      }
+      return <>{children}</>;
+    },
+  };
+}
+
+/** Segmented Follow/Light/Dark picker shared by the toolbar blocks panel.
+ *  `null` means "follow the app theme". */
+function BlockThemeSegment({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: MarkdownBlockTheme | null;
+  onChange: (next: MarkdownBlockTheme | null) => void;
+}) {
+  const options: Array<{ id: MarkdownBlockTheme | null; text: string }> = [
+    { id: null, text: "Follow" },
+    { id: "light", text: "Light" },
+    { id: "dark", text: "Dark" },
+  ];
+  return (
+    <div className={styles.blockGroup}>
+      <span className={styles.blockLabel}>{label}</span>
+      <div className={styles.segment} role="radiogroup" aria-label={label}>
+        {options.map((option) => {
+          const active = value === option.id;
+          return (
+            <button
+              key={option.text}
+              type="button"
+              role="radio"
+              aria-checked={active}
+              className={`${styles.segmentButton} ${active ? styles.segmentActive : ""}`}
+              onClick={() => onChange(option.id)}
+            >
+              {option.text}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/** Compact background row: custom color input + per-field Follow button. */
+function BlockBackgroundRow({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string | null;
+  onChange: (next: string | null) => void;
+}) {
+  return (
+    <div className={styles.blockGroup}>
+      <span className={styles.blockLabel}>{label}</span>
+      <div className={styles.blockColorRow}>
+        <input
+          type="color"
+          className={styles.blockColorInput}
+          value={value ?? "#ffffff"}
+          onChange={(event) => onChange(event.target.value)}
+          aria-label={`Custom ${label.toLowerCase()}`}
+          title={`Custom ${label.toLowerCase()}`}
+        />
+        <span className={styles.blockColorValue}>{value ?? "Follow theme"}</span>
+        {value !== null && (
+          <button type="button" className={styles.blockFollow} onClick={() => onChange(null)}>
+            Follow
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
 
 const ZOOM_STEP = 10;
 const ZOOM_MIN = 60;
@@ -30,7 +168,7 @@ const ZOOM_MAX = 200;
  *  the plugin-array identity changes, so these must never be recreated on
  *  every render. */
 const REMARK_PLUGINS = [remarkGfm, remarkMath];
-const REHYPE_PLUGINS = [rehypeRaw, rehypeKatex, sanitizeRawHtml];
+const REHYPE_PLUGINS = [markGeneratedElements, rehypeRaw, sanitizeRawHtml, rehypeKatex];
 const REHYPE_PLUGINS_NO_RAW = [rehypeKatex];
 
 /** Attribute names allowed on raw-HTML elements. Anything else — e.g. names
@@ -83,26 +221,59 @@ interface HastNode {
   children?: HastNode[];
 }
 
+/** Marker stamped on every element produced from Markdown syntax (see
+ *  `markGeneratedElements`). Raw-HTML elements parsed later by `rehypeRaw`
+ *  never carry it, so the sanitizer can tell the two apart — even though
+ *  `rehypeRaw` rebuilds node identities (the marker travels as a `data-*`
+ *  attribute through its HTML round-trip). Removed again by the sanitizer,
+ *  so it never reaches React. */
+const GENERATED_MARKER = "dataReadlynxSafe";
+
+/** Runs before `rehypeRaw`: every element in the tree at this point was
+ *  produced from Markdown syntax (raw HTML is still unparsed `raw` nodes),
+ *  so stamp them for the sanitizer below. */
+function markGeneratedElements(): (tree: HastNode) => void {
+  const walk = (node: HastNode | undefined): void => {
+    if (!node || typeof node !== "object") return;
+    if (node.type === "element") {
+      node.properties = { ...(node.properties ?? {}), [GENERATED_MARKER]: "true" };
+    }
+    if (Array.isArray(node.children)) {
+      for (const child of node.children) walk(child);
+    }
+  };
+  return walk;
+}
+
 /** Sanitizes the raw-HTML tree produced by `rehypeRaw`. Translation output
  *  often carries JSX/Tailwind fragments (e.g. `<div className=…>` or
  *  `<div inline-flex flex-col…>`); tags survive but every attribute that is
  *  not in the whitelist is dropped, so no garbage classes/attributes reach
- *  React and no invalid-attribute warnings are raised. */
+ *  React and no invalid-attribute warnings are raised. Elements stamped by
+ *  `markGeneratedElements` keep their attributes (stripping them would kill
+ *  code highlighting, KaTeX styling and task-list checkboxes) — only the
+ *  marker itself is removed, and their children are still visited since raw
+ *  HTML can nest inside them (e.g. a `<span>` inside a heading). */
 function sanitizeRawHtml(): (tree: HastNode) => void {
   const walk = (node: HastNode | undefined): void => {
     if (!node || typeof node !== "object") return;
     if (node.type === "element") {
-      const tag = String(node.tagName ?? "").toLowerCase();
-      if (DROP_RAW_HTML_TAGS.has(tag)) {
-        node.tagName = "span";
-        node.properties = {};
-        node.children = [];
-        return;
-      }
-      if (node.properties) {
-        for (const name of Object.keys(node.properties)) {
-          if (!RAW_HTML_ATTRIBUTES.has(name)) {
-            delete node.properties[name];
+      const props = node.properties;
+      if (props && props[GENERATED_MARKER] !== undefined) {
+        delete props[GENERATED_MARKER];
+      } else {
+        const tag = String(node.tagName ?? "").toLowerCase();
+        if (DROP_RAW_HTML_TAGS.has(tag)) {
+          node.tagName = "span";
+          node.properties = {};
+          node.children = [];
+          return;
+        }
+        if (props) {
+          for (const name of Object.keys(props)) {
+            if (!RAW_HTML_ATTRIBUTES.has(name)) {
+              delete props[name];
+            }
           }
         }
       }
@@ -297,7 +468,7 @@ function escapeHtmlInLine(line: string): string {
 }
 
 /* eslint-disable @typescript-eslint/no-unused-vars */
-const components: Components = {
+const baseComponents: Components = {
   h1: ({ children, node: _node, ...props }) => (
     <h1 className={styles.h1} {...props} {...dirProps(children)}>
       {children}
@@ -422,7 +593,34 @@ const components: Components = {
     }
     return <code dir="ltr" className={styles.inlineCode}>{children}</code>;
   },
-  pre: ({ children }) => <>{children}</>,
+  pre: ({ children, node }) => {
+    // Block code (`pre > code`) without a language carries no `language-*`
+    // class, so the `code` renderer below would mistake it for inline code
+    // and style it as an inline pill. Catch that shape here (a `pre` whose
+    // only meaningful child is a `code` element with no language) and render
+    // it as a plain block instead. Fenced blocks *with* a language keep
+    // flowing through the `code` renderer into the `Code` component
+    // untouched, and raw-HTML `<pre>` elements (any other shape) render as
+    // before.
+    const root = toMdNode(node);
+    const kids = (root?.children ?? []).filter(
+      (child) => child.type !== "text" || (child.value ?? "").trim(),
+    );
+    if (kids.length === 1 && kids[0]?.tagName === "code") {
+      const codeEl = kids[0];
+      const cls = codeEl.properties?.className;
+      const cn = Array.isArray(cls) ? cls.join(" ") : String(cls ?? "");
+      if (!/language-(\w+)/.test(cn)) {
+        const text = (codeEl.children ?? []).map((child) => mdText(child)).join("");
+        return (
+          <pre className={styles.blockCode}>
+            <code>{text}</code>
+          </pre>
+        );
+      }
+    }
+    return <>{children}</>;
+  },
   th: ({ children, node: _node, ...props }) => (
     <th scope="col" className={tableStyles.headCell} {...props} {...dirProps(children)}>
       {children}
@@ -503,13 +701,23 @@ export function Markdown({
     setCustomBg,
     customText,
     setCustomText,
+    codeTheme,
+    setCodeTheme,
+    diagramTheme,
+    setDiagramTheme,
+    codeBackground,
+    setCodeBackground,
+    diagramBackground,
+    setDiagramBackground,
   } = useReaderSettings(settingsBookId, "markdown");
   const [colorOpen, setColorOpen] = useState(false);
+  const [blocksOpen, setBlocksOpen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [spacerHeight, setSpacerHeight] = useState(0);
   const [aiSelection, setAiSelection] = useState<{ x: number; y: number; text: string } | null>(null);
   const hostRef = useRef<HTMLDivElement>(null);
   const colorsWrapRef = useRef<HTMLDivElement>(null);
+  const blocksWrapRef = useRef<HTMLDivElement>(null);
 
   /** Shows the floating "Ask AI" bubble next to the end of a text selection
    *  inside this document — only after the mouse button is released, never
@@ -626,10 +834,38 @@ export function Markdown({
     };
   }, [colorOpen]);
 
+  /** Closes the code/diagram appearance panel on outside click or Escape. */
+  useEffect(() => {
+    if (!blocksOpen) return;
+    const onDown = (event: MouseEvent) => {
+      const wrap = blocksWrapRef.current;
+      if (wrap && !wrap.contains(event.target as Node)) {
+        setBlocksOpen(false);
+      }
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setBlocksOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [blocksOpen]);
+
   const handleResetSettings = () => {
     setCustomBg(null);
     setCustomText(null);
     setColorOpen(false);
+  };
+
+  const handleResetBlocks = () => {
+    setCodeTheme(null);
+    setDiagramTheme(null);
+    setCodeBackground(null);
+    setDiagramBackground(null);
+    setBlocksOpen(false);
   };
 
   const changeZoom = useCallback((delta: number) => {
@@ -648,11 +884,21 @@ export function Markdown({
     [content, rawHtml],
   );
 
+  /** Component map with the effective code/diagram appearance bound in.
+   *  Only rebuilds when those four values change. */
+  const components = useMemo<Components>(
+    () => ({
+      ...baseComponents,
+      ...createBlockComponents({ codeTheme, diagramTheme, codeBackground, diagramBackground }),
+    }),
+    [codeTheme, diagramTheme, codeBackground, diagramBackground],
+  );
+
   /** The rendered document is expensive to build (markdown parse + per-node
-   *  RTL analysis + syntax highlighting), so it only ever rebuilds when the
-   *  source content or the raw-HTML mode changes. Zoom, colors, fonts,
-   *  fullscreen and menu state change just CSS/classes around it — React
-   *  bails out of the subtree because the element reference stays the same. */
+   *  RTL analysis + syntax highlighting), so zoom, page colors, fonts,
+   *  fullscreen and menu state change just CSS/classes around it. Code and
+   *  diagram themes *do* rebuild it because both syntax colors and Mermaid
+   *  colors are baked into the output at render time. */
   const documentElement = useMemo(
     () => (
       <ReactMarkdown
@@ -664,7 +910,7 @@ export function Markdown({
         {body}
       </ReactMarkdown>
     ),
-    [body, rawHtml],
+    [body, rawHtml, components],
   );
 
   /** Theme CSS variables are only needed for the color pickers' current
@@ -772,6 +1018,51 @@ export function Markdown({
                 resetLabel="Reset to theme"
                 onReset={handleResetSettings}
               />
+            </div>
+            <div className={styles.controlsWrap} ref={blocksWrapRef}>
+              <button
+                type="button"
+                className={`${styles.toolButton} ${blocksOpen ? styles.toolButtonActive : ""}`}
+                onClick={() => setBlocksOpen((open) => !open)}
+                aria-label="Code and diagram appearance"
+                title="Code and diagram appearance"
+                aria-haspopup="true"
+                aria-expanded={blocksOpen}
+              >
+                <Braces size={16} strokeWidth={2} aria-hidden="true" />
+              </button>
+              {blocksOpen && (
+                <div
+                  className={styles.blocksPanel}
+                  role="dialog"
+                  aria-label="Code and diagram appearance"
+                >
+                  <span className={styles.blocksTitle}>Code & diagrams</span>
+                  <BlockThemeSegment label="Code theme" value={codeTheme} onChange={setCodeTheme} />
+                  <BlockThemeSegment
+                    label="Diagram theme"
+                    value={diagramTheme}
+                    onChange={setDiagramTheme}
+                  />
+                  <BlockBackgroundRow
+                    label="Code background"
+                    value={codeBackground}
+                    onChange={setCodeBackground}
+                  />
+                  <BlockBackgroundRow
+                    label="Diagram background"
+                    value={diagramBackground}
+                    onChange={setDiagramBackground}
+                  />
+                  <button
+                    type="button"
+                    className={styles.blocksReset}
+                    onClick={handleResetBlocks}
+                  >
+                    Reset to theme
+                  </button>
+                </div>
+              )}
             </div>
             <span className={styles.divider} aria-hidden="true" />
             <button
