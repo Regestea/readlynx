@@ -1,5 +1,5 @@
 import type { CSSProperties, KeyboardEvent } from "react";
-import { Pencil, Trash2 } from "lucide-react";
+import { Pencil, Pin, PinOff, Trash2 } from "lucide-react";
 import type { Book, BookKind } from "../../../../shared/types";
 import { Progress } from "../../../../components/ui/Progress/Progress";
 import styles from "./BookCard.module.css";
@@ -12,6 +12,7 @@ interface BookCardProps {
   onClick?: () => void;
   onDelete?: () => void;
   onEdit?: () => void;
+  onTogglePin?: () => void;
 }
 
 const COVER_STYLES: Record<Book["cover"], string> = {
@@ -65,6 +66,7 @@ export function BookCard({
   onClick,
   onDelete,
   onEdit,
+  onTogglePin,
 }: BookCardProps) {
   const interactiveProps = onClick
     ? {
@@ -105,6 +107,28 @@ export function BookCard({
       title="Edit book"
     >
       <Pencil size={14} strokeWidth={1.8} aria-hidden="true" />
+    </button>
+  ) : null;
+
+  const pinned = book.isPinned === true;
+  const pinButton = onTogglePin ? (
+    <button
+      type="button"
+      className={`${styles.pinButton} ${pinned ? styles.pinActive : ""}`}
+      onClick={(event) => {
+        event.stopPropagation();
+        onTogglePin();
+      }}
+      onKeyDown={(event) => handleActionKeyDown(event, onTogglePin)}
+      aria-label={pinned ? `Unpin ${book.title}` : `Pin ${book.title}`}
+      aria-pressed={pinned}
+      title={pinned ? "Unpin book" : "Pin book"}
+    >
+      {pinned ? (
+        <PinOff size={14} strokeWidth={1.8} aria-hidden="true" />
+      ) : (
+        <Pin size={14} strokeWidth={1.8} aria-hidden="true" />
+      )}
     </button>
   ) : null;
 
@@ -162,7 +186,13 @@ export function BookCard({
           />
         )}
         {book.kind && <span className={styles.badge}>{BADGE_LABELS[book.kind]}</span>}
+        {pinned && (
+          <span className={styles.pinnedBadge} aria-hidden="true">
+            <Pin size={10} strokeWidth={2.5} aria-hidden="true" />
+          </span>
+        )}
       </div>
+      {pinButton}
       {editButton}
       {deleteButton}
       <div className={styles.meta} {...fullTitleProps(book.title)}>

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { BookOpen, Languages, NotebookPen } from "lucide-react";
+import { BookOpen, Languages, NotebookPen, Pin } from "lucide-react";
 import { AddModeCard } from "./widgets/AddModeCard/AddModeCard";
 import { Shelf } from "./widgets/Shelf/Shelf";
 import { CreateBookDialog } from "./components/CreateBookDialog";
@@ -40,6 +40,7 @@ function toBook(row: BookListItem): Book {
     coverImage: coverUrl(row.coverImage),
     coverPath: row.coverImage,
     kind: row.kind,
+    isPinned: row.isPinned === 1,
   };
 }
 
@@ -85,8 +86,38 @@ export function HomePage({ onCreateBook, onOpenBook, onOpenReadingBook }: HomePa
     setBookToEdit(null);
   };
 
+  const handleTogglePin = async (book: Book) => {
+    const nextPinned = !book.isPinned;
+    setBooks((prev) =>
+      prev ? prev.map((entry) => (entry.id === book.id ? { ...entry, isPinned: nextPinned } : entry)) : prev,
+    );
+    try {
+      const updated = await window.readlynx?.db.setBookPinned?.(book.id, nextPinned);
+      if (updated) {
+        const next = toBook(updated);
+        setBooks((prev) => (prev ? prev.map((entry) => (entry.id === next.id ? next : entry)) : prev));
+      }
+    } catch {
+      setBooks((prev) =>
+        prev ? prev.map((entry) => (entry.id === book.id ? { ...entry, isPinned: book.isPinned } : entry)) : prev,
+      );
+    }
+  };
+
   const shelfBooks = books ?? [];
   const shelfLoading = books === null;
+  const pinnedBooks = shelfBooks.filter((book) => book.isPinned);
+  const unpinnedBooks = shelfBooks.filter((book) => !book.isPinned);
+  const showPinnedShelf = shelfLoading || pinnedBooks.length > 0;
+
+  const handleShelfBookClick = (bookId: string) => {
+    const book = books?.find((entry) => entry.id === bookId);
+    if (book?.kind === "reading") {
+      onOpenReadingBook?.(bookId);
+    } else {
+      onOpenBook?.(bookId);
+    }
+  };
 
   return (
     <main className={styles.page} aria-label="Home">
@@ -119,22 +150,32 @@ export function HomePage({ onCreateBook, onOpenBook, onOpenReadingBook }: HomePa
         </div>
       </section>
 
+      {showPinnedShelf && (
+        <Shelf
+          icon={<Pin size={20} strokeWidth={1.8} />}
+          title="Pinned"
+          subtitle="Your pinned books — always at the top"
+          books={pinnedBooks}
+          loading={shelfLoading}
+          onBookClick={handleShelfBookClick}
+          onDeleteBook={setBookToDelete}
+          onEditBook={setBookToEdit}
+          onTogglePin={handleTogglePin}
+          emptyText="No pinned books yet."
+          emptyHint="Pin a book to keep it at the top."
+        />
+      )}
+
       <Shelf
         icon={<BookOpen size={20} strokeWidth={1.8} />}
         title="Your Shelf"
         subtitle="Everything you're writing, translating, and reading"
-        books={shelfBooks}
+        books={unpinnedBooks}
         loading={shelfLoading}
-        onBookClick={(bookId) => {
-          const book = books?.find((entry) => entry.id === bookId);
-          if (book?.kind === "reading") {
-            onOpenReadingBook?.(bookId);
-          } else {
-            onOpenBook?.(bookId);
-          }
-        }}
+        onBookClick={handleShelfBookClick}
         onDeleteBook={setBookToDelete}
         onEditBook={setBookToEdit}
+        onTogglePin={handleTogglePin}
       />
 
       <CreateBookDialog

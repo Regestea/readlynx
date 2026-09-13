@@ -13,6 +13,9 @@ interface ShelfProps {
   onBookClick?: (bookId: string) => void;
   onDeleteBook?: (book: Book) => void;
   onEditBook?: (book: Book) => void;
+  onTogglePin?: (book: Book) => void;
+  emptyText?: string;
+  emptyHint?: string;
 }
 
 const SKELETON_COUNT = 4;
@@ -26,6 +29,9 @@ export function Shelf({
   onBookClick,
   onDeleteBook,
   onEditBook,
+  onTogglePin,
+  emptyText = "Your shelf is empty.",
+  emptyHint = "Create your first book to get started.",
 }: ShelfProps) {
   return (
     <Card className={`animate-fade-up ${styles.shelf}`}>
@@ -54,8 +60,8 @@ export function Shelf({
           <span className={styles.emptyIcon} aria-hidden="true">
             {icon}
           </span>
-          <p className={styles.emptyText}>Your shelf is empty.</p>
-          <p className={styles.emptyHint}>Create your first book to get started.</p>
+          <p className={styles.emptyText}>{emptyText}</p>
+          <p className={styles.emptyHint}>{emptyHint}</p>
         </div>
       ) : (
         <div className={styles.grid}>
@@ -66,6 +72,7 @@ export function Shelf({
               onClick={onBookClick ? () => onBookClick(book.id) : undefined}
               onDelete={onDeleteBook ? () => onDeleteBook(book) : undefined}
               onEdit={onEditBook ? () => onEditBook(book) : undefined}
+              onTogglePin={onTogglePin ? () => onTogglePin(book) : undefined}
             />
           ))}
         </div>
