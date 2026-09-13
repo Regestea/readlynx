@@ -103,6 +103,10 @@ export class DbWorkerClient {
     return this.exec("update-book", payload);
   }
 
+  setBookPinned(bookId: string, pinned: boolean): Promise<BookListItem | null> {
+    return this.exec("set-book-pinned", { bookId, pinned });
+  }
+
   getBook(bookId: string): Promise<GetBookResult | null> {
     return this.exec("get-book", bookId);
   }

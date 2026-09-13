@@ -215,6 +215,13 @@ function handleUpdateBook(payload: UpdateBookPayload): BookListItem | null {
   return books.list().find((entry) => entry.id === book.id) ?? null;
 }
 
+/** Pins or unpins a book. Returns the updated row or null when missing. */
+function handleSetBookPinned(payload: { bookId: string; pinned: boolean }): BookListItem | null {
+  const ok = books.setPinned(payload.bookId, payload.pinned);
+  if (!ok) return null;
+  return books.list().find((entry) => entry.id === payload.bookId) ?? null;
+}
+
 const handlers: Record<string, (payload: unknown) => unknown> = {
   "create-book": handleCreateBook,
   "create-translated-book": (payload) =>
@@ -226,6 +233,8 @@ const handlers: Record<string, (payload: unknown) => unknown> = {
   "get-book": (payload) => handleGetBook(payload as string),
   "delete-book": (payload) => handleDeleteBook(payload as string),
   "update-book": (payload) => handleUpdateBook(payload as UpdateBookPayload),
+  "set-book-pinned": (payload) =>
+    handleSetBookPinned(payload as { bookId: string; pinned: boolean }),
   "get-app-settings": () => appSettings.get() ?? null,
   "update-app-settings": (payload) => {
     appSettings.update(payload as { theme?: string; chatZoom?: number });

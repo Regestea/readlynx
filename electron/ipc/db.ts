@@ -41,6 +41,10 @@ export function registerDbIpc(db: DbWorkerClient) {
     db.updateBook(payload),
   );
 
+  handle("db:set-book-pinned", (_event, payload: { bookId: string; pinned: boolean }) =>
+    db.setBookPinned(payload.bookId, payload.pinned),
+  );
+
   handle("db:get-app-settings", () => db.getAppSettings());
 
   handle("db:update-app-settings", (_event, patch: AppSettingsInput) => db.updateAppSettings(patch));

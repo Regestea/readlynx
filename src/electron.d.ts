@@ -100,6 +100,7 @@ declare global {
         getBook(bookId: string): Promise<GetBookResult | null>;
         deleteBook(bookId: string): Promise<boolean>;
         updateBook(payload: UpdateBookPayload): Promise<BookListItem | null>;
+        setBookPinned(bookId: string, pinned: boolean): Promise<BookListItem | null>;
         getAppSettings(): Promise<AppSettingsEntity | null>;
         updateAppSettings(patch: {
           theme?: string;

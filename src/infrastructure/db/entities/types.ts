@@ -74,6 +74,10 @@ export interface BookListItem {
   coverImage: string | null;
   createdAt: string;
   updatedAt: string;
+  /** 1 = pinned to the top Pinned shelf, 0 = regular shelf order. */
+  isPinned: number;
+  /** UTC timestamp of the last pin action (NULL when never pinned / unpinned). */
+  pinnedAt: string | null;
 }
 
 /** One day of reading time derived from the `ReadingEvents` ledger. `day`

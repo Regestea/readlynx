@@ -18,6 +18,8 @@ export interface Book {
   totalPages?: number;
   pagesRead?: number;
   category?: string;
+  /** True when the book is pinned to the top Pinned shelf. */
+  isPinned?: boolean;
 }
 
 export interface Quote {

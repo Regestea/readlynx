@@ -6,6 +6,8 @@ CREATE TABLE IF NOT EXISTS Books (
   title      TEXT NOT NULL DEFAULT 'Untitled',
   coverImage TEXT,
   kind       TEXT NOT NULL DEFAULT 'created',
+  isPinned   INTEGER NOT NULL DEFAULT 0,
+  pinnedAt   TEXT,
   createdAt  TEXT NOT NULL DEFAULT (datetime('now')),
   updatedAt  TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -209,6 +211,7 @@ export function applySchema(db: Database.Database): void {
     ensureReaderDefaultsTable(db);
     ensureReaderSettingsBlockColumns(db);
     ensureReaderDefaultsBlockColumns(db);
+    ensureBookPinColumns(db);
   });
 }
 
@@ -219,6 +222,8 @@ function ensureCoverImageTextColumn(db: Database.Database): void {
   const columns = db.pragma("table_info(Books)") as Array<{ name: string; type: string }>;
   const column = columns.find((entry) => entry.name === "coverImage");
   if (!column || column.type.toUpperCase().includes("TEXT")) return;
+  const names = new Set(columns.map((entry) => entry.name));
+  const hasPin = names.has("isPinned") && names.has("pinnedAt");
   db.transaction(() => {
     db.exec(`
       CREATE TABLE Books_new (
@@ -226,11 +231,13 @@ function ensureCoverImageTextColumn(db: Database.Database): void {
         title      TEXT NOT NULL DEFAULT 'Untitled',
         coverImage TEXT,
         kind       TEXT NOT NULL DEFAULT 'created',
+        isPinned   INTEGER NOT NULL DEFAULT 0,
+        pinnedAt   TEXT,
         createdAt  TEXT NOT NULL DEFAULT (datetime('now')),
         updatedAt  TEXT NOT NULL DEFAULT (datetime('now'))
       );
-      INSERT INTO Books_new (id, title, coverImage, createdAt, updatedAt)
-        SELECT id, title, coverImage, createdAt, updatedAt FROM Books;
+      INSERT INTO Books_new (id, title, coverImage, createdAt, updatedAt${hasPin ? ", isPinned, pinnedAt" : ""})
+        SELECT id, title, coverImage, createdAt, updatedAt${hasPin ? ", isPinned, pinnedAt" : ""} FROM Books;
       DROP TABLE Books;
       ALTER TABLE Books_new RENAME TO Books;
     `);
@@ -681,5 +688,17 @@ function ensureReaderDefaultsBlockColumns(db: Database.Database): void {
     if (!has("codeBackground")) db.exec("ALTER TABLE ReaderDefaults ADD COLUMN codeBackground TEXT");
     if (!has("diagramBackground"))
       db.exec("ALTER TABLE ReaderDefaults ADD COLUMN diagramBackground TEXT");
+  })();
+}
+
+/** Databases created before book pinning lack `isPinned` / `pinnedAt` on
+ *  `Books`. Adds them with defaults (unpinned); existing rows keep their
+ *  shelf order. */
+function ensureBookPinColumns(db: Database.Database): void {
+  const columns = db.pragma("table_info(Books)") as Array<{ name: string }>;
+  const has = (name: string) => columns.some((entry) => entry.name === name);
+  db.transaction(() => {
+    if (!has("isPinned")) db.exec("ALTER TABLE Books ADD COLUMN isPinned INTEGER NOT NULL DEFAULT 0");
+    if (!has("pinnedAt")) db.exec("ALTER TABLE Books ADD COLUMN pinnedAt TEXT");
   })();
 }

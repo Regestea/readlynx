@@ -11,4 +11,8 @@ export interface BookEntity {
   kind: BookKind;
   createdAt: string;
   updatedAt: string;
+  /** 1 = pinned to the top Pinned shelf, 0 = regular shelf order. */
+  isPinned: number;
+  /** UTC timestamp of the last pin action (NULL when never pinned / unpinned). */
+  pinnedAt: string | null;
 }

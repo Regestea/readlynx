@@ -38,16 +38,38 @@ export class BookRepository {
       | undefined;
   }
 
+  /** Pins or unpins a book. Pinning stamps `pinnedAt` (newest pins first
+   *  on the Pinned shelf); unpinning clears it. Returns false when the book
+   *  does not exist. */
+  setPinned(bookId: string, pinned: boolean): boolean {
+    const book = this.findById(bookId);
+    if (!book) return false;
+    if (pinned) {
+      this.db
+        .prepare("UPDATE Books SET isPinned = 1, pinnedAt = datetime('now') WHERE id = ?")
+        .run(bookId);
+    } else {
+      this.db
+        .prepare("UPDATE Books SET isPinned = 0, pinnedAt = NULL WHERE id = ?")
+        .run(bookId);
+    }
+    return true;
+  }
+
   /** All books, most recently active first (shelf order). Reading books have
    *  no edit flow to bump `updatedAt`, so they sort by their last opened time
-   *  instead (falling back to `updatedAt` if never opened). */
+   *  instead (falling back to `updatedAt` if never opened). Pinned books
+   *  sort first by their pin time so the Pinned shelf stays stable. */
   list(): BookListItem[] {
     return this.db
       .prepare(
-        `SELECT b.id, b.title, b.kind, b.coverImage, b.createdAt, b.updatedAt
+        `SELECT b.id, b.title, b.kind, b.coverImage, b.createdAt, b.updatedAt,
+                COALESCE(b.isPinned, 0) AS isPinned, b.pinnedAt
          FROM Books b
          LEFT JOIN ReadingState rs ON rs.bookId = b.id
          ORDER BY
+           COALESCE(b.isPinned, 0) DESC,
+           b.pinnedAt DESC,
            CASE WHEN b.kind = 'reading'
              THEN COALESCE(rs.lastOpenedAt, b.updatedAt)
              ELSE b.updatedAt
