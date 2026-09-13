@@ -1,0 +1,123 @@
+import { Check, Minus, Plus } from "lucide-react";
+import { READING_BACKGROUNDS } from "../../../components/ui/ColorPickerPanel/colors";
+import styles from "./readerDefaults.module.css";
+
+const ZOOM_MIN = 60;
+const ZOOM_MAX = 200;
+const ZOOM_STEP = 10;
+
+/** Zoom stepper mirroring the reader toolbars (60–200%, click value resets). */
+export function ZoomField({
+  value,
+  onChange,
+}: {
+  value: number;
+  onChange: (next: number) => void;
+}) {
+  return (
+    <div className={styles.zoomRow}>
+      <button
+        type="button"
+        className={styles.zoomButton}
+        onClick={() => onChange(Math.max(ZOOM_MIN, value - ZOOM_STEP))}
+        disabled={value <= ZOOM_MIN}
+        aria-label="Decrease default zoom"
+        title="Decrease default zoom"
+      >
+        <Minus size={16} strokeWidth={2} aria-hidden="true" />
+      </button>
+      <button
+        type="button"
+        className={styles.zoomValue}
+        onClick={() => onChange(100)}
+        aria-label={`Default zoom ${value} percent, click to reset`}
+        title="Reset default zoom to 100%"
+      >
+        {value}%
+      </button>
+      <button
+        type="button"
+        className={styles.zoomButton}
+        onClick={() => onChange(Math.min(ZOOM_MAX, value + ZOOM_STEP))}
+        disabled={value >= ZOOM_MAX}
+        aria-label="Increase default zoom"
+        title="Increase default zoom"
+      >
+        <Plus size={16} strokeWidth={2} aria-hidden="true" />
+      </button>
+    </div>
+  );
+}
+
+/** Inline color picker: curated reading swatches + custom color + a
+ *  "follow theme" reset. `null` means "follow the app theme" (no override). */
+export function DefaultColorField({
+  label,
+  hint,
+  value,
+  onChange,
+  themeLabel = "Follow theme",
+}: {
+  label: string;
+  hint?: string;
+  value: string | null;
+  onChange: (next: string | null) => void;
+  themeLabel?: string;
+}) {
+  const active = (value ?? "").toLowerCase();
+  const isCustom =
+    value !== null &&
+    !READING_BACKGROUNDS.some(({ color }) => color.toLowerCase() === active);
+
+  return (
+    <div className={styles.field}>
+      <span className={styles.fieldLabel}>{label}</span>
+      {hint && <span className={styles.fieldHint}>{hint}</span>}
+      <div className={styles.swatches} role="radiogroup" aria-label={label}>
+        {READING_BACKGROUNDS.map(({ name, color }) => {
+          const selected = active === color.toLowerCase();
+          return (
+            <button
+              key={color}
+              type="button"
+              role="radio"
+              aria-checked={selected}
+              aria-label={name ?? color}
+              title={name ?? color}
+              className={`${styles.swatch} ${selected ? styles.swatchActive : ""}`}
+              style={{ background: color }}
+              onClick={() => onChange(color)}
+            >
+              {selected && (
+                <Check size={12} strokeWidth={3.5} className={styles.swatchCheck} aria-hidden="true" />
+              )}
+            </button>
+          );
+        })}
+        <span className={styles.customWrap}>
+          <input
+            type="color"
+            className={styles.customInput}
+            value={value ?? "#ffffff"}
+            onChange={(event) => onChange(event.target.value)}
+            aria-label={`Custom ${label.toLowerCase()}`}
+            title={`Custom ${label.toLowerCase()}`}
+            style={isCustom ? { outline: "3px solid var(--color-glow)", outlineOffset: 1 } : undefined}
+          />
+        </span>
+      </div>
+      <span className={styles.currentValue}>
+        {value ?? themeLabel}
+        {value !== null && (
+          <>
+            {" · "}
+            <button type="button" className={styles.themeButton} onClick={() => onChange(null)}>
+              {themeLabel}
+            </button>
+          </>
+        )}
+      </span>
+    </div>
+  );
+}
+
