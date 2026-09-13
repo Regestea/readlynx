@@ -19,12 +19,18 @@ interface PdfThemeProviderProps {
 /** Owns the PDF reader background theme and persists the user preference to
  *  the book's `ReaderSettings` row (replacing the old localStorage storage).
  *  Rendering stays in pdfjs-dist — this provider only stores the background
- *  color and never touches the PDF file. */
+ *  color and never touches the PDF file.
+ *
+ *  Fallback order for a book that was never customized: per-book row first,
+ *  then the global `ReaderDefaults` row for "pdf" edited in Settings, then
+ *  the hardcoded default. Merely opening a book never creates a per-book
+ *  row, so new books keep following the global default. */
 export function PdfThemeProvider({ children, bookId }: PdfThemeProviderProps) {
   const [state, setState] = useState<PdfThemeState>(() => ({
     background: PDF_THEME_DEFAULT_BACKGROUND,
   }));
   const loadedRef = useRef(!bookId);
+  const snapshotRef = useRef<string>(PDF_THEME_DEFAULT_BACKGROUND);
 
   /** Loads the saved background for the book. Until it resolves the default
    *  is shown and nothing is persisted, so a default value is never written
@@ -35,10 +41,23 @@ export function PdfThemeProvider({ children, bookId }: PdfThemeProviderProps) {
     loadedRef.current = false;
     const load = async () => {
       try {
-        const row = await window.readlynx?.db.getReaderSettings(bookId, "pdf");
+        const [row, defaults] = await Promise.all([
+          window.readlynx?.db.getReaderSettings(bookId, "pdf"),
+          window.readlynx?.db.getReaderDefaults("pdf").catch(() => null),
+        ]);
         if (cancelled) return;
-        if (row?.pdfBackground && isValidHexColor(row.pdfBackground)) {
-          setState({ background: row.pdfBackground });
+        const background =
+          (row?.pdfBackground && isValidHexColor(row.pdfBackground)
+            ? row.pdfBackground
+            : null) ??
+          (defaults?.pdfBackground && isValidHexColor(defaults.pdfBackground)
+            ? defaults.pdfBackground
+            : null);
+        if (background) {
+          snapshotRef.current = background;
+          setState({ background });
+        } else {
+          snapshotRef.current = PDF_THEME_DEFAULT_BACKGROUND;
         }
       } catch {
         // keep the default
@@ -54,6 +73,8 @@ export function PdfThemeProvider({ children, bookId }: PdfThemeProviderProps) {
 
   useEffect(() => {
     if (!loadedRef.current) return;
+    if (state.background === snapshotRef.current) return;
+    snapshotRef.current = state.background;
     if (bookId) {
       void window.readlynx?.db.updateReaderSettings(bookId, "pdf", {
         pdfBackground: state.background,
