@@ -74,6 +74,11 @@ contextBridge.exposeInMainWorld("readlynx", {
       ipcRenderer.invoke("db:reader-settings-get", { bookId, viewer }),
     updateReaderSettings: (bookId, viewer, settings) =>
       ipcRenderer.invoke("db:reader-settings-update", { bookId, viewer, ...settings }),
+    getReaderDefaults: (viewer) =>
+      ipcRenderer.invoke("db:reader-defaults-get", { viewer }),
+    listReaderDefaults: () => ipcRenderer.invoke("db:reader-defaults-list"),
+    updateReaderDefaults: (viewer, settings) =>
+      ipcRenderer.invoke("db:reader-defaults-update", { viewer, ...settings }),
     getTranslations: (options) => ipcRenderer.invoke("db:translation-get", options),
     putTranslation: (translation) => ipcRenderer.invoke("db:translation-put", translation),
     deleteTranslations: (options) => ipcRenderer.invoke("db:translation-delete", options),

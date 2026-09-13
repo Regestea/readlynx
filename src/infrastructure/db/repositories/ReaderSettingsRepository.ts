@@ -15,6 +15,14 @@ export interface ReaderSettingsInput {
   textHardOverride?: number | boolean | null;
   /** PDF viewer background (null = app default paper). */
   pdfBackground?: string | null;
+  /** Markdown-only code-block syntax theme ("light"/"dark", null = follow). */
+  codeTheme?: string | null;
+  /** Markdown-only Mermaid diagram theme ("light"/"dark", null = follow). */
+  diagramTheme?: string | null;
+  /** Markdown-only code-block background (null = follow the theme card). */
+  codeBackground?: string | null;
+  /** Markdown-only diagram background (null = follow the theme card). */
+  diagramBackground?: string | null;
 }
 
 /** Row store for the `ReaderSettings` table (one per book + viewer). */
@@ -40,7 +48,9 @@ export class ReaderSettingsRepository {
       .prepare(
         `INSERT INTO ReaderSettings (
            bookId, viewer, zoomPct, fontFamily, customBg, customText,
-           textHardOverride, pdfBackground, updatedAt
+           textHardOverride, pdfBackground,
+           codeTheme, diagramTheme, codeBackground, diagramBackground,
+           updatedAt
          ) VALUES (
            @bookId, @viewer,
            COALESCE(@zoomPct, 100),
@@ -48,16 +58,21 @@ export class ReaderSettingsRepository {
            @customBg, @customText,
            COALESCE(@textHardOverride, 0),
            @pdfBackground,
+           @codeTheme, @diagramTheme, @codeBackground, @diagramBackground,
            datetime('now')
          )
          ON CONFLICT(bookId, viewer) DO UPDATE SET
-           zoomPct          = COALESCE(@zoomPct,          ReaderSettings.zoomPct),
-           fontFamily       = COALESCE(@fontFamily,       ReaderSettings.fontFamily),
-           customBg         = @customBg,
-           customText       = @customText,
-           textHardOverride = COALESCE(@textHardOverride, ReaderSettings.textHardOverride, 0),
-           pdfBackground    = @pdfBackground,
-           updatedAt        = datetime('now')`,
+           zoomPct           = COALESCE(@zoomPct,          ReaderSettings.zoomPct),
+           fontFamily        = COALESCE(@fontFamily,       ReaderSettings.fontFamily),
+           customBg          = @customBg,
+           customText        = @customText,
+           textHardOverride  = COALESCE(@textHardOverride, ReaderSettings.textHardOverride, 0),
+           pdfBackground     = @pdfBackground,
+           codeTheme         = @codeTheme,
+           diagramTheme      = @diagramTheme,
+           codeBackground    = @codeBackground,
+           diagramBackground = @diagramBackground,
+           updatedAt         = datetime('now')`,
       )
       .run({
         bookId,
@@ -73,6 +88,10 @@ export class ReaderSettingsRepository {
               ? (settings.textHardOverride ? 1 : 0)
               : settings.textHardOverride,
         pdfBackground: settings.pdfBackground ?? null,
+        codeTheme: settings.codeTheme ?? null,
+        diagramTheme: settings.diagramTheme ?? null,
+        codeBackground: settings.codeBackground ?? null,
+        diagramBackground: settings.diagramBackground ?? null,
       });
   }
 }

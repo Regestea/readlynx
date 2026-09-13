@@ -15,6 +15,7 @@ import type { AppSettingsEntity } from "./infrastructure/db/entities";
 import type { CustomInstructionEntity } from "./infrastructure/db/entities";
 import type { ReadingStateEntity } from "./infrastructure/db/entities";
 import type { ReaderSettingsEntity, ReaderViewer } from "./infrastructure/db/entities";
+import type { ReaderDefaultsEntity } from "./infrastructure/db/entities";
 import type { ReadingStateInput } from "./infrastructure/db/repositories";
 import type { ReaderSettingsInput } from "./infrastructure/db/repositories";
 import type { TranslationEntity, TranslationMethod } from "./infrastructure/db/entities";
@@ -127,6 +128,12 @@ declare global {
         ): Promise<ReaderSettingsEntity | null>;
         updateReaderSettings(
           bookId: string,
+          viewer: ReaderViewer,
+          settings: ReaderSettingsInput,
+        ): Promise<boolean>;
+        getReaderDefaults(viewer: ReaderViewer): Promise<ReaderDefaultsEntity | null>;
+        listReaderDefaults(): Promise<ReaderDefaultsEntity[]>;
+        updateReaderDefaults(
           viewer: ReaderViewer,
           settings: ReaderSettingsInput,
         ): Promise<boolean>;

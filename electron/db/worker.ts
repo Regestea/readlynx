@@ -20,6 +20,7 @@ import {
   DocumentSettingsRepository,
   ReadingStateRepository,
   ReaderSettingsRepository,
+  ReaderDefaultsRepository,
   TranslationRepository,
 } from "../../src/infrastructure/db/repositories/index.ts";
 import { EMPTY_DOCUMENT_STATE } from "../../src/infrastructure/db/repositories/DocumentRepository.ts";
@@ -98,6 +99,7 @@ const appSettings = new AppSettingsRepository(db);
 const aiModels = new AiModelRepository(db);
 const readingState = new ReadingStateRepository(db);
 const readerSettings = new ReaderSettingsRepository(db);
+const readerDefaults = new ReaderDefaultsRepository(db);
 const translations = new TranslationRepository(db);
 const customInstructions = new CustomInstructionRepository(db);
 
@@ -288,6 +290,18 @@ const handlers: Record<string, (payload: unknown) => unknown> = {
       viewer: ReaderViewer;
     } & ReaderSettingsInput;
     readerSettings.upsert(bookId, viewer, settings);
+    return true;
+  },
+  "reader-defaults-get": (payload) => {
+    const { viewer } = payload as { viewer: ReaderViewer };
+    return readerDefaults.findByViewer(viewer) ?? null;
+  },
+  "reader-defaults-list": () => readerDefaults.list(),
+  "reader-defaults-update": (payload) => {
+    const { viewer, ...settings } = payload as {
+      viewer: ReaderViewer;
+    } & ReaderSettingsInput;
+    readerDefaults.upsert(viewer, settings);
     return true;
   },
   "translation-get": (payload) => {

@@ -65,16 +65,38 @@ CREATE TABLE IF NOT EXISTS ReadingState (
 -- serves the EPUB viewer ('epub'), the translation Markdown view ('markdown')
 -- and the PDF viewer's reading theme ('pdf').
 CREATE TABLE IF NOT EXISTS ReaderSettings (
-  bookId           TEXT NOT NULL REFERENCES Books(id) ON DELETE CASCADE,
-  viewer           TEXT NOT NULL,
-  zoomPct          REAL NOT NULL DEFAULT 100,
-  fontFamily       TEXT NOT NULL DEFAULT '',
-  customBg         TEXT,
-  customText       TEXT,
-  textHardOverride INTEGER NOT NULL DEFAULT 0,
-  pdfBackground    TEXT,
-  updatedAt        TEXT NOT NULL DEFAULT (datetime('now')),
+  bookId            TEXT NOT NULL REFERENCES Books(id) ON DELETE CASCADE,
+  viewer            TEXT NOT NULL,
+  zoomPct           REAL NOT NULL DEFAULT 100,
+  fontFamily        TEXT NOT NULL DEFAULT '',
+  customBg          TEXT,
+  customText        TEXT,
+  textHardOverride  INTEGER NOT NULL DEFAULT 0,
+  pdfBackground     TEXT,
+  codeTheme         TEXT,
+  diagramTheme      TEXT,
+  codeBackground    TEXT,
+  diagramBackground TEXT,
+  updatedAt         TEXT NOT NULL DEFAULT (datetime('now')),
   PRIMARY KEY (bookId, viewer)
+);
+
+-- Global reader defaults (one row per viewer). Books without a per-book
+-- ReaderSettings row fall back to these values, so newly added books pick
+-- up the Settings-page defaults until the user customizes them per book.
+CREATE TABLE IF NOT EXISTS ReaderDefaults (
+  viewer            TEXT PRIMARY KEY,
+  zoomPct           REAL NOT NULL DEFAULT 100,
+  fontFamily        TEXT NOT NULL DEFAULT '',
+  customBg          TEXT,
+  customText        TEXT,
+  textHardOverride  INTEGER NOT NULL DEFAULT 0,
+  pdfBackground     TEXT,
+  codeTheme         TEXT,
+  diagramTheme      TEXT,
+  codeBackground    TEXT,
+  diagramBackground TEXT,
+  updatedAt         TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE TABLE IF NOT EXISTS Translations (
@@ -184,6 +206,9 @@ export function applySchema(db: Database.Database): void {
     ensureTranslationLookupIndex(db);
     ensureAppSettingsChatZoomColumn(db);
     ensureReaderSettingsHardOverrideColumn(db);
+    ensureReaderDefaultsTable(db);
+    ensureReaderSettingsBlockColumns(db);
+    ensureReaderDefaultsBlockColumns(db);
   });
 }
 
@@ -607,4 +632,54 @@ function ensureReaderSettingsHardOverrideColumn(db: Database.Database): void {
   const columns = db.pragma("table_info(ReaderSettings)") as Array<{ name: string }>;
   if (columns.some((entry) => entry.name === "textHardOverride")) return;
   db.exec("ALTER TABLE ReaderSettings ADD COLUMN textHardOverride INTEGER NOT NULL DEFAULT 0");
+}
+
+/** Databases created before global reader defaults existed lack the
+ *  `ReaderDefaults` table. Creates it; existing per-book settings are
+ *  untouched and keep winning over the defaults. */
+function ensureReaderDefaultsTable(db: Database.Database): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS ReaderDefaults (
+      viewer            TEXT PRIMARY KEY,
+      zoomPct           REAL NOT NULL DEFAULT 100,
+      fontFamily        TEXT NOT NULL DEFAULT '',
+      customBg          TEXT,
+      customText        TEXT,
+      textHardOverride  INTEGER NOT NULL DEFAULT 0,
+      pdfBackground     TEXT,
+      codeTheme         TEXT,
+      diagramTheme      TEXT,
+      codeBackground    TEXT,
+      diagramBackground TEXT,
+      updatedAt         TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+  `);
+}
+
+/** Databases created before Markdown code/diagram appearance settings
+ *  existed lack the four block columns. Adds them as nullable (null =
+ *  follow the app theme); existing rows keep their saved colors. */
+function ensureReaderSettingsBlockColumns(db: Database.Database): void {
+  const columns = db.pragma("table_info(ReaderSettings)") as Array<{ name: string }>;
+  const has = (name: string) => columns.some((entry) => entry.name === name);
+  db.transaction(() => {
+    if (!has("codeTheme")) db.exec("ALTER TABLE ReaderSettings ADD COLUMN codeTheme TEXT");
+    if (!has("diagramTheme")) db.exec("ALTER TABLE ReaderSettings ADD COLUMN diagramTheme TEXT");
+    if (!has("codeBackground")) db.exec("ALTER TABLE ReaderSettings ADD COLUMN codeBackground TEXT");
+    if (!has("diagramBackground"))
+      db.exec("ALTER TABLE ReaderSettings ADD COLUMN diagramBackground TEXT");
+  })();
+}
+
+/** Same backfill for the global `ReaderDefaults` table. */
+function ensureReaderDefaultsBlockColumns(db: Database.Database): void {
+  const columns = db.pragma("table_info(ReaderDefaults)") as Array<{ name: string }>;
+  const has = (name: string) => columns.some((entry) => entry.name === name);
+  db.transaction(() => {
+    if (!has("codeTheme")) db.exec("ALTER TABLE ReaderDefaults ADD COLUMN codeTheme TEXT");
+    if (!has("diagramTheme")) db.exec("ALTER TABLE ReaderDefaults ADD COLUMN diagramTheme TEXT");
+    if (!has("codeBackground")) db.exec("ALTER TABLE ReaderDefaults ADD COLUMN codeBackground TEXT");
+    if (!has("diagramBackground"))
+      db.exec("ALTER TABLE ReaderDefaults ADD COLUMN diagramBackground TEXT");
+  })();
 }

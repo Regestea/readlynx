@@ -99,6 +99,16 @@ export function registerDbIpc(db: DbWorkerClient) {
     db.updateReaderSettings(payload.bookId, payload.viewer, payload),
   );
 
+  handle("db:reader-defaults-get", (_event, payload) =>
+    db.getReaderDefaults(payload.viewer),
+  );
+
+  handle("db:reader-defaults-list", () => db.listReaderDefaults());
+
+  handle("db:reader-defaults-update", (_event, payload) =>
+    db.updateReaderDefaults(payload.viewer, payload),
+  );
+
   handle("db:translation-get", (_event, options) => db.getTranslations(options));
 
   handle("db:translation-put", (_event, translation) => db.putTranslation(translation));

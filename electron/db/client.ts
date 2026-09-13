@@ -10,6 +10,7 @@ import type { AppSettingsEntity } from "../../src/infrastructure/db/entities/App
 import type { AppSettingsInput } from "../../src/infrastructure/db/repositories/AppSettingsRepository.ts";
 import type { ReadingProgressRow, ReadingWeekSummary } from "../../src/infrastructure/db/entities/types.ts";
 import type { ReaderSettingsEntity, ReaderViewer } from "../../src/infrastructure/db/entities/ReaderSettings.ts";
+import type { ReaderDefaultsEntity } from "../../src/infrastructure/db/entities/ReaderDefaults.ts";
 import type { ReadingStateInput, ReaderSettingsInput } from "../../src/infrastructure/db/repositories/index.ts";
 import type {
   BookListItem,
@@ -184,6 +185,21 @@ export class DbWorkerClient {
     settings: ReaderSettingsInput,
   ): Promise<boolean> {
     return this.exec("reader-settings-update", { bookId, viewer, ...settings });
+  }
+
+  getReaderDefaults(viewer: ReaderViewer): Promise<ReaderDefaultsEntity | null> {
+    return this.exec("reader-defaults-get", { viewer });
+  }
+
+  listReaderDefaults(): Promise<ReaderDefaultsEntity[]> {
+    return this.exec("reader-defaults-list");
+  }
+
+  updateReaderDefaults(
+    viewer: ReaderViewer,
+    settings: ReaderSettingsInput,
+  ): Promise<boolean> {
+    return this.exec("reader-defaults-update", { viewer, ...settings });
   }
 
   getTranslations(options: {
