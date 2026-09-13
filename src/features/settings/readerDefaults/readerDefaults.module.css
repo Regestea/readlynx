@@ -169,31 +169,29 @@
 .customWrap {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-2);
 }
 
-.customInput {
-  width: 30px;
-  height: 30px;
+.customSwatch {
+  background: conic-gradient(
+    from 180deg,
+    #ff6b6b,
+    #ffd93d,
+    #6bcb77,
+    #4d96ff,
+    #c86bff,
+    #ff6b6b
+  );
+}
+
+.hiddenColorInput {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  margin: 0;
   padding: 0;
-  border: 1px solid rgb(0 0 0 / 25%);
-  border-radius: 50%;
-  background: none;
-  cursor: pointer;
-}
-
-.customInput::-webkit-color-swatch-wrapper {
-  padding: 2px;
-}
-
-.customInput::-webkit-color-swatch {
-  border: none;
-  border-radius: 50%;
-}
-
-.customInput::-moz-color-swatch {
-  border: none;
-  border-radius: 50%;
+  border: 0;
+  pointer-events: none;
 }
 
 .themeButton {

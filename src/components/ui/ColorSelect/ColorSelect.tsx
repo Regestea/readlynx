@@ -1,5 +1,5 @@
 import { useRef } from "react";
-import { Check } from "lucide-react";
+import { Check, Plus } from "lucide-react";
 import styles from "./ColorSelect.module.css";
 
 const PRESET_COLORS = ["#5b6b50", "#737b58", "#8a8c67", "#b9794c", "#8c6248", "#4c382b", "#c18b4d"];
@@ -44,11 +44,14 @@ export function ColorSelect({ value, onChange, label, presets }: ColorSelectProp
         role="radio"
         aria-checked={customActive}
         aria-label="Pick a custom color"
+        title="Pick a custom color…"
         className={`${styles.swatch} ${styles.customSwatch} ${customActive ? styles.swatchActive : ""}`}
         onClick={() => colorInputRef.current?.click()}
       >
-        {customActive && (
+        {customActive ? (
           <Check size={12} strokeWidth={3.5} className={styles.swatchCheck} aria-hidden="true" />
+        ) : (
+          <Plus size={14} strokeWidth={3} className={styles.swatchCheck} aria-hidden="true" />
         )}
       </button>
       <input

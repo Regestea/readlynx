@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import { Check, Minus, Plus } from "lucide-react";
 import { READING_BACKGROUNDS } from "../../../components/ui/ColorPickerPanel/colors";
 import styles from "./readerDefaults.module.css";
@@ -68,6 +69,7 @@ export function DefaultColorField({
   const isCustom =
     value !== null &&
     !READING_BACKGROUNDS.some(({ color }) => color.toLowerCase() === active);
+  const customInputRef = useRef<HTMLInputElement>(null);
 
   return (
     <div className={styles.field}>
@@ -95,14 +97,29 @@ export function DefaultColorField({
           );
         })}
         <span className={styles.customWrap}>
+          <button
+            type="button"
+            role="radio"
+            aria-checked={isCustom}
+            aria-label={`Custom ${label.toLowerCase()}`}
+            title={`Custom ${label.toLowerCase()}…`}
+            className={`${styles.swatch} ${styles.customSwatch} ${isCustom ? styles.swatchActive : ""}`}
+            onClick={() => customInputRef.current?.click()}
+          >
+            {isCustom ? (
+              <Check size={12} strokeWidth={3.5} className={styles.swatchCheck} aria-hidden="true" />
+            ) : (
+              <Plus size={14} strokeWidth={3} className={styles.swatchCheck} aria-hidden="true" />
+            )}
+          </button>
           <input
+            ref={customInputRef}
             type="color"
-            className={styles.customInput}
+            className={styles.hiddenColorInput}
             value={value ?? "#ffffff"}
             onChange={(event) => onChange(event.target.value)}
-            aria-label={`Custom ${label.toLowerCase()}`}
-            title={`Custom ${label.toLowerCase()}`}
-            style={isCustom ? { outline: "3px solid var(--color-glow)", outlineOffset: 1 } : undefined}
+            aria-label={`Custom ${label.toLowerCase()} picker`}
+            tabIndex={-1}
           />
         </span>
       </div>
