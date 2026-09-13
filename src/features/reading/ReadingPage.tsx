@@ -10,9 +10,22 @@ import { AiChatPanel } from "../../components/aiChat/AiChatPanel";
 import type { BookSourceType } from "../../infrastructure/db/entities";
 import { TranslationSettingsPanel, TranslationToggle } from "./translation/TranslationPanel";
 import { useTranslation } from "./translation/useTranslation";
-import { epubUnitKey, methodFor, pdfUnitKey, unitToChapter, unitToPage } from "./translation/types";
+import {
+  epubUnitKey,
+  mdUnitKey,
+  methodFor,
+  pdfUnitKey,
+  unitToChapter,
+  unitToPage,
+} from "./translation/types";
 import { useCloseFlush } from "../../shared/closeFlush";
 import styles from "./ReadingPage.module.css";
+
+/** Decodes raw file bytes as UTF-8 Markdown text (strips a BOM when present). */
+function decodeMarkdownBytes(data: ArrayBuffer): string {
+  const text = new TextDecoder("utf-8", { fatal: false }).decode(data);
+  return text.replace(/^\uFEFF/, "");
+}
 
 interface ReadingPageProps {
   bookId: string;
@@ -47,6 +60,9 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
   const [pageCount, setPageCount] = useState(0);
   /** Total chapters of the loaded EPUB (0 until the viewer reports it). */
   const [chapterCount, setChapterCount] = useState(0);
+  /** Original Markdown file text (only for `markdown` books; null while loading). */
+  const [markdownSource, setMarkdownSource] = useState<string | null>(null);
+  const [markdownSourceError, setMarkdownSourceError] = useState<string | null>(null);
   const [aiContext, setAiContext] = useState<string | null>(null);
   const [pdfAskImages, setPdfAskImages] = useState<string[] | null>(null);
   const [chatError, setChatError] = useState<string | null>(null);
@@ -100,6 +116,7 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
     pdfRef,
     epubRef,
     epubReady,
+    markdownText: markdownSource,
   });
   const { setUnit: setTranslationUnit } = translation;
 
@@ -211,6 +228,8 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
     let cancelled = false;
     const db = window.readlynx?.db;
     if (!db) return;
+    // Note: `markdownSource` starts as null per mount (the page is keyed by
+    // book id), so no synchronous reset is needed here.
     void Promise.all([db.getBook(bookId), db.getReadingState(bookId)]).then(([result, reading]) => {
       if (cancelled) return;
       if (!result?.source) {
@@ -219,14 +238,34 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
       }
       setSavedPage(reading?.currentPage ?? 1);
       setSavedChapter(reading?.currentChapter || null);
+      const rawType = String(result.source.sourceType ?? "pdf").toLowerCase();
+      const sourceType: BookSourceType =
+        rawType === "epub" ? "epub" : rawType === "markdown" || rawType === "md" ? "markdown" : "pdf";
       setState({
         status: "ready",
         book: {
           title: result.book.title,
-          sourceType: result.source.sourceType === "epub" ? "epub" : "pdf",
+          sourceType,
           filePath: result.source.filePath,
         },
       });
+      if (sourceType === "markdown") {
+        // Markdown books are a single translation unit; the viewer shows the
+        // whole file and the pipeline chunks it for the AI.
+        setTranslationUnit(mdUnitKey());
+        void window.readlynx?.readFileBytes(result.source.filePath).then((data) => {
+          if (cancelled) return;
+          if (!data) {
+            setMarkdownSourceError("Could not read the Markdown file. It may have been moved or deleted.");
+            return;
+          }
+          try {
+            setMarkdownSource(decodeMarkdownBytes(data));
+          } catch {
+            setMarkdownSourceError("Could not decode the Markdown file as UTF-8 text.");
+          }
+        });
+      }
       // Records "last read" so the book can be offered as a continue-reading
       // entry, and creates the state row when this is the first open.
       void db.markReadingStateOpened(bookId);
@@ -243,7 +282,7 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
     return () => {
       cancelled = true;
     };
-  }, [bookId, tickHeartbeat]);
+  }, [bookId, tickHeartbeat, setTranslationUnit]);
 
   const handlePageChange = useCallback(
     (page: number) => {
@@ -439,6 +478,7 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
 
   /** Reader-mode navigation: which unit the translation view is showing and
    *  prev/next movement through the document (PDF pages / EPUB chapters).
+   *  Markdown books are a single document — no prev/next navigation.
    *  Only shown inside the Markdown viewer's toolbar — the Markdown component
    *  itself stays source-agnostic via its `toolbarExtra` slot. */
   const currentPdfPage =
@@ -447,13 +487,19 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
     book?.sourceType === "epub"
       ? Number(unitToChapter(translation.unitKey ?? epubUnitKey("0")))
       : null;
+  const isMarkdownBook = book?.sourceType === "markdown";
   // Fall back to the viewer's live count when state hasn't been persisted yet
   // (e.g. right after load) so the nav buttons are not stuck disabled.
   const totalPages = pageCount || pdfRef.current?.getPageCount() || 0;
   const totalChapters = chapterCount || epubRef.current?.getChapterCount() || 0;
-  const canPrev = book?.sourceType === "pdf" ? (currentPdfPage ?? 1) > 1 : (currentChapter ?? 0) > 0;
-  const canNext =
-    book?.sourceType === "pdf"
+  const canPrev = isMarkdownBook
+    ? false
+    : book?.sourceType === "pdf"
+      ? (currentPdfPage ?? 1) > 1
+      : (currentChapter ?? 0) > 0;
+  const canNext = isMarkdownBook
+    ? false
+    : book?.sourceType === "pdf"
       ? totalPages === 0
         ? false
         : (currentPdfPage ?? 1) < totalPages
@@ -462,7 +508,7 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
         : (currentChapter ?? 0) + 1 < totalChapters;
   const goUnit = useCallback(
     (delta: number) => {
-      if (!book) return;
+      if (!book || book.sourceType === "markdown") return;
       if (book.sourceType === "pdf") {
         pdfRef.current?.goToPage((currentPdfPage ?? 1) + delta);
       } else {
@@ -490,7 +536,7 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
     [book, bookId, currentPdfPage, currentChapter, totalChapters, setTranslationUnit],
   );
   const toolbarExtra =
-    showTranslation && book ? (
+    showTranslation && book && !isMarkdownBook ? (
       <div className={styles.navExtra}>
         <Button
           variant="ghost"
@@ -640,7 +686,7 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
                   onPageChange={handlePageChange}
                   onAskAi={handleAskPdfRegion}
                 />
-              ) : (
+              ) : state.book.sourceType === "epub" ? (
                 <EpubViewer
                   ref={epubRef}
                   filePath={state.book.filePath}
@@ -658,6 +704,24 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
                   onProgressChange={(progress) => {
                     epubProgressRef.current = progress;
                   }}
+                  onAskAi={setAiContext}
+                />
+              ) : markdownSourceError ? (
+                <div className={styles.state} role="alert">
+                  <FileWarning size={28} strokeWidth={1.8} aria-hidden="true" />
+                  <span>{markdownSourceError}</span>
+                </div>
+              ) : markdownSource === null ? (
+                <div className={styles.state} aria-label="Loading Markdown">
+                  <Loader2 size={24} strokeWidth={2} className={styles.spinner} />
+                  <span>Loading Markdown…</span>
+                </div>
+              ) : (
+                <Markdown
+                  content={markdownSource}
+                  toolbar
+                  settingsBookId={bookId}
+                  className={styles.translationBody}
                   onAskAi={setAiContext}
                 />
               )}
@@ -695,7 +759,15 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
                 ) : (
                   <div className={styles.state}>
                     <Languages size={28} strokeWidth={1.6} aria-hidden="true" />
-                    <span>No translation yet for this {state.book.sourceType === "pdf" ? "page" : "chapter"}.</span>
+                    <span>
+                      No translation yet for this{" "}
+                      {state.book.sourceType === "pdf"
+                        ? "page"
+                        : state.book.sourceType === "markdown"
+                          ? "document"
+                          : "chapter"}
+                      .
+                    </span>
                     <span className={styles.stateHint}>
                       Open the Translate panel and press Translate.
                     </span>

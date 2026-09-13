@@ -114,13 +114,16 @@ export function TranslationSettingsPanel({
   }, [ocrOpen, modelOpen]);
 
   const isPdf = sourceType === "pdf";
+  const isEpub = sourceType === "epub";
   const isOcr = isPdf && pdfMethod === "ocr";
   const actionLabel = hasTranslation ? "Regenerate" : "Translate";
   const rangeMethodLabel = isPdf
     ? pdfMethod === "ocr"
       ? "local OCR"
       : "AI vision"
-    : "chapter text";
+    : sourceType === "markdown"
+      ? "markdown text"
+      : "chapter text";
   const rangeTargetLabel = languageLabel(settings.targetLang);
   const rangeModelLabel = modelIds.length
     ? modelIds
@@ -324,7 +327,7 @@ export function TranslationSettingsPanel({
         title="Custom instruction layered on the translation"
       />
 
-      {!isPdf && (
+      {isEpub && (
         <label
           className={styles.htmlToggle}
           title="Enhance translation: check this if the translation is not displaying correctly — for example, broken or missing code blocks or tables. It sends more detail about the chapter to the AI, but uses more data and can be slower."

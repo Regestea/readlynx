@@ -6,6 +6,12 @@ import { Input } from "../../../components/ui/Input/Input";
 import { FirstPageCover } from "./FirstPageCover";
 import type { FirstPageCoverHandle } from "./FirstPageCover";
 import type { BookSourceType } from "../../../infrastructure/db/entities/types";
+import {
+  BOOK_FILE_FILTERS,
+  bookSourceLabel,
+  bookTitleFromPath,
+  detectBookSourceType,
+} from "../../../shared/bookFiles";
 import styles from "./ReadBookDialog.module.css";
 
 interface ReadBookDialogProps {
@@ -40,11 +46,13 @@ export function ReadBookDialog({ open, onClose, onConfirm }: ReadBookDialogProps
 
   const handlePick = async () => {
     const picked = await window.readlynx?.pickFile({
-      filters: [{ name: "PDF or EPUB book", extensions: ["pdf", "epub"] }],
+      filters: BOOK_FILE_FILTERS,
     });
     if (!picked) return;
     setSourcePath(picked);
-    setSourceType(picked.toLowerCase().endsWith(".pdf") ? "pdf" : "epub");
+    setSourceType(detectBookSourceType(picked));
+    // Pre-fill the title with the file name; the user can still change it.
+    setTitle(bookTitleFromPath(picked));
     setCoverImage(null);
   };
 
@@ -138,9 +146,7 @@ export function ReadBookDialog({ open, onClose, onConfirm }: ReadBookDialogProps
                 </span>
                 <span className={styles.fileMeta}>
                   <span className={styles.fileName}>{sourceName}</span>
-                  <span className={styles.fileType}>
-                    {sourceType === "pdf" ? "PDF document" : "EPUB book"}
-                  </span>
+                  <span className={styles.fileType}>{bookSourceLabel(sourceType)}</span>
                 </span>
                 <button
                   type="button"
@@ -155,7 +161,7 @@ export function ReadBookDialog({ open, onClose, onConfirm }: ReadBookDialogProps
             ) : (
               <button type="button" className={styles.pickZone} onClick={() => void handlePick()}>
                 <FolderOpen size={20} strokeWidth={1.8} aria-hidden="true" />
-                <span className={styles.pickTitle}>Choose a PDF or EPUB file</span>
+                <span className={styles.pickTitle}>Choose a PDF, EPUB or Markdown file</span>
                 <span className={styles.pickHint}>The file is copied into the app and its first page becomes the cover</span>
               </button>
             )}

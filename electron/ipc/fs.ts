@@ -57,7 +57,7 @@ export function registerFsIpc({ getStore }: FsIpcDeps) {
     }
   });
 
-  /** Copies the chosen PDF/EPUB into the books bucket and returns the
+  /** Copies the chosen PDF/EPUB/Markdown into the books bucket and returns the
    *  bucket-relative key (e.g. `"books/<uuid>.pdf"`), or null on error. */
   ipcMain.handle("fs:import-source", async (_event, options: { sourcePath: string; sourceType: string }) => {
     try {
@@ -66,7 +66,9 @@ export function registerFsIpc({ getStore }: FsIpcDeps) {
           ? ".pdf"
           : options.sourceType === "epub"
             ? ".epub"
-            : null;
+            : options.sourceType === "markdown"
+              ? ".md"
+              : null;
       if (!extension) return null;
       const fs = await import("node:fs/promises");
       const sourceData = await fs.readFile(options.sourcePath);

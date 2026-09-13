@@ -31,9 +31,12 @@ import {
 import type { PdfRegionSnapshot } from "./pdfRegions.ts";
 import {
   DEFAULT_TRANSLATION_SETTINGS,
+  MARKDOWN_CHAPTER_KEY,
   docTypeFor,
+  isChunkedSourceType,
   methodFor,
   unitToChapter,
+  unitToMarkdownSection,
   unitToPage,
 } from "./types.ts";
 import type {
@@ -51,6 +54,10 @@ interface UseTranslationOptions {
   /** True once the EPUB viewer has finished loading and its chapter DOM is
    *  available for image extraction. Irrelevant for PDF books. */
   epubReady: boolean;
+  /** Original Markdown file text for `markdown` books. The translation
+   *  pipeline chunks it (like an EPUB chapter) so no AI request overloads
+   *  the model; null until the file is loaded. Irrelevant for PDF/EPUB. */
+  markdownText?: string | null;
 }
 
 /** Chunk keys are ordered by their index, zero-padded so string ordering
@@ -133,7 +140,14 @@ async function resolvePdfRegionCrops(
  * It stays independent of the viewers — it only talks to them through the
  * handles exposed by `PdfViewer` / `EpubViewer`.
  */
-export function useTranslation({ bookId, sourceType, pdfRef, epubRef, epubReady }: UseTranslationOptions) {
+export function useTranslation({
+  bookId,
+  sourceType,
+  pdfRef,
+  epubRef,
+  epubReady,
+  markdownText = null,
+}: UseTranslationOptions) {
   const [viewMode, setViewModeState] = useState<TranslationViewMode>("original");
   const [settings, setSettings] = useState<TranslationSettings>(DEFAULT_TRANSLATION_SETTINGS);
   const [unitKey, setUnitKey] = useState<TranslationUnitKey | null>(null);
@@ -168,6 +182,11 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef, epubReady 
   const [installed, setInstalled] = useState<string[]>([]);
   const [downloading, setDownloading] = useState<string | null>(null);
   const [downloadProgress, setDownloadProgress] = useState<number | null>(null);
+
+  const markdownTextRef = useRef<string | null>(markdownText);
+  useEffect(() => {
+    markdownTextRef.current = markdownText;
+  }, [markdownText]);
 
   const busyRef = useRef(false);
   /** Tracks which unit key is currently being translated by `translate`.
@@ -344,8 +363,9 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef, epubReady 
   }, [unitKey]);
 
   /** Refresh the cached translation whenever the unit (PDF page / EPUB
-   *  chapter) changes. The lookup is method-agnostic — one translation per
-   *  page / chapter, whatever pipeline produced it. */
+   *  chapter / Markdown document) changes. The lookup is method-agnostic —
+   *  one translation per page / chapter / document, whatever pipeline
+   *  produced it. */
   useEffect(() => {
     if (!unitKey) return;
     let cancelled = false;
@@ -355,9 +375,13 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef, epubReady 
       try {
         const page = unitToPage(unitKey);
         const chapter = unitToChapter(unitKey);
+        const mdSection = unitToMarkdownSection(unitKey);
+        const chunked = isChunkedSourceType(sourceType);
+        const chunkPrefix = sourceType === "markdown" ? MARKDOWN_CHAPTER_KEY : (chapter ?? undefined);
+        void mdSection;
         const rows = await db.getTranslations(
-          sourceType === "epub"
-            ? { bookId, chunkKeyPrefix: chapter ?? undefined }
+          chunked
+            ? { bookId, chunkKeyPrefix: chunkPrefix }
             : { bookId, pageNumber: page ?? undefined },
         );
         if (cancelled) return;
@@ -368,14 +392,21 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef, epubReady 
           setImagesPending(false);
           rawCachedMarkdownRef.current = null;
         } else {
-          const rawJoined =
-            sourceType === "epub"
-              ? rows.map((row) => row.markdown).join("\n\n")
-              : rows[0].markdown;
+          const rawJoined = chunked
+            ? rows.map((row) => row.markdown).join("\n\n")
+            : rows[0].markdown;
           // Normalize old cached rows that may have stored long code as inline
           // (from before the fix) so they display correctly without re-translation.
           const raw = normalizeTranslatedMarkdown(rawJoined);
-          if (sourceType === "epub") {
+          if (sourceType === "markdown") {
+            // Markdown files keep their own `![alt](url)` images — no viewer
+            // extraction or token resolution is needed.
+            setMarkdown(raw);
+            setMarkdownUnitKey(unitKey);
+            setHasTranslation(true);
+            setImagesPending(false);
+            rawCachedMarkdownRef.current = null;
+          } else if (sourceType === "epub") {
             const hasProtocolUrls = raw.includes("readlynx-translation-image://");
             const needsImages = !hasProtocolUrls && raw.includes("[IMG-");
             if (!needsImages) {
@@ -917,15 +948,26 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef, epubReady 
     try {
       let result: string;
       if (method === "chapter") {
-        // Original-HTML mode sends the chapter's cleaned tags instead of
-        // converted Markdown (chunked by element, never mid-tag); the
-        // default mode sends the extracted plain text as usual.
+        // Chunked-text pipeline (EPUB chapters and Markdown documents).
+        // Chunks are sized (≈1.5k–6k chars) so no single AI request overloads
+        // the model, while staying large enough to keep context and avoid a
+        // flood of tiny requests.
+        // Original-HTML mode (EPUB only) sends the chapter's cleaned tags
+        // instead of converted Markdown (chunked by element, never mid-tag);
+        // the default mode sends the extracted plain text as usual.
         let chunks: string[];
         let images: EpubImageRef[];
         // Original-HTML mode primes the model with tags, so echoed markup
         // is stripped from its output (outside code) before saving.
-        const cleanLeaks = currentSettings.epubExtraction === "html";
-        if (cleanLeaks) {
+        const cleanLeaks = sourceType === "epub" && currentSettings.epubExtraction === "html";
+        if (sourceType === "markdown") {
+          const source = (markdownTextRef.current ?? "").trim();
+          if (!source) {
+            throw new Error("The Markdown file text is not available yet.");
+          }
+          chunks = chunkChapter(source);
+          images = [];
+        } else if (cleanLeaks) {
           const htmlExtraction = epubRef.current?.getCurrentChapterHtmlExtraction();
           if (!htmlExtraction || htmlExtraction.chunks.length === 0) {
             throw new Error("The chapter HTML is not available yet.");
@@ -941,9 +983,16 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef, epubReady 
           images = extraction.images;
         }
         if (chunks.length === 0) {
-          throw new Error("The chapter has no text to translate.");
+          throw new Error(
+            sourceType === "markdown"
+              ? "The Markdown file has no text to translate."
+              : "The chapter has no text to translate.",
+          );
         }
-        const chapterKey = unitToChapter(key) ?? "chapter";
+        const chapterKey =
+          sourceType === "markdown"
+            ? MARKDOWN_CHAPTER_KEY
+            : (unitToChapter(key) ?? "chapter");
         // A partially translated chapter is useless: chunk results stay in
         // memory and are only written to the database once every chunk has
         // been translated, so a cancel or failure mid-chapter leaves the
@@ -955,9 +1004,10 @@ export function useTranslation({ bookId, sourceType, pdfRef, epubRef, epubReady 
           if (cancelRequestedRef.current) {
             throw new TranslationCancelledError("Translation cancelled.");
           }
+          const singleLabel = sourceType === "markdown" ? "Translating document…" : "Translating chapter…";
           const chunkStatus =
             chunks.length === 1
-              ? "Translating chapter…"
+              ? singleLabel
               : `Translating chunk ${index + 1} of ${chunks.length}…`;
           baseStatusRef.current = chunkStatus;
           setRateLimitRetry(null);

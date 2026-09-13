@@ -3,6 +3,7 @@ import { AlignJustify, ArrowLeft, BookOpen, ChevronDown, ChevronUp, Columns2, Fi
 import { DocumentEditor } from "./documentEditor";
 import { PdfViewer } from "../../components/pdfViewer/PdfViewer";
 import { EpubViewer } from "../../components/epubViewer/EpubViewer";
+import { Markdown } from "../../components/markdown/Markdown";
 import { ocrTextToMarkdown } from "../../infrastructure/ocr/ocrToMarkdown";
 import { useDefaultAiModel } from "../../infrastructure/ai/useDefaultAiModel";
 import { resolveProviderBaseUrl } from "../../infrastructure/ai/modelResolver";
@@ -91,6 +92,7 @@ export function CreateBookPage({
   const [searchIndex, setSearchIndex] = useState(0);
   const [searchCount, setSearchCount] = useState(0);
   const [source, setSource] = useState<{ sourceType: BookSourceType; filePath: string } | null>(null);
+  const [markdownSource, setMarkdownSource] = useState<string | null>(null);
   const [sourceMode, setSourceMode] = useState<"split" | "editor" | "source">("split");
   const [sourceRatio, setSourceRatio] = useState(0.4);
   const [dragging, setDragging] = useState(false);
@@ -136,14 +138,30 @@ export function CreateBookPage({
       setTitle(book.title);
       setCoverImage(book.coverImage);
       setInitialState(isValidEditorStateJson(document.contentJson) ? document.contentJson : undefined);
+      const rawType = String(bookSource?.sourceType ?? "").toLowerCase();
+      const sourceType: BookSourceType =
+        rawType === "epub" ? "epub" : rawType === "markdown" || rawType === "md" ? "markdown" : "pdf";
       setSource(
         bookSource
           ? {
-              sourceType: bookSource.sourceType === "epub" ? "epub" : "pdf",
+              sourceType,
               filePath: bookSource.filePath,
             }
           : null,
       );
+      if (bookSource && sourceType === "markdown") {
+        void window.readlynx?.readFileBytes(bookSource.filePath).then((data) => {
+          if (cancelled || !data) return;
+          try {
+            const text = new TextDecoder("utf-8", { fatal: false }).decode(data).replace(/^\uFEFF/, "");
+            if (!cancelled) setMarkdownSource(text);
+          } catch {
+            // leave the preview empty — the editor itself is unaffected
+          }
+        });
+      } else {
+        setMarkdownSource(null);
+      }
       if (settings) {
         setLayout(settings.layout);
         setPageFormat(settings.pageFormat);
@@ -591,8 +609,30 @@ export function CreateBookPage({
                   onOcrText={handleOcrText}
                   onAiVision={handleAiVision}
                 />
-              ) : (
+              ) : source.sourceType === "epub" ? (
                 <EpubViewer filePath={source.filePath} fill onExtractPage={handleExtractEpubPage} />
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
+                  <div style={{ padding: "8px 12px", borderBottom: "1px solid var(--color-border)" }}>
+                    <Button
+                      variant="secondary"
+                      onClick={() => {
+                        if (markdownSource) handleExtractEpubPage(markdownSource);
+                      }}
+                      disabled={!markdownSource}
+                      title="Append the Markdown file content to the editor"
+                    >
+                      Append to editor
+                    </Button>
+                  </div>
+                  <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "16px" }}>
+                    {markdownSource === null ? (
+                      <span>Loading Markdown…</span>
+                    ) : (
+                      <Markdown content={markdownSource} />
+                    )}
+                  </div>
+                </div>
               )}
             </div>
             {sourceMode === "split" && (

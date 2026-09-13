@@ -9,7 +9,12 @@ export type { BookSourceType };
 export type TranslationViewMode = "original" | "translation";
 
 /** What the AI was asked to translate (part of every request). */
-export type TranslationDocType = "EPUB chapter" | "EPUB HTML" | "PDF OCR text" | "PDF image";
+export type TranslationDocType =
+  | "EPUB chapter"
+  | "EPUB HTML"
+  | "PDF OCR text"
+  | "PDF image"
+  | "Markdown";
 
 /** Which EPUB extraction is sent to the AI: converted Markdown (default) or
  *  the chapter's cleaned original HTML tags. */
@@ -51,9 +56,13 @@ export const DEFAULT_TRANSLATION_SETTINGS: TranslationSettings = {
   pdfAutoFigures: true,
 };
 
-/** Identifies the unit of content currently on screen: `pdf:<page>` or
- *  `epub:<chapter spine index>`. */
-export type TranslationUnitKey = `pdf:${number}` | `epub:${string}`;
+/** Identifies the unit of content currently on screen: `pdf:<page>`,
+ *  `epub:<chapter spine index>` or `md:<section key>` (Markdown books are a
+ *  single section, `md:markdown`, chunked for translation like EPUB chapters). */
+export type TranslationUnitKey = `pdf:${number}` | `epub:${string}` | `md:${string}`;
+
+/** Stable chunk-key prefix for a Markdown book's translation rows. */
+export const MARKDOWN_CHAPTER_KEY = "markdown";
 
 export function pdfUnitKey(pageNumber: number): TranslationUnitKey {
   return `pdf:${pageNumber}`;
@@ -61,6 +70,10 @@ export function pdfUnitKey(pageNumber: number): TranslationUnitKey {
 
 export function epubUnitKey(chapterKey: string): TranslationUnitKey {
   return `epub:${chapterKey}`;
+}
+
+export function mdUnitKey(sectionKey: string = MARKDOWN_CHAPTER_KEY): TranslationUnitKey {
+  return `md:${sectionKey}`;
 }
 
 export function unitToPage(key: TranslationUnitKey): number | null {
@@ -74,10 +87,21 @@ export function unitToChapter(key: TranslationUnitKey): string | null {
   return key.slice(5);
 }
 
-/** The translation pipeline the user picked for a PDF (EPUB always uses
- *  `chapter`). */
+export function unitToMarkdownSection(key: TranslationUnitKey): string | null {
+  if (!key.startsWith("md:")) return null;
+  return key.slice(3);
+}
+
+/** True for chunked text translations (EPUB chapters and Markdown documents),
+ *  which store one row per chunk (`<key>#<index>`) instead of one row per page. */
+export function isChunkedSourceType(sourceType: BookSourceType): boolean {
+  return sourceType === "epub" || sourceType === "markdown";
+}
+
+/** The translation pipeline the user picked for a PDF (EPUB and Markdown
+ *  always use the chunked-text `chapter` pipeline). */
 export function methodFor(sourceType: BookSourceType, pdfMethod: TranslationMethod): TranslationMethod {
-  return sourceType === "epub" ? "chapter" : pdfMethod;
+  return isChunkedSourceType(sourceType) ? "chapter" : pdfMethod;
 }
 
 export function docTypeFor(
@@ -85,6 +109,7 @@ export function docTypeFor(
   pdfMethod: TranslationMethod,
   epubExtraction: EpubExtractionMode = "markdown",
 ): TranslationDocType {
+  if (sourceType === "markdown") return "Markdown";
   if (sourceType === "epub") return epubExtraction === "html" ? "EPUB HTML" : "EPUB chapter";
   return pdfMethod === "vision" ? "PDF image" : "PDF OCR text";
 }

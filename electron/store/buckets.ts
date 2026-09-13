@@ -12,7 +12,7 @@ export const BUCKETS: Record<BucketName, BucketConfig> = {
     allowedExtensions: ["png", "jpg", "jpeg", "webp", "gif", "svg", "bmp", "avif"],
   },
   books: {
-    allowedExtensions: ["pdf", "epub"],
+    allowedExtensions: ["pdf", "epub", "md", "markdown"],
   },
   ocr: {
     allowedExtensions: ["gz"],

@@ -66,9 +66,10 @@ function waitUntil(predicate: () => boolean, timeout: number): Promise<boolean> 
 }
 
 /** Shared cover picker for the reading/translate dialogs. PDFs preview the
- *  first page and can use it as the cover; EPUBs show a shelf-style colored
- *  placeholder until the user picks an image. Hosts should mount it with
- *  `key={sourcePath}` so its state resets when the file changes. */
+ *  first page and can use it as the cover; EPUB and Markdown books show a
+ *  shelf-style colored placeholder until the user picks an image. Hosts
+ *  should mount it with `key={sourcePath}` so its state resets when the file
+ *  changes. */
 export function FirstPageCover({
   sourcePath,
   sourceType,
@@ -123,8 +124,8 @@ export function FirstPageCover({
     return null;
   };
 
-  /** High-resolution first page of a PDF, used as the cover source. EPUBs
-   *  have no auto-capture — the user always picks their own image. */
+  /** High-resolution first page of a PDF, used as the cover source. EPUB and
+   *  Markdown books have no auto-capture — the user always picks their own image. */
   const captureHighRes = async (): Promise<string | null> => {
     if (sourceType !== "pdf") return null;
     if (snapshotRef.current) return snapshotRef.current;
@@ -136,7 +137,8 @@ export function FirstPageCover({
   useImperativeHandle(ref, () => ({ captureFirstPage: captureHighRes }));
 
   /** Opens the image editor. PDFs can auto-capture the first page first;
-   *  EPUBs always edit the current cover or start in file-pick mode. */
+   *  EPUB and Markdown books always edit the current cover or start in
+   *  file-pick mode. */
   const openCoverEditor = async (source: CoverSource = "capture") => {
     if (busy || capturing) return;
     setCapturing(true);
@@ -267,7 +269,7 @@ export function FirstPageCover({
             <button type="button" className={styles.previewEmpty} onClick={onPick}>
               {emptyIcon}
               <span>First page preview</span>
-              <span className={styles.previewEmptyHint}>Choose a PDF or EPUB to see it here</span>
+              <span className={styles.previewEmptyHint}>Choose a PDF, EPUB or Markdown file to see it here</span>
             </button>
           )}
         </div>

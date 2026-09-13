@@ -10,7 +10,7 @@ export interface CreateBookResult {
   documentId: string;
 }
 
-export type BookSourceType = "pdf" | "epub";
+export type BookSourceType = "pdf" | "epub" | "markdown";
 
 /** Payload of `db:create-translated-book`: creates a book backed by an
  *  imported PDF/EPUB source. `sourcePath` is the copied file; `coverImage`

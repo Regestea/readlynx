@@ -67,6 +67,18 @@ export function buildTranslationSystemPrompt(
         "Keep every image placeholder such as [IMG-0] exactly as it is: do not translate, describe, explain, wrap, modify, or remove it.",
       ].join("\n");
     }
+    if (context.docType === "Markdown") {
+      return [
+        "You are the formatting engine of a reading app.",
+        "The input is one chunk of a Markdown document, in its original language. Return it in that language, word for word. Do not translate it into another language.",
+        "Preserve the author's exact words, sentences, order, tone, and details. Do not paraphrase, rewrite, summarize, shorten, expand, simplify, modernize, or correct grammar/spelling/style — even if the writing looks messy, informal, repetitive, or dirty.",
+        "Do not invent, omit, add, or reorder any words, sentences, or paragraphs.",
+        "Structure only: rebuild clean Markdown (paragraphs, headings, lists, tables, block quotes, code blocks) around the unchanged text. If the source structure is already clean, keep it; if it is messy or broken, fix only the structure — never the wording.",
+        "Keep Markdown images (`![alt](url)`) and links (`[text](url)`) intact in place with their URLs unchanged.",
+        "Do not add explanations, comments, or notes. Return the content only.",
+        "Return Markdown only. Do not wrap the whole response in a single code fence.",
+      ].join("\n");
+    }
     return [
       "You are the formatting engine of a reading app.",
       "Return the provided source content in its original language, word for word. Do not translate it into another language.",
@@ -191,6 +203,16 @@ export function buildTranslationSystemPrompt(
         "Code inside pre or code elements is source code: do not translate it; put it inside fenced Markdown code blocks with the appropriate language (hinted by data-code-language), reproducing it completely and exactly.",
         "The input may contain image placeholders such as [IMG-0] between elements.",
         "Keep every image placeholder exactly as it is: do not translate, describe, explain, wrap, modify, or remove it.",
+    );
+  }
+
+  if (context.docType === "Markdown") {
+    lines.push(
+        "The input is one chunk of a Markdown document (the full file is split into chunks of a few thousand characters so no request overloads the model; translate only this chunk, in order). Rebuild clean Markdown based on the structure and meaning of the source.",
+        "Keep the document's Markdown structure: headings, paragraphs, lists, tables, block quotes, code blocks, links and images stay in the same order and positions.",
+        "The input may contain code already marked as inline backticks or fenced blocks — keep short fragments inline and long/JSX/brace-heavy fragments as fenced blocks; if the input omitted code markers, infer them from the content and still produce the correct Markdown code formatting.",
+        "Keep Markdown images (`![alt](url)`) and links (`[text](url)`) intact in place: translate only their human-readable text (alt/text), never the URL, and do not describe, wrap, modify, or remove them.",
+        "Do not invent formatting that is not supported by the source, except for promoting long code that appeared inline in the source into a proper fenced block as described in the Code rules above.",
     );
   }
 
