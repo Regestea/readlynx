@@ -6,6 +6,7 @@ import type { Book, Contents, Location, Rendition } from "epubjs";
 import { useTheme } from "../../app/providers/theme/ThemeContext";
 import { useReaderSettings } from "../../hooks/useReaderSettings.ts";
 import { epubHtmlToCleanedHtmlWithImages, epubHtmlToMarkdown, epubHtmlToPlainTextWithImages } from "../../shared/document/epubToMarkdown";
+import { sanitizeEpubArchive } from "../../shared/document/epubSanitize";
 import type { EpubHtmlExtraction } from "../../shared/document/epubToMarkdown";
 import type { EpubImageRef } from "../../shared/document/epubToMarkdown";
 import { getSelectionEndRect } from "../../shared/selection";
@@ -555,9 +556,15 @@ export function EpubViewer({
         }
         if (cancelled) return;
 
-        const nextBook = ePub(data);
+        const nextBook = ePub(await sanitizeEpubArchive(data));
         bookRef.current = nextBook;
-        await nextBook.ready;
+        // If the sanitizer didn't catch a broken nav/ncx, epubjs's
+        // loadNavigation hangs `ready` forever (loading.navigation is
+        // never resolved/rejected). Timeout so the reader still opens.
+        await Promise.race([
+          nextBook.ready,
+          new Promise<void>((resolve) => setTimeout(resolve, 8000)),
+        ]);
         if (cancelled) {
           nextBook.destroy();
           return;
