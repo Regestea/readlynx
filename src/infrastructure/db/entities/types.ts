@@ -24,12 +24,40 @@ export interface CreateTranslatedBookPayload {
 
 /** Payload of `db:create-reading-book`: like `create-translated-book` but the
  *  book has no document — it opens in the read-only viewer instead of the
- *  editor. */
+ *  editor. The optional identity lets "Open with" dedupe by content and
+ *  remember where the file came from. */
 export interface CreateReadingBookPayload {
   title: string;
   sourceType: BookSourceType;
   sourcePath: string;
   coverImage: string | null;
+  /** sha256 of the imported bytes (`NULL` for books added before tracking). */
+  fileHash?: string | null;
+  /** Byte length of the imported file. */
+  fileSize?: number | null;
+  /** Absolute OS path the file was picked from. */
+  originalPath?: string | null;
+}
+
+/** A `BookSources` row returned by the identity lookups. */
+export interface BookSourceLookupResult {
+  id: string;
+  bookId: string;
+  sourceType: string;
+  filePath: string;
+  fileHash: string | null;
+  fileSize: number | null;
+  originalPath: string | null;
+}
+
+/** Payload of `db:refresh-book-source`: the book keeps its id/title, but
+ *  its stored copy and identity are replaced (the outside file changed). */
+export interface RefreshBookSourcePayload {
+  bookId: string;
+  sourcePath: string;
+  fileHash: string | null;
+  fileSize: number | null;
+  originalPath: string | null;
 }
 
 /** Result of `db:create-reading-book`. There is no document. */

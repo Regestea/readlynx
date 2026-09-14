@@ -27,6 +27,22 @@ export function registerDbIpc(db: DbWorkerClient) {
     db.createReadingBook(payload),
   );
 
+  handle("db:find-book-by-source-hash", (_event, payload: { fileHash: string; fileSize: number }) =>
+    db.findBookBySourceHash(payload.fileHash, payload.fileSize),
+  );
+
+  handle("db:find-book-by-original-path", (_event, originalPath: string) =>
+    db.findBookByOriginalPath(originalPath),
+  );
+
+  handle("db:refresh-book-source", (_event, payload) =>
+    db.refreshBookSource(payload),
+  );
+
+  handle("db:update-book-original-path", (_event, payload: { bookId: string; originalPath: string }) =>
+    db.updateBookOriginalPath(payload.bookId, payload.originalPath),
+  );
+
   handle("db:save-document", (_event, payload: SaveDocumentPayload) =>
     db.saveDocument(payload),
   );

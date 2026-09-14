@@ -23,6 +23,53 @@ protocol.registerSchemesAsPrivileged([
   },
 ]);
 
+let mainWindow: BrowserWindow | null = null;
+/** A book file handed by the OS before the window/renderer was ready
+ *  (cold start via double-click, or macOS `open-file`). Flushed once the
+ *  page finishes loading, or pulled by the renderer on mount. */
+let pendingOpenFile: string | null = null;
+
+/** True for OS-provided paths that are actual book files (filters out the
+ *  exe path itself, dev flags, …). Mirrors the main-side check in
+ *  `ipc/fs.ts` so both layers agree. */
+function findBookFile(argv: string[]): string | null {
+  const found = argv.find((arg) => /\.(pdf|epub|md|markdown)$/i.test(arg));
+  return found ?? null;
+}
+
+/** Routes an OS-opened book file to the window, queuing it when the
+ *  renderer is not ready yet. */
+function deliverOpenFile(filePath: string) {
+  if (mainWindow && !mainWindow.isDestroyed() && mainWindow.webContents) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.focus();
+    mainWindow.webContents.send("app:open-file", filePath);
+  } else {
+    pendingOpenFile = filePath;
+  }
+}
+
+// macOS delivers double-clicked files here — even before `ready`.
+app.on("open-file", (event, filePath) => {
+  event.preventDefault();
+  if (/\.(pdf|epub|md|markdown)$/i.test(filePath)) deliverOpenFile(filePath);
+});
+
+// Windows/Linux deliver them to the second instance's argv.
+const gotSingleLock = app.requestSingleInstanceLock();
+if (!gotSingleLock) {
+  app.quit();
+} else {
+  app.on("second-instance", (_event, argv) => {
+    const filePath = findBookFile(argv);
+    if (filePath) deliverOpenFile(filePath);
+    else if (mainWindow && !mainWindow.isDestroyed()) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+    }
+  });
+}
+
 function createWindow() {
   const win = new BrowserWindow({
     width: 1440,
@@ -45,6 +92,21 @@ function createWindow() {
 
   win.once("ready-to-show", () => {
     win.show();
+  });
+
+  mainWindow = win;
+  win.on("closed", () => {
+    if (mainWindow === win) mainWindow = null;
+  });
+
+  // A cold-start file (double-click while the app was closed) is delivered
+  // once the renderer can receive it.
+  win.webContents.on("did-finish-load", () => {
+    if (pendingOpenFile) {
+      const filePath = pendingOpenFile;
+      pendingOpenFile = null;
+      win.webContents.send("app:open-file", filePath);
+    }
   });
 
   /** Closing hands the renderer a chance to finish pending saves first (the
@@ -122,6 +184,17 @@ app.whenReady().then(() => {
     openDb,
     getStore,
   });
+  // Renderer pull-model fallback for the cold-start file (covers the case
+  // where the push above raced the renderer's listener registration).
+  ipcMain.handle("app:get-pending-file", () => {
+    const filePath = pendingOpenFile;
+    pendingOpenFile = null;
+    return filePath;
+  });
+  // Cold start via file association (Windows/Linux argv; macOS uses
+  // `open-file`, queued above).
+  const launchFile = findBookFile(process.argv.slice(app.isPackaged ? 1 : 2));
+  if (launchFile) pendingOpenFile = launchFile;
   createWindow();
 });
 

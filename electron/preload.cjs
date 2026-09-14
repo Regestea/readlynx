@@ -17,6 +17,15 @@ contextBridge.exposeInMainWorld("readlynx", {
   readCoverDataUrl: (relativePath) => ipcRenderer.invoke("cover:read-data-url", relativePath),
   pickFile: (options) => ipcRenderer.invoke("fs:pick-file", options),
   importSource: (options) => ipcRenderer.invoke("fs:import-source", options),
+  fileIdentity: (sourcePath) => ipcRenderer.invoke("fs:file-identity", sourcePath),
+  replaceSource: (options) => ipcRenderer.invoke("fs:replace-source", options),
+  /** OS "Open with" delivery: pushed while running, pulled on cold start. */
+  onOpenFile: (callback) => {
+    const listener = (_event, filePath) => callback(filePath);
+    ipcRenderer.on("app:open-file", listener);
+    return () => ipcRenderer.removeListener("app:open-file", listener);
+  },
+  getPendingFile: () => ipcRenderer.invoke("app:get-pending-file"),
   captureRect: (rect) => ipcRenderer.invoke("fs:capture-rect", rect),
   backup: {
     create: () => ipcRenderer.invoke("backup:create"),

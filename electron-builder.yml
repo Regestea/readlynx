@@ -5,6 +5,29 @@ copyright: Copyright (c) 2026 ReadLynx Contributors
 directories:
   output: release
 
+# "Open with ReadLynx" (double-click). Per-type icons live next to the app
+# icon in the build resources dir: electron-builder picks `${firstExt}.ico`
+# on Windows (NSIS) and `${firstExt}.icns` on macOS automatically.
+# Not supported on Linux (falls back to the generic document icon).
+fileAssociations:
+  - ext: pdf
+    name: com.readlynx.app.pdf
+    description: PDF Document (ReadLynx)
+    mimeType: application/pdf
+    role: Viewer
+  - ext: epub
+    name: com.readlynx.app.epub
+    description: EPUB Book (ReadLynx)
+    mimeType: application/epub+zip
+    role: Viewer
+  - ext:
+      - md
+      - markdown
+    name: com.readlynx.app.markdown
+    description: Markdown Document (ReadLynx)
+    mimeType: text/markdown
+    role: Viewer
+
 files:
   - dist/**
   - electron/**

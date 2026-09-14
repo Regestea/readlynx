@@ -33,11 +33,14 @@ CREATE TABLE IF NOT EXISTS DocumentSettings (
 );
 
 CREATE TABLE IF NOT EXISTS BookSources (
-  id         TEXT PRIMARY KEY,
-  bookId     TEXT NOT NULL REFERENCES Books(id) ON DELETE CASCADE,
-  sourceType TEXT NOT NULL,
-  filePath   TEXT NOT NULL,
-  createdAt  TEXT NOT NULL DEFAULT (datetime('now'))
+  id           TEXT PRIMARY KEY,
+  bookId       TEXT NOT NULL REFERENCES Books(id) ON DELETE CASCADE,
+  sourceType   TEXT NOT NULL,
+  filePath     TEXT NOT NULL,
+  fileHash     TEXT,
+  fileSize     INTEGER,
+  originalPath TEXT,
+  createdAt    TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE TABLE IF NOT EXISTS ReadingState (
@@ -197,6 +200,7 @@ export function applySchema(db: Database.Database): void {
     ensureReadingStateEpubExtractionColumn(db);
     ensureReadingStatePdfAutoFiguresColumn(db);
     ensureReadingStateProgressColumns(db);
+    ensureBookSourceIdentityColumns(db);
     ensureCascadeForeignKeys(db);
     ensureReadingStateV2(db);
     ensureReadingStateStatsColumns(db);
@@ -256,6 +260,27 @@ function ensureKindColumn(db: Database.Database): void {
 function hasCascadeForeignKeys(db: Database.Database, table: string): boolean {
   const fks = db.pragma(`foreign_key_list(${table})`) as Array<{ on_delete: string }>;
   return fks.length > 0 && fks.every((fk) => fk.on_delete === "CASCADE");
+}
+
+/** Databases created before external "Open with" support lack the content
+ *  identity columns on `BookSources` (`fileHash` = sha256 of the imported
+ *  bytes, `fileSize` = byte length, `originalPath` = where the file was
+ *  picked from). Adds them as nullable — pre-existing rows keep `NULL`
+ *  (they simply never match a hash lookup) — plus the lookup indexes.
+ *  Runs before `ensureCascadeForeignKeys` so its table rebuild carries the
+ *  columns over. */
+function ensureBookSourceIdentityColumns(db: Database.Database): void {
+  const columns = db.pragma("table_info(BookSources)") as Array<{ name: string }>;
+  const has = (name: string) => columns.some((entry) => entry.name === name);
+  db.transaction(() => {
+    if (!has("fileHash")) db.exec("ALTER TABLE BookSources ADD COLUMN fileHash TEXT");
+    if (!has("fileSize")) db.exec("ALTER TABLE BookSources ADD COLUMN fileSize INTEGER");
+    if (!has("originalPath")) db.exec("ALTER TABLE BookSources ADD COLUMN originalPath TEXT");
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_book_sources_hash
+      ON BookSources (fileHash, fileSize)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_book_sources_original
+      ON BookSources (originalPath)`);
+  })();
 }
 
 /** Databases created before the monotonic progress columns existed lack
@@ -328,14 +353,17 @@ function ensureCascadeForeignKeys(db: Database.Database): void {
       ALTER TABLE ReadingState_new RENAME TO ReadingState;
 
       CREATE TABLE BookSources_new (
-        id         TEXT PRIMARY KEY,
-        bookId     TEXT NOT NULL REFERENCES Books(id) ON DELETE CASCADE,
-        sourceType TEXT NOT NULL,
-        filePath   TEXT NOT NULL,
-        createdAt  TEXT NOT NULL DEFAULT (datetime('now'))
+        id           TEXT PRIMARY KEY,
+        bookId       TEXT NOT NULL REFERENCES Books(id) ON DELETE CASCADE,
+        sourceType   TEXT NOT NULL,
+        filePath     TEXT NOT NULL,
+        fileHash     TEXT,
+        fileSize     INTEGER,
+        originalPath TEXT,
+        createdAt    TEXT NOT NULL DEFAULT (datetime('now'))
       );
-      INSERT INTO BookSources_new (id, bookId, sourceType, filePath, createdAt)
-        SELECT id, bookId, sourceType, filePath, createdAt FROM BookSources;
+      INSERT INTO BookSources_new (id, bookId, sourceType, filePath, fileHash, fileSize, originalPath, createdAt)
+        SELECT id, bookId, sourceType, filePath, fileHash, fileSize, originalPath, createdAt FROM BookSources;
       DROP TABLE BookSources;
       ALTER TABLE BookSources_new RENAME TO BookSources;
 

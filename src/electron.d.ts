@@ -1,5 +1,6 @@
 import type {
   BookListItem,
+  BookSourceLookupResult,
   CreateBookResult,
   CreateReadingBookPayload,
   CreateReadingBookResult,
@@ -7,6 +8,7 @@ import type {
   GetBookResult,
   ReadingProgressRow,
   ReadingWeekSummary,
+  RefreshBookSourcePayload,
   SaveDocumentPayload,
   UpdateBookPayload,
 } from "./infrastructure/db/entities";
@@ -51,6 +53,14 @@ declare global {
         sourcePath: string;
         sourceType: string;
       }): Promise<string | null>;
+      /** Byte size + streaming sha256 of an outside file (dedupe key). */
+      fileIdentity(sourcePath: string): Promise<{ fileSize: number; fileHash: string } | null>;
+      /** Overwrites an imported `books/<uuid>` copy with fresh outside bytes. */
+      replaceSource(options: { storedPath: string; sourcePath: string }): Promise<boolean>;
+      /** OS "Open with" events (file association / double-click). */
+      onOpenFile(callback: (filePath: string) => void): () => void;
+      /** Cold-start file queued before the renderer mounted. */
+      getPendingFile(): Promise<string | null>;
       captureRect(rect: {
         x: number;
         y: number;
@@ -95,6 +105,13 @@ declare global {
         createBook(): Promise<CreateBookResult>;
         createTranslatedBook(payload: CreateTranslatedBookPayload): Promise<CreateBookResult>;
         createReadingBook(payload: CreateReadingBookPayload): Promise<CreateReadingBookResult>;
+        findBookBySourceHash(
+          fileHash: string,
+          fileSize: number,
+        ): Promise<BookSourceLookupResult | null>;
+        findBookByOriginalPath(originalPath: string): Promise<BookSourceLookupResult | null>;
+        refreshBookSource(payload: RefreshBookSourcePayload): Promise<boolean>;
+        updateBookOriginalPath(bookId: string, originalPath: string): Promise<boolean>;
         saveDocument(payload: SaveDocumentPayload): Promise<{ documentId: string } | null>;
         listBooks(): Promise<BookListItem[]>;
         getBook(bookId: string): Promise<GetBookResult | null>;

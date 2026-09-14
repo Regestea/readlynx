@@ -14,11 +14,13 @@ import type { ReaderDefaultsEntity } from "../../src/infrastructure/db/entities/
 import type { ReadingStateInput, ReaderSettingsInput } from "../../src/infrastructure/db/repositories/index.ts";
 import type {
   BookListItem,
+  BookSourceLookupResult,
   CreateBookResult,
   CreateReadingBookPayload,
   CreateReadingBookResult,
   CreateTranslatedBookPayload,
   GetBookResult,
+  RefreshBookSourcePayload,
   SaveDocumentPayload,
   UpdateBookPayload,
 } from "../../src/infrastructure/db/entities/types.ts";
@@ -89,6 +91,27 @@ export class DbWorkerClient {
 
   createReadingBook(payload: CreateReadingBookPayload): Promise<CreateReadingBookResult> {
     return this.exec("create-reading-book", payload);
+  }
+
+  /** Finds the book holding exactly this imported content (sha256 + size). */
+  findBookBySourceHash(fileHash: string, fileSize: number): Promise<BookSourceLookupResult | null> {
+    return this.exec("find-book-by-source-hash", { fileHash, fileSize });
+  }
+
+  /** Finds the book originally picked from this OS path. */
+  findBookByOriginalPath(originalPath: string): Promise<BookSourceLookupResult | null> {
+    return this.exec("find-book-by-original-path", originalPath);
+  }
+
+  /** Replaces a book's stored copy after its outside file changed (drops
+   *  stale translations and resets the reading position). */
+  refreshBookSource(payload: RefreshBookSourcePayload): Promise<boolean> {
+    return this.exec("refresh-book-source", payload);
+  }
+
+  /** Remembers a new pick location for the same content (renamed copy). */
+  updateBookOriginalPath(bookId: string, originalPath: string): Promise<boolean> {
+    return this.exec("update-book-original-path", { bookId, originalPath });
   }
 
   saveDocument(payload: SaveDocumentPayload): Promise<{ documentId: string } | null> {

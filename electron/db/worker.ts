@@ -143,9 +143,53 @@ function handleCreateReadingBook(payload: CreateReadingBookPayload): { bookId: s
   db.transaction(() => {
     books.insert(bookId, payload.title, "reading");
     if (storedCover) books.update(bookId, { title: payload.title, coverImage: storedCover });
-    bookSources.insert(sourceId, bookId, payload.sourceType, payload.sourcePath);
+    bookSources.insert(sourceId, bookId, payload.sourceType, payload.sourcePath, {
+      fileHash: payload.fileHash ?? null,
+      fileSize: payload.fileSize ?? null,
+      originalPath: payload.originalPath ?? null,
+    });
   })();
   return { bookId };
+}
+
+/** Points an existing book at replacement content (the user edited the file
+ *  outside the app and reopened it): swaps the stored copy reference and
+ *  its identity, drops the now-stale cached translations (rows + images)
+ *  and resets the reading position while keeping the title and reader
+ *  preferences. Returns false when the book does not exist. */
+function handleRefreshBookSource(payload: {
+  bookId: string;
+  sourcePath: string;
+  fileHash: string | null;
+  fileSize: number | null;
+  originalPath: string | null;
+}): boolean {
+  const book = books.findById(payload.bookId);
+  if (!book) return false;
+  db.transaction(() => {
+    bookSources.updateIdentity(payload.bookId, {
+      filePath: payload.sourcePath,
+      fileHash: payload.fileHash,
+      fileSize: payload.fileSize,
+      originalPath: payload.originalPath,
+    });
+    db.prepare("DELETE FROM Translations WHERE bookId = ?").run(payload.bookId);
+    db.prepare(
+      `UPDATE ReadingState SET
+         currentPage = 1,
+         currentChapter = '',
+         totalPages = 0,
+         totalChapters = 0,
+         progressPercent = 0,
+         maxProgress = 0,
+         finished = 0,
+         lastOpenedAt = datetime('now'),
+         updatedAt = datetime('now')
+       WHERE bookId = ?`,
+    ).run(payload.bookId);
+  })();
+  deleteAllBookTranslationImages(store, payload.bookId);
+  return true;
 }
 
 function handleSaveDocument(payload: SaveDocumentPayload): { documentId: string } | null {
@@ -228,6 +272,27 @@ const handlers: Record<string, (payload: unknown) => unknown> = {
     handleCreateTranslatedBook(payload as CreateTranslatedBookPayload),
   "create-reading-book": (payload) =>
     handleCreateReadingBook(payload as CreateReadingBookPayload),
+  "find-book-by-source-hash": (payload) => {
+    const { fileHash, fileSize } = payload as { fileHash: string; fileSize: number };
+    return bookSources.findByHash(fileHash, fileSize) ?? null;
+  },
+  "find-book-by-original-path": (payload) =>
+    bookSources.findByOriginalPath(payload as string) ?? null,
+  "refresh-book-source": (payload) =>
+    handleRefreshBookSource(
+      payload as {
+        bookId: string;
+        sourcePath: string;
+        fileHash: string | null;
+        fileSize: number | null;
+        originalPath: string | null;
+      },
+    ),
+  "update-book-original-path": (payload) => {
+    const { bookId, originalPath } = payload as { bookId: string; originalPath: string };
+    bookSources.updateOriginalPath(bookId, originalPath);
+    return true;
+  },
   "save-document": (payload) => handleSaveDocument(payload as SaveDocumentPayload),
   "list-books": () => books.list(),
   "get-book": (payload) => handleGetBook(payload as string),

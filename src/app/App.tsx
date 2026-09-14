@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ThemeProvider } from "./providers/theme/ThemeProvider";
 import { Header } from "./layout/Header/Header";
 import { Sidebar } from "./layout/Sidebar/Sidebar";
@@ -7,6 +7,8 @@ import { SettingsPage } from "../features/settings/SettingsPage";
 import { BackupPage } from "../features/backup/BackupPage";
 import { CreateBookPage } from "../features/create/CreateBookPage";
 import type { CreateBookDetails } from "../features/home/components/CreateBookDialog";
+import { PdfCoverCapture } from "../features/home/components/PdfCoverCapture";
+import { useExternalFileOpen } from "../features/home/hooks/useExternalFileOpen";
 import { ReadingPage } from "../features/reading/ReadingPage";
 import type { BookListItem } from "../infrastructure/db/entities";
 import { ReadingProgress } from "../features/home/widgets/ReadingProgress/ReadingProgress";
@@ -22,6 +24,19 @@ export default function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const isHome = activeId === "home";
   const isFullWidth = !isHome;
+
+  /** Shared routing into the read-only reader (home shelf + OS open-with). */
+  const openReadingBook = useCallback((bookId: string) => {
+    setCreateDetails(null);
+    setOpenBookId(null);
+    setReadingBookId(bookId);
+    setSidebarCollapsed(true);
+    setActiveId("reading");
+  }, []);
+
+  /** OS "Open with ReadLynx" (double-click on pdf/epub/md): silent import
+   *  into the library, then straight to the reader. */
+  const { coverJob, clearCoverJob } = useExternalFileOpen(openReadingBook);
 
   /** When the window is closing, run the active page's save flush first (the
    *  same work its top-bar back button would do), then let the window close. */
@@ -112,15 +127,10 @@ export default function App() {
                 setReadingBookId(null);
                 setActiveId("create-book");
               }}
-              onOpenReadingBook={(bookId) => {
-                setCreateDetails(null);
-                setOpenBookId(null);
-                setReadingBookId(bookId);
-                setSidebarCollapsed(true);
-                setActiveId("reading");
-              }}
+              onOpenReadingBook={openReadingBook}
             />
           )}
+          {coverJob && <PdfCoverCapture job={coverJob} onDone={clearCoverJob} />}
           {activeId === "create-book" && (
             <CreateBookPage
               onBack={() => {
