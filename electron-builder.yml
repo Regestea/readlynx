@@ -4,10 +4,13 @@ copyright: Copyright (c) 2026 ReadLynx Contributors
 
 directories:
   output: release
+  # Icon sources (app icon + per-type file icons) live here. electron-builder
+  # resolves association icons from this dir.
+  buildResources: src/assets/icon
 
-# "Open with ReadLynx" (double-click). Per-type icons live next to the app
-# icon in the build resources dir: electron-builder picks `${firstExt}.ico`
-# on Windows (NSIS) and `${firstExt}.icns` on macOS automatically.
+# "Open with ReadLynx" (double-click). Association icons are picked
+# automatically by extension basename: `${firstExt}.ico` on Windows (NSIS)
+# and `${firstExt}.icns` on macOS (pdf/epub/md files above).
 # Not supported on Linux (falls back to the generic document icon).
 fileAssociations:
   - ext: pdf
@@ -33,6 +36,10 @@ files:
   - electron/**
   - src/**
   - package.json
+  # Build-time icon binaries (embedded into the installer / app bundle by
+  # electron-builder itself) — no need to ship them inside the app.
+  - "!src/assets/icon/*.ico"
+  - "!src/assets/icon/*.icns"
 
 # Native modules (better-sqlite3) and the worker threads that use them
 # must live outside the asar archive.

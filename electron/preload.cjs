@@ -56,6 +56,13 @@ contextBridge.exposeInMainWorld("readlynx", {
     createBook: () => ipcRenderer.invoke("db:create-book"),
     createTranslatedBook: (payload) => ipcRenderer.invoke("db:create-translated-book", payload),
     createReadingBook: (payload) => ipcRenderer.invoke("db:create-reading-book", payload),
+    findBookBySourceHash: (fileHash, fileSize) =>
+      ipcRenderer.invoke("db:find-book-by-source-hash", { fileHash, fileSize }),
+    findBookByOriginalPath: (originalPath) =>
+      ipcRenderer.invoke("db:find-book-by-original-path", originalPath),
+    refreshBookSource: (payload) => ipcRenderer.invoke("db:refresh-book-source", payload),
+    updateBookOriginalPath: (bookId, originalPath) =>
+      ipcRenderer.invoke("db:update-book-original-path", { bookId, originalPath }),
     saveDocument: (payload) => ipcRenderer.invoke("db:save-document", payload),
     listBooks: () => ipcRenderer.invoke("db:list-books"),
     getBook: (bookId) => ipcRenderer.invoke("db:get-book", bookId),
