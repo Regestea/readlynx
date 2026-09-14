@@ -87,6 +87,10 @@ jobs:
         with:
           fetch-depth: 0
 
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
       - name: Download installers
         uses: actions/download-artifact@v5
         with:
@@ -95,7 +99,18 @@ jobs:
           merge-multiple: true
 
       - name: Generate release notes
-        id: notes
+        env:
+          # Your own OpenAI-compatible endpoint. Key goes in Secrets (masked),
+          # URL + model go in Variables:
+          #   Secrets: LLM_API_KEY
+          #   Variables: LLM_BASE_URL (e.g. https://api.openai.com/v1),
+          #              LLM_MODEL (e.g. gpt-4o-mini),
+          #              RELEASE_NOTES_LANG (en or fa, optional)
+          # Without LLM_API_KEY the script uses the keyless heuristic changelog.
+          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+          LLM_BASE_URL: ${{ vars.LLM_BASE_URL }}
+          LLM_MODEL: ${{ vars.LLM_MODEL }}
+          RELEASE_NOTES_LANG: ${{ vars.RELEASE_NOTES_LANG }}
         run: |
           LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || true)
           node .github/scripts/make-changelog.mjs "${{ needs.version.outputs.version }}" "$LAST_TAG" > NOTES.md
