@@ -19,6 +19,12 @@ import {
   unitToPage,
 } from "./translation/types";
 import { useCloseFlush } from "../../shared/closeFlush";
+import {
+  loadScrollRatio,
+  markdownRatio,
+  restoreMarkdownRatio,
+  saveScrollRatio,
+} from "./scrollMemory";
 import styles from "./ReadingPage.module.css";
 
 /** Decodes raw file bytes as UTF-8 Markdown text (strips a BOM when present). */
@@ -74,22 +80,20 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
   const askPdfRef = useRef(false);
   const pdfRef = useRef<PdfViewerHandle | null>(null);
   const epubRef = useRef<EpubViewerHandle | null>(null);
-  /** Scrollable content element of the translation Markdown — used to read /
-   *  set the scroll position when toggling between the original and
-   *  translation views (EPUB scroll sync). */
+  /** Scrollable element of the translation Markdown. Each view (original /
+   *  translation) keeps its own scroll position — switching never copies an
+   *  offset across, so there is no jump. Persisted per book+unit. */
   const translationScrollRef = useRef<HTMLDivElement | null>(null);
-  /** Exact pixel scroll offset captured from the EPUB viewer while its
-   *  translation was still loading; applied (for the same chapter only) once
-   *  it is ready. */
-  const pendingEpubScrollRef = useRef<{ unitKey: string; top: number } | null>(null);
-  /** Last scroll offset handed to the EPUB viewer on a toggle. When the user
-   *  toggles back without scrolling (within a small px tolerance), this exact
-   *  value is reused instead of a ratio computed from rounded scroll offsets
-   *  — which would otherwise drift towards the top on every toggle. */
-  const lastEpubScrollRef = useRef<number | null>(null);
-  /** Translation scroll offset at the moment it was last synced, so a
-   *  scroll inside the translation can be detected on toggle-back. */
-  const lastTranslationScrollRef = useRef<number | null>(null);
+  /** Scrollable element of the original Markdown view (markdown books only).
+   *  The EPUB original scrolls inside its own viewer (see epubRef). */
+  const originalMarkdownScrollRef = useRef<HTMLDivElement | null>(null);
+  /** Unit keys already restored, so content re-renders (zoom, images) don't
+   *  snap the user back to a stale saved position. */
+  const restoredUnitsRef = useRef<Set<string>>(new Set());
+  /** Debounce timer for scroll-event saves (localStorage is synchronous). */
+  const saveTimerRef = useRef<number | null>(null);
+  const prevEpubChapterRef = useRef<string | null>(null);
+  const prevTransUnitRef = useRef<string | null>(null);
   /** Last position write still in flight, so closing waits for the worker to
    *  finish it before the app quits. */
   const lastPositionWriteRef = useRef<Promise<unknown> | null>(null);
@@ -238,6 +242,9 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
       }
       setSavedPage(reading?.currentPage ?? 1);
       setSavedChapter(reading?.currentChapter || null);
+      prevEpubChapterRef.current = reading?.currentChapter || null;
+      prevTransUnitRef.current = null;
+      restoredUnitsRef.current.clear();
       const rawType = String(result.source.sourceType ?? "pdf").toLowerCase();
       const sourceType: BookSourceType =
         rawType === "epub" ? "epub" : rawType === "markdown" || rawType === "md" ? "markdown" : "pdf";
@@ -295,7 +302,27 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
 
   const handleChapterChange = useCallback(
     (chapterKey: string) => {
+      prevEpubChapterRef.current = chapterKey;
       setTranslationUnit(epubUnitKey(chapterKey));
+      // New chapter just rendered: restore its own saved position (if any).
+      // Each chapter keeps an independent offset — never copied from another
+      // chapter or from the translation.
+      const saved = loadScrollRatio("epub-orig", bookId, chapterKey);
+      if (saved !== null && saved > 0) {
+        let left = 6;
+        const tick = () => {
+          const scroll = epubRef.current?.getChapterScroll();
+          if (scroll && scroll.max > 0) {
+            epubRef.current?.setChapterScroll(saved * scroll.max);
+            left -= 1;
+            if (left > 0) window.setTimeout(() => requestAnimationFrame(tick), 150);
+            return;
+          }
+          left -= 1;
+          if (left > 0) window.setTimeout(() => requestAnimationFrame(tick), 150);
+        };
+        requestAnimationFrame(tick);
+      }
       lastPositionWriteRef.current =
         window.readlynx?.db.updateReadingState(bookId, {
           currentChapter: chapterKey,
@@ -327,9 +354,47 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
     }
   }, [bookId]);
 
+  /** Persists the visible long-document scroll positions (EPUB / Markdown,
+   *  original + translation independently) — localStorage is synchronous, so
+   *  this is safe to call during close/unmount. */
+  const flushScrollMemory = useCallback(() => {
+    try {
+      const sourceType = readyBook?.sourceType;
+      if (sourceType === "epub") {
+        const scroll = epubRef.current?.getChapterScroll();
+        const chapter = translation.unitKey
+          ? unitToChapter(translation.unitKey)
+          : prevEpubChapterRef.current;
+        if (scroll && scroll.max > 0 && chapter) {
+          saveScrollRatio("epub-orig", bookId, chapter, scroll.top / scroll.max);
+        }
+        const unitKey = translation.unitKey;
+        if (unitKey) {
+          const ratio = markdownRatio(translationScrollRef.current);
+          if (ratio !== null) saveScrollRatio("trans", bookId, unitKey, ratio);
+        }
+      } else if (sourceType === "markdown") {
+        const origRatio = markdownRatio(originalMarkdownScrollRef.current);
+        if (origRatio !== null) saveScrollRatio("md-orig", bookId, "doc", origRatio);
+        const unitKey = translation.unitKey;
+        if (unitKey) {
+          const ratio = markdownRatio(translationScrollRef.current);
+          if (ratio !== null) saveScrollRatio("trans", bookId, unitKey, ratio);
+        }
+      }
+    } catch {
+      // best-effort only
+    }
+    if (saveTimerRef.current !== null) {
+      window.clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+  }, [readyBook, bookId, translation.unitKey]);
+
   /** Closing the app waits for the last position write and the session
    *  flush, the same saves the back button's close performs. */
   useCloseFlush(async () => {
+    flushScrollMemory();
     await lastPositionWriteRef.current;
     await flushSession();
   });
@@ -338,6 +403,7 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
    *  back button still counts the session and saves the last EPUB position. */
   useEffect(() => {
     return () => {
+      flushScrollMemory();
       void flushSession();
       const progress = epubProgressRef.current;
       if (progress > 0) {
@@ -346,7 +412,7 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
         });
       }
     };
-  }, [flushSession, bookId]);
+  }, [flushSession, flushScrollMemory, bookId]);
 
   /** PDF click-to-ask: follows the translate panel's top setting — OCR the
    *  whole current page locally and seed the chat with the recognized text
@@ -389,92 +455,179 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
   const book = state.status === "ready" ? state.book : null;
   const showTranslation = translation.viewMode === "translation";
 
-  /** Applies a saved pixel offset to the translation Markdown. Two frames of
-   *  delay so the view has committed and the zoomed content height is final
-   *  before measuring `scrollHeight`. */
-  const applyTranslationScroll = useCallback((top: number) => {
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        const element = translationScrollRef.current;
-        if (!element) return;
-        const max = element.scrollHeight - element.clientHeight;
-        if (max <= 0) return;
-        element.scrollTop = Math.min(max, Math.max(0, top));
-      });
-    });
-  }, []);
+  /** Saves the EPUB original scroll for a chapter as a 0..1 ratio. */
+  const saveEpubScroll = useCallback(
+    (chapterKey: string | null | undefined) => {
+      if (book?.sourceType !== "epub" || !chapterKey) return;
+      const scroll = epubRef.current?.getChapterScroll();
+      if (!scroll || scroll.max <= 0) return;
+      saveScrollRatio("epub-orig", bookId, chapterKey, scroll.top / scroll.max);
+    },
+    [book?.sourceType, bookId],
+  );
 
-  /** Toggling between the original EPUB view and the translation carries the
-   *  reading position over as an exact pixel offset. When the user toggles
-   *  back without scrolling, the last exact offset is reused — recomputing it
-   *  from rounded `scrollTop` values would drift towards the top each time.
-   *  When the translation is still loading, the offset waits in
-   *  `pendingEpubScrollRef` and is applied once the content is ready (same
-   *  chapter only). */
+  /** Saves the translation scroll for a unit as a 0..1 ratio. */
+  const saveTranslationScroll = useCallback(
+    (unitKey: string | null | undefined) => {
+      if (!unitKey) return;
+      if (book?.sourceType === "pdf") return;
+      const ratio = markdownRatio(translationScrollRef.current);
+      if (ratio === null) return;
+      saveScrollRatio("trans", bookId, unitKey, ratio);
+    },
+    [book?.sourceType, bookId],
+  );
+
+  /** Saves the original Markdown scroll (markdown books: single document). */
+  const saveMdOriginalScroll = useCallback(() => {
+    if (book?.sourceType !== "markdown") return;
+    const ratio = markdownRatio(originalMarkdownScrollRef.current);
+    if (ratio === null) return;
+    saveScrollRatio("md-orig", bookId, "doc", ratio);
+  }, [book?.sourceType, bookId]);
+
+  /** Queues a debounced save of whichever long-document view is visible. */
+  const scheduleScrollSave = useCallback(() => {
+    if (saveTimerRef.current !== null) window.clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = window.setTimeout(() => {
+      saveTimerRef.current = null;
+      if (book?.sourceType === "epub") {
+        if (showTranslation) saveTranslationScroll(translation.unitKey);
+        else {
+          const chapter = translation.unitKey
+            ? unitToChapter(translation.unitKey)
+            : prevEpubChapterRef.current;
+          saveEpubScroll(chapter ?? prevEpubChapterRef.current);
+        }
+      } else if (book?.sourceType === "markdown") {
+        if (showTranslation) saveTranslationScroll(translation.unitKey);
+        else saveMdOriginalScroll();
+      }
+    }, 300);
+  }, [
+    book?.sourceType,
+    showTranslation,
+    translation.unitKey,
+    saveTranslationScroll,
+    saveEpubScroll,
+    saveMdOriginalScroll,
+  ]);
+
+  /** Switching keeps each view where it was: persist the outgoing view only.
+   *  Nothing is copied across, so there is no jump. The translation Markdown
+   *  unmounts while hidden, so its restored-marker is cleared on leave —
+   *  otherwise coming back to the same unit would skip the restore and the
+   *  view would reset to the top. */
   const toggleViewMode = useCallback(() => {
     const nextMode = showTranslation ? "original" : "translation";
     if (book?.sourceType === "epub") {
-      if (nextMode === "translation") {
-        const scroll = epubRef.current?.getChapterScroll();
-        const unitKey = translation.unitKey;
-        if (scroll && scroll.max > 0 && unitKey) {
-          const reused =
-            lastEpubScrollRef.current !== null &&
-            Math.abs(scroll.top - lastEpubScrollRef.current) < 2;
-          const top = reused ? lastEpubScrollRef.current : Math.round(scroll.top);
-          if (!reused) lastEpubScrollRef.current = top;
-          lastTranslationScrollRef.current = null;
-          pendingEpubScrollRef.current = { unitKey, top };
-        }
+      if (showTranslation) {
+        saveTranslationScroll(translation.unitKey);
+        if (translation.unitKey) restoredUnitsRef.current.delete(`trans:${translation.unitKey}`);
       } else {
-        const element = translationScrollRef.current;
-        if (element && lastEpubScrollRef.current !== null) {
-          const max = element.scrollHeight - element.clientHeight;
-          if (max > 0) {
-            const scrolledInTranslation =
-              lastTranslationScrollRef.current !== null &&
-              Math.abs(element.scrollTop - lastTranslationScrollRef.current) >= 2;
-            if (scrolledInTranslation) {
-              // The user moved inside the translation: carry the new position
-              // over by ratio and remember the exact EPUB offset it produced.
-              const top = Math.round((element.scrollTop / max) * (epubRef.current?.getChapterScroll()?.max ?? 0));
-              lastEpubScrollRef.current = top;
-              epubRef.current?.setChapterScroll(top);
-            } else {
-              // No movement: reuse the exact offset captured when leaving the
-              // EPUB view so repeated toggles never drift.
-              epubRef.current?.setChapterScroll(lastEpubScrollRef.current);
-            }
-            lastTranslationScrollRef.current = element.scrollTop;
-          }
-        }
+        const chapter = translation.unitKey
+          ? unitToChapter(translation.unitKey)
+          : prevEpubChapterRef.current;
+        saveEpubScroll(chapter ?? prevEpubChapterRef.current);
       }
+    } else if (book?.sourceType === "markdown") {
+      if (showTranslation) {
+        saveTranslationScroll(translation.unitKey);
+        if (translation.unitKey) restoredUnitsRef.current.delete(`trans:${translation.unitKey}`);
+      } else saveMdOriginalScroll();
     }
     translation.setViewMode(nextMode);
-  }, [book?.sourceType, showTranslation, translation]);
+  }, [
+    book?.sourceType,
+    showTranslation,
+    translation,
+    saveTranslationScroll,
+    saveEpubScroll,
+    saveMdOriginalScroll,
+  ]);
 
-  /** Applies the pending EPUB scroll offset once the translation content for
-   *  the same chapter has finished loading into the view. */
+  /** Restores the translation scroll once its content for the current unit is
+   *  ready. Once per unit per view-session, so later re-renders (zoom,
+   *  images) never snap the user back. The marker is cleared when leaving
+   *  the translation view (see toggleViewMode) because the Markdown host
+   *  unmounts — otherwise returning to the same unit would skip the restore
+   *  and reset to the top. */
   useEffect(() => {
-    const pending = pendingEpubScrollRef.current;
-    if (!pending || !showTranslation) return;
-    if (pending.unitKey !== translation.unitKey) {
-      pendingEpubScrollRef.current = null;
-      lastEpubScrollRef.current = null;
+    if (!showTranslation) return;
+    if (book?.sourceType === "pdf") return;
+    const unitKey = translation.unitKey;
+    if (!unitKey) return;
+    if (!translation.markdown || translation.markdownLoading || translation.imagesPending) return;
+    const element = translationScrollRef.current;
+    if (!element) return;
+    if (prevTransUnitRef.current === unitKey && restoredUnitsRef.current.has(`trans:${unitKey}`)) {
       return;
     }
-    if (!translation.markdown || translation.markdownLoading || translation.imagesPending) return;
-    applyTranslationScroll(pending.top);
-    lastTranslationScrollRef.current = pending.top;
-    pendingEpubScrollRef.current = null;
+    prevTransUnitRef.current = unitKey;
+    restoredUnitsRef.current.add(`trans:${unitKey}`);
+    const saved = loadScrollRatio("trans", bookId, unitKey);
+    if (saved !== null && saved > 0) {
+      restoreMarkdownRatio(element, saved);
+    }
   }, [
     showTranslation,
+    book?.sourceType,
+    bookId,
     translation.unitKey,
     translation.markdown,
     translation.markdownLoading,
     translation.imagesPending,
-    applyTranslationScroll,
   ]);
+
+  /** Restores the original Markdown scroll once the file text is loaded. */
+  useEffect(() => {
+    if (showTranslation) return;
+    if (book?.sourceType !== "markdown") return;
+    if (!markdownSource) return;
+    const key = "md-orig:doc";
+    if (restoredUnitsRef.current.has(key)) return;
+    restoredUnitsRef.current.add(key);
+    const saved = loadScrollRatio("md-orig", bookId, "doc");
+    if (saved !== null && saved > 0) {
+      restoreMarkdownRatio(originalMarkdownScrollRef.current, saved);
+    }
+  }, [showTranslation, book?.sourceType, bookId, markdownSource]);
+
+  /** Continuously persists the visible Markdown view while scrolling
+   *  (debounced). EPUB original is polled below — its scroll element lives
+   *  inside the viewer's iframe/container. */
+  useEffect(() => {
+    const target = showTranslation
+      ? translationScrollRef.current
+      : originalMarkdownScrollRef.current;
+    if (!target) return;
+    if (book?.sourceType !== "epub" && book?.sourceType !== "markdown") return;
+    // EPUB translation also scrolls a Markdown host.
+    if (!showTranslation && book?.sourceType !== "markdown") return;
+    const onScroll = () => scheduleScrollSave();
+    target.addEventListener("scroll", onScroll, { passive: true });
+    return () => target.removeEventListener("scroll", onScroll);
+  }, [
+    showTranslation,
+    book?.sourceType,
+    translation.unitKey,
+    translation.markdown,
+    markdownSource,
+    scheduleScrollSave,
+  ]);
+
+  /** Polls the EPUB original scroll while it is visible (its scroll element
+   *  is owned by the viewer, so a direct listener would miss iframe scrolls). */
+  useEffect(() => {
+    if (book?.sourceType !== "epub" || showTranslation) return;
+    const id = window.setInterval(() => {
+      const chapter = translation.unitKey
+        ? unitToChapter(translation.unitKey)
+        : prevEpubChapterRef.current;
+      saveEpubScroll(chapter ?? prevEpubChapterRef.current);
+    }, 2000);
+    return () => window.clearInterval(id);
+  }, [book?.sourceType, showTranslation, translation.unitKey, saveEpubScroll]);
 
   /** Reader-mode navigation: which unit the translation view is showing and
    *  prev/next movement through the document (PDF pages / EPUB chapters).
@@ -512,6 +665,16 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
       if (book.sourceType === "pdf") {
         pdfRef.current?.goToPage((currentPdfPage ?? 1) + delta);
       } else {
+        // Persist the current chapter/unit scroll before leaving it, so
+        // coming back restores the same spot. `onChapterChange` restores
+        // the target chapter after `rendition.display()`.
+        if (showTranslation) saveTranslationScroll(translation.unitKey);
+        else {
+          const chapter = translation.unitKey
+            ? unitToChapter(translation.unitKey)
+            : prevEpubChapterRef.current;
+          saveEpubScroll(chapter ?? prevEpubChapterRef.current);
+        }
         // Mirror PDF: drive the viewer — it fires `onChapterChange` which
         // updates `translation.unitKey` and loads the chapter's markdown.
         // The viewer stays layout-capable while hidden (see .viewerHidden)
@@ -533,7 +696,18 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
         }
       }
     },
-    [book, bookId, currentPdfPage, currentChapter, totalChapters, setTranslationUnit],
+    [
+      book,
+      bookId,
+      currentPdfPage,
+      currentChapter,
+      totalChapters,
+      setTranslationUnit,
+      showTranslation,
+      translation.unitKey,
+      saveTranslationScroll,
+      saveEpubScroll,
+    ],
   );
   const toolbarExtra =
     showTranslation && book && !isMarkdownBook ? (
@@ -606,6 +780,7 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
           className={styles.backButton}
           aria-label="Back to home"
           onClick={() => {
+            flushScrollMemory();
             void flushSession();
             onBack?.();
           }}
@@ -723,6 +898,7 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
                   settingsBookId={bookId}
                   className={styles.translationBody}
                   onAskAi={setAiContext}
+                  scrollHostRef={originalMarkdownScrollRef}
                 />
               )}
             </div>
