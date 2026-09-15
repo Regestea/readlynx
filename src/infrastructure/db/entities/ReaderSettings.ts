@@ -1,5 +1,8 @@
-/** Which surface of the reading screen a `ReaderSettings` row applies to. */
-export type ReaderViewer = "epub" | "markdown" | "pdf";
+/** Which surface of the reading screen a `ReaderSettings` row applies to.
+ *  `image` holds the per-book global image zoom (one value shared by every
+ *  image of the book, in both the EPUB source view and the Markdown
+ *  translation view); only its `zoomPct` column is used. */
+export type ReaderViewer = "epub" | "markdown" | "pdf" | "image";
 
 /** Syntax/diagram theme override for Markdown code blocks and Mermaid
  *  diagrams. `null` = follow the app theme; otherwise a fixed light/dark

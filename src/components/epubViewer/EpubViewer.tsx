@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
-import type { Ref } from "react";
-import { ChevronLeft, ChevronRight, FileDown, FileWarning, Loader2, Maximize2, Minus, Minimize2, Palette, Plus } from "lucide-react";
+import type { PointerEvent as ReactPointerEvent, Ref } from "react";
+import { ChevronLeft, ChevronRight, FileDown, FileWarning, Loader2, Maximize2, Minus, Minimize2, Palette, Plus, X } from "lucide-react";
 import ePub from "epubjs";
 import type { Book, Contents, Location, Rendition } from "epubjs";
 import { useTheme } from "../../app/providers/theme/ThemeContext";
@@ -23,6 +23,31 @@ import styles from "./EpubViewer.module.css";
 const FONT_STEP = 10;
 const FONT_MIN = 60;
 const FONT_MAX = 200;
+
+/** Per-book global image zoom (one value shared by every image of the book,
+ *  persisted via `useReaderSettings(bookId, "image")`). Wide range on purpose:
+ *  book illustrations are often read zoomed far beyond the text zoom. */
+const IMAGE_ZOOM_MIN = 25;
+const IMAGE_ZOOM_MAX = 400;
+const IMAGE_ZOOM_STEP = 25;
+
+function clampImageZoom(value: number): number {
+  if (!Number.isFinite(value)) return 100;
+  return Math.min(IMAGE_ZOOM_MAX, Math.max(IMAGE_ZOOM_MIN, Math.round(value)));
+}
+
+/** Injected into every EPUB content document: wrapper + hover toolbar styles
+ *  for book images. Fixed colors (no theme vars — the iframe document does not
+ *  inherit the app document's custom properties) that stay readable over any
+ *  illustration, light or dark. */
+const EPUB_IMAGE_CSS = [
+  ".rlx-img-wrap { position: relative; display: block; max-width: 100%; margin: 1em auto; overflow: hidden; border-radius: 8px; line-height: 0; }",
+  ".rlx-img-wrap::after { content: ''; display: table; clear: both; }",
+  ".rlx-img-wrap > img { line-height: normal; }",
+  ".rlx-img-full { position: absolute; top: 8px; right: 8px; z-index: 5; width: 30px; height: 30px; padding: 0; border-radius: 999px; background: rgba(18, 18, 22, 0.85); border: 1px solid rgba(255, 255, 255, 0.22); box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35); color: #fff; font: 600 14px/1 system-ui, sans-serif; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; opacity: 0; transform: translateY(-4px); transition: opacity 0.15s ease, transform 0.15s ease; pointer-events: none; line-height: 1; }",
+  ".rlx-img-wrap:hover .rlx-img-full, .rlx-img-wrap:focus-within .rlx-img-full { opacity: 0.55; transform: none; pointer-events: auto; }",
+  ".rlx-img-wrap .rlx-img-full:hover { opacity: 1; }",
+].join("\n");
 
 hljs.registerLanguage("powershell", powershell);
 hljs.registerLanguage("dockerfile", dockerfile);
@@ -335,6 +360,17 @@ export function EpubViewer({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [spacerHeight, setSpacerHeight] = useState(0);
   const [aiSelection, setAiSelection] = useState<{ x: number; y: number; text: string } | null>(null);
+  /** EPUB image zoom is intentionally ephemeral: kept only in memory, never
+   *  persisted anywhere, and reset to 100% on every open — so it can never
+   *  leak into (or read from) the Markdown viewer's per-book image zoom. */
+  const [imageZoomPct, setImageZoomPct] = useState(100);
+  /** Fullscreen image overlay (opened from an in-content toolbar). The image
+   *  keeps the shared per-book zoom, so zooming there zooms everywhere. */
+  const [imageOverlay, setImageOverlay] = useState<{ src: string; alt: string } | null>(null);
+  const [overlayDragging, setOverlayDragging] = useState(false);
+  const overlayViewRef = useRef<HTMLDivElement>(null);
+  const overlayDragRef = useRef<{ x: number; y: number; left: number; top: number } | null>(null);
+  const openImageOverlayRef = useRef<(src: string, alt: string) => void>(() => {});
   const viewerRef = useRef<HTMLDivElement>(null);
   const hostRef = useRef<HTMLDivElement>(null);
   const controlsWrapRef = useRef<HTMLDivElement>(null);
@@ -369,6 +405,57 @@ export function EpubViewer({
   useEffect(() => {
     onProgressChangeRef.current = onProgressChange;
   }, [onProgressChange]);
+
+  const openImageOverlay = useCallback((src: string, alt: string) => {
+    setImageOverlay({ src, alt });
+  }, []);
+  /** Closing the EPUB image modal resets its (in-memory only) zoom back to
+   *  100% — Markdown viewer zoom is untouched. */
+  const closeImageOverlay = useCallback(() => {
+    setImageOverlay(null);
+    setImageZoomPct(100);
+  }, []);
+  useEffect(() => {
+    openImageOverlayRef.current = openImageOverlay;
+  }, [openImageOverlay]);
+
+  /** Text-zoom scale applied to the whole content document (`transform:
+   *  scale`); rects measured inside the iframe are post-transform, so button
+   *  offsets derived from them are divided back by this scale. */
+  const textZoomRef = useRef(1);
+
+  /** Pins the circle button 8px inside the image's own rendered top-right
+   *  corner — never dangling half-outside narrow, centered or floated
+   *  images whose wrapper is wider than the picture itself. */
+  const placeImageButton = useCallback(
+    (wrap: HTMLElement, img: HTMLImageElement, btn: HTMLButtonElement) => {
+      try {
+        const scale = textZoomRef.current || 1;
+        const box = wrap.getBoundingClientRect();
+        const rect = img.getBoundingClientRect();
+        if (rect.width <= 0 || rect.height <= 0) return;
+        btn.style.top = `${Math.max(0, (rect.top - box.top) / scale + 8)}px`;
+        btn.style.right = `${Math.max(0, (box.right - rect.right) / scale + 8)}px`;
+      } catch {
+        // keep the default corner on any measurement failure
+      }
+    },
+    [],
+  );
+
+  const placeAllImageButtons = useCallback(
+    (doc: Document) => {
+      doc.querySelectorAll(".rlx-img-wrap").forEach((node) => {
+        const wrap = node as HTMLElement;
+        const img = wrap.querySelector("img");
+        const btn = wrap.querySelector(".rlx-img-full");
+        if (img instanceof HTMLImageElement && btn instanceof HTMLButtonElement) {
+          placeImageButton(wrap, img, btn);
+        }
+      });
+    },
+    [placeImageButton],
+  );
 
   /** Markdown of the currently rendered section (the chapter being read),
    *  extracted the same way as the toolbar's "Extract" action. */
@@ -472,6 +559,50 @@ export function EpubViewer({
     return () => document.removeEventListener("keydown", onKey);
   }, [isFullscreen]);
 
+  /** Exits the image fullscreen overlay with Escape. */
+  useEffect(() => {
+    if (!imageOverlay) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") closeImageOverlay();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [imageOverlay, closeImageOverlay]);
+
+  /** Automatic drag panning inside the image fullscreen overlay (mirrors the
+   *  in-content drag so over-zoomed illustrations stay explorable). */
+  const startOverlayPan = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const view = overlayViewRef.current;
+    if (!view || !(clampImageZoom(imageZoomPct) > 100)) return;
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+    overlayDragRef.current = {
+      x: event.clientX,
+      y: event.clientY,
+      left: view.scrollLeft,
+      top: view.scrollTop,
+    };
+    setOverlayDragging(true);
+    try {
+      view.setPointerCapture?.(event.pointerId);
+    } catch {
+      // ignore — dragging still works without capture
+    }
+    event.preventDefault();
+  };
+
+  const moveOverlayPan = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const drag = overlayDragRef.current;
+    const view = overlayViewRef.current;
+    if (!drag || !view) return;
+    view.scrollLeft = drag.left - (event.clientX - drag.x);
+    view.scrollTop = drag.top - (event.clientY - drag.y);
+  };
+
+  const endOverlayPan = () => {
+    overlayDragRef.current = null;
+    setOverlayDragging(false);
+  };
+
   /** Injects/replaces a forced font-family stylesheet into an EPUB document. */
   const injectFontStyle = useCallback((content: Contents) => {
     const doc = content.document;
@@ -484,6 +615,69 @@ export function EpubViewer({
     }
     style.textContent = fontCssRef.current + "\n" + skinCssRef.current;
   }, []);
+
+  /** Wraps every content image with a single circular fullscreen button
+   *  pinned 8px inside the picture's own top-right corner, shown
+   *  semi-transparent on hover (fully opaque on the button itself). Zoom
+   *  lives only in the fullscreen overlay — in-content images always render
+   *  at their natural size. */
+  const enhanceImages = useCallback(
+    (content: Contents) => {
+      const doc = content.document;
+      if (!doc) return;
+      if (!doc.getElementById("readlynx-img")) {
+        const style = doc.createElement("style");
+        style.id = "readlynx-img";
+        style.textContent = EPUB_IMAGE_CSS;
+        if (doc.head) doc.head.appendChild(style);
+      }
+      doc.querySelectorAll("img").forEach((node) => {
+        const img = node as HTMLImageElement;
+        if (img.dataset.rlxImg === "1") return;
+        // Skip tiny chrome (tracking pixels, bullets, small icons) so the
+        // button only ever adorns real illustrations.
+        const wAttr = Number(img.getAttribute("width") ?? 0);
+        const hAttr = Number(img.getAttribute("height") ?? 0);
+        if ((wAttr > 0 && wAttr < 48) || (hAttr > 0 && hAttr < 48)) return;
+        img.dataset.rlxImg = "1";
+        const wrap = doc.createElement("span");
+        wrap.className = "rlx-img-wrap";
+        img.parentNode?.insertBefore(wrap, img);
+        wrap.appendChild(img);
+
+        const fullBtn = doc.createElement("button");
+        fullBtn.type = "button";
+        fullBtn.textContent = "⤢";
+        fullBtn.title = "View image fullscreen";
+        fullBtn.setAttribute("aria-label", "View image fullscreen");
+        fullBtn.className = "rlx-img-full";
+        wrap.appendChild(fullBtn);
+
+        // The wrapper is full-width, but the picture itself may be narrower
+        // (small, centered or floated) — measure once it has a real box so
+        // the button hugs the picture instead of the wrapper edge.
+        if (img.complete && img.naturalWidth > 0) {
+          placeImageButton(wrap as HTMLElement, img, fullBtn as HTMLButtonElement);
+        } else {
+          img.addEventListener(
+            "load",
+            () => placeImageButton(wrap as HTMLElement, img, fullBtn as HTMLButtonElement),
+            { once: true },
+          );
+        }
+
+        const openFull = (event: Event) => {
+          event.stopPropagation();
+          event.preventDefault();
+          const src = img.currentSrc || img.src;
+          if (src) openImageOverlayRef.current(src, img.alt || "Book image");
+        };
+        fullBtn.addEventListener("click", openFull);
+        img.addEventListener("dblclick", openFull);
+      });
+    },
+    [placeImageButton],
+  );
 
   /** Replaces every `<pre class="source-code">` in a section with a
    *  Highlight.js-highlighted `<code class="hljs">`, unwrapping the book's
@@ -533,11 +727,17 @@ export function EpubViewer({
     fontCssRef.current =
       (fontFamily ? `${FONT_FORCE_SELECTOR} { font-family: ${cssFontFamily(fontFamily)} !important; }` : "") +
       transformRule;
+    textZoomRef.current = scale;
     (rendition.getContents() as unknown as Contents[]).forEach((content) => injectFontStyle(content));
     // Force a resize / reflow after changing the injected styles so the
     // scrolled-doc layout recalculates to the new scaled width.
     rendition.resize(host.clientWidth, host.clientHeight);
-  }, [fontFamily, zoomPct, book, injectFontStyle]);
+    // Reflow can move pictures (narrow/centered/floated) — re-pin their
+    // fullscreen buttons to the new rendered boxes.
+    (rendition.getContents() as unknown as Contents[]).forEach((content) => {
+      if (content?.document) placeAllImageButtons(content.document);
+    });
+  }, [fontFamily, zoomPct, book, injectFontStyle, placeAllImageButtons]);
 
   useEffect(() => {
     let cancelled = false;
@@ -595,6 +795,7 @@ export function EpubViewer({
         rendition.on("selected", handleSelected);
         rendition.hooks.content.register(injectFontStyle);
         rendition.hooks.content.register(highlightCodeBlocks);
+        rendition.hooks.content.register(enhanceImages);
         await rendition.display();
         // Resume reading where the user left off: jump to the saved chapter
         // (spine index). The relocated handler fires and reports the restored
@@ -703,7 +904,7 @@ export function EpubViewer({
       bookRef.current?.destroy();
       bookRef.current = null;
     };
-  }, [filePath, srcData, injectFontStyle, highlightCodeBlocks, initialChapter]);
+  }, [filePath, srcData, injectFontStyle, highlightCodeBlocks, enhanceImages, initialChapter]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -798,6 +999,10 @@ export function EpubViewer({
 
   const changeZoom = (delta: number) => {
     setZoomPct((current) => Math.min(FONT_MAX, Math.max(FONT_MIN, current + delta)));
+  };
+
+  const changeImageZoom = (delta: number) => {
+    setImageZoomPct((current) => clampImageZoom(current + delta));
   };
 
   const toggleFullscreen = () => {
@@ -1032,6 +1237,95 @@ export function EpubViewer({
         text={aiSelection.text}
         onAsk={onAskAi}
       />
+    )}
+    {imageOverlay && (
+      <div
+        className={styles.imageOverlay}
+        role="dialog"
+        aria-modal="true"
+        aria-label={imageOverlay.alt || "Book image"}
+        onClick={closeImageOverlay}
+      >
+        <div
+          className={styles.imageOverlayInner}
+          onClick={(event) => event.stopPropagation()}
+        >
+          <div className={styles.imageOverlayToolbar} role="toolbar" aria-label="Image controls">
+            <button
+              type="button"
+              className={`${styles.toolButton} ${styles.collapsible}`}
+              onClick={() => changeImageZoom(-IMAGE_ZOOM_STEP)}
+              disabled={clampImageZoom(imageZoomPct) <= IMAGE_ZOOM_MIN}
+              aria-label="Zoom image out"
+              title="Zoom image out"
+            >
+              <Minus size={16} strokeWidth={2} aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              className={`${styles.zoomValue} ${styles.collapsible}`}
+              onClick={() => setImageZoomPct(100)}
+              aria-label={`Image zoom ${clampImageZoom(imageZoomPct)} percent, click to reset`}
+              title="Reset image zoom to 100%"
+            >
+              {clampImageZoom(imageZoomPct)}%
+            </button>
+            <button
+              type="button"
+              className={`${styles.toolButton} ${styles.collapsible}`}
+              onClick={() => changeImageZoom(IMAGE_ZOOM_STEP)}
+              disabled={clampImageZoom(imageZoomPct) >= IMAGE_ZOOM_MAX}
+              aria-label="Zoom image in"
+              title="Zoom image in"
+            >
+              <Plus size={16} strokeWidth={2} aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              className={styles.toolButton}
+              onClick={closeImageOverlay}
+              aria-label="Exit image fullscreen"
+              title="Exit fullscreen"
+            >
+              <X size={16} strokeWidth={2} aria-hidden="true" />
+            </button>
+          </div>
+          <div
+            ref={overlayViewRef}
+            className={[
+              styles.imageOverlayView,
+              clampImageZoom(imageZoomPct) > 100 ? styles.imageOverlayPannable : "",
+              overlayDragging ? styles.imageOverlayDragging : "",
+            ].filter(Boolean).join(" ")}
+            style={
+              clampImageZoom(imageZoomPct) < 100
+                ? { display: "flex", alignItems: "safe center", justifyContent: "safe center" }
+                : undefined
+            }
+            onPointerDown={startOverlayPan}
+            onPointerMove={moveOverlayPan}
+            onPointerUp={endOverlayPan}
+            onPointerCancel={endOverlayPan}
+          >
+            <img
+              src={imageOverlay.src}
+              alt={imageOverlay.alt || "Book image"}
+              draggable={false}
+              className={styles.imageOverlayImg}
+              style={
+                clampImageZoom(imageZoomPct) !== 100
+                  ? {
+                      width: `${clampImageZoom(imageZoomPct)}%`,
+                      ...(clampImageZoom(imageZoomPct) > 100
+                        ? { maxWidth: "none", height: "auto" }
+                        : {}),
+                    }
+                  : undefined
+              }
+            />
+          </div>
+        </div>
+      </div>
     )}
     </>
   );

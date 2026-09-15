@@ -235,3 +235,118 @@
     transform: rotate(360deg);
   }
 }
+
+/* Fullscreen image overlay opened from the in-content circle button. Zoom
+ * here is ephemeral (resets to 100% on close); zoomed images pan via
+ * scrollbars and automatic drag. */
+.imageOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-dialog);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgb(0 0 0 / 72%);
+}
+
+/* Fixed frame: image zoom only changes the picture inside the scrollable
+ * viewport below, never the modal size itself. */
+.imageOverlayInner {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: min(1100px, 94vw);
+  height: min(90vh, calc(100vh - 48px));
+  padding-top: 48px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-card);
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+}
+
+/* Collapsible toolbar pinned to the overlay's top-right corner: at rest a
+ * single exit circle; hovering it widens it into the full pill (same
+ * pattern as the Markdown image toolbar). Content is packed to the end so
+ * the exit button never moves. It floats above the scrollable image, so
+ * even very tall illustrations never push it off-screen. */
+.imageOverlayToolbar {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  max-width: 54px;
+  padding: 3px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-bg) 88%, transparent);
+  box-shadow: var(--shadow-md);
+  direction: ltr;
+  overflow: hidden;
+  opacity: 0;
+  transform: translateY(-4px);
+  transition:
+    opacity var(--transition-fast) ease,
+    transform var(--transition-fast) ease,
+    max-width var(--transition-base) ease;
+  pointer-events: none;
+  backdrop-filter: blur(8px);
+}
+
+.imageOverlayToolbar > * {
+  flex-shrink: 0;
+}
+
+.imageOverlayInner:hover .imageOverlayToolbar,
+.imageOverlayInner:focus-within .imageOverlayToolbar {
+  opacity: 0.55;
+  transform: none;
+  pointer-events: auto;
+}
+
+.imageOverlayInner .imageOverlayToolbar:hover,
+.imageOverlayInner .imageOverlayToolbar:focus-within {
+  max-width: 280px;
+  opacity: 1;
+}
+
+.imageOverlayToolbar .collapsible {
+  visibility: hidden;
+}
+
+.imageOverlayToolbar:hover .collapsible,
+.imageOverlayToolbar:focus-within .collapsible {
+  visibility: visible;
+}
+
+.imageOverlayView {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  background: var(--color-page);
+  touch-action: pan-x pan-y;
+}
+
+.imageOverlayPannable {
+  cursor: grab;
+}
+
+.imageOverlayDragging {
+  cursor: grabbing;
+  user-select: none;
+}
+
+.imageOverlayImg {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin: 0 auto;
+  object-fit: contain;
+  pointer-events: none;
+}

@@ -1,4 +1,4 @@
-import { isValidElement, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, isValidElement, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode, Ref } from "react";
 import ReactMarkdown from "react-markdown";
 import type { Components } from "react-markdown";
@@ -467,6 +467,31 @@ function escapeHtmlInLine(line: string): string {
   return out;
 }
 
+/** Per-book global image zoom shared by every image of the book. Provided by
+ *  the `Markdown` host (persisted via `useReaderSettings(bookId, "image")`)
+ *  so zooming one image updates all of them without re-parsing the document
+ *  (the components map stays stable; only the image consumers re-render). */
+const ImageZoomContext = createContext<{ zoom: number; setZoom: (next: number) => void } | null>(
+  null,
+);
+
+function MdImage({ src, alt }: { src?: string; alt?: string }) {
+  const ctx = useContext(ImageZoomContext);
+  if (!ctx) {
+    return <Image src={src} alt={alt ?? "Image"} aspectRatio="16 / 9" className={styles.mdImage} />;
+  }
+  return (
+    <Image
+      src={src}
+      alt={alt ?? "Image"}
+      aspectRatio="16 / 9"
+      className={styles.mdImage}
+      zoomPct={ctx.zoom}
+      onZoomChange={ctx.setZoom}
+    />
+  );
+}
+
 /* eslint-disable @typescript-eslint/no-unused-vars */
 const baseComponents: Components = {
   h1: ({ children, node: _node, ...props }) => (
@@ -579,9 +604,7 @@ const baseComponents: Components = {
     </blockquote>
   ),
   hr: () => <hr className={styles.hr} />,
-  img: ({ src, alt }) => (
-    <Image src={src} alt={alt ?? "Image"} aspectRatio="16 / 9" className={styles.mdImage} />
-  ),
+  img: ({ src, alt }) => <MdImage src={src} alt={alt ?? "Image"} />,
   code: ({ className, children }) => {
     const match = /language-(\w+)/.exec(className ?? "");
     if (match) {
@@ -710,6 +733,16 @@ export function Markdown({
     diagramBackground,
     setDiagramBackground,
   } = useReaderSettings(settingsBookId, "markdown");
+  /** Per-book global image zoom (one value for every image of the book),
+   *  persisted in the `ReaderSettings` table under the "image" viewer. */
+  const { zoomPct: imageZoomPct, setZoomPct: setImageZoomPct } = useReaderSettings(
+    settingsBookId,
+    "image",
+  );
+  const imageZoomValue = useMemo(
+    () => ({ zoom: imageZoomPct, setZoom: setImageZoomPct }),
+    [imageZoomPct, setImageZoomPct],
+  );
   const [colorOpen, setColorOpen] = useState(false);
   const [blocksOpen, setBlocksOpen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -1081,7 +1114,9 @@ export function Markdown({
           </div>
         )}
         <div ref={scrollHostRef} className={`${styles.body}${toolbar ? ` ${styles.bodyScroll}` : ""}`} style={{ zoom: zoomPct / 100 }}>
-          {documentElement}
+          <ImageZoomContext.Provider value={imageZoomValue}>
+            {documentElement}
+          </ImageZoomContext.Provider>
         </div>
       </div>
       {isFullscreen && (
