@@ -44,7 +44,12 @@ export function Image({
   const [innerZoom, setInnerZoom] = useState(() => clampZoom(defaultZoom));
   const [fullscreen, setFullscreen] = useState(false);
   const [dragging, setDragging] = useState(false);
-  const viewportRef = useRef<HTMLDivElement>(null);
+  /* Span (not div): `Image` renders inside Markdown `<p>` elements
+   * (`li > p > img`), where a `<div>` descendant is invalid HTML and trips
+   * React's validateDOMNesting. Spans are phrasing content so `p > span >
+   * span > img` stays valid; absolute/flex positioning blockifies them so
+   * the layout is unchanged. */
+  const viewportRef = useRef<HTMLSpanElement>(null);
   const overlayViewportRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{ x: number; y: number; left: number; top: number } | null>(null);
 
@@ -88,7 +93,10 @@ export function Image({
   // NOTE: `overlayOpen` is derived below; the Escape handler above intentionally
   // watches `fullscreen` so it is registered before the image finishes loading.
 
-  const startPan = (event: ReactPointerEvent<HTMLDivElement>, view: HTMLDivElement | null) => {
+  const startPan = (
+    event: ReactPointerEvent<HTMLSpanElement | HTMLDivElement>,
+    view: HTMLSpanElement | HTMLDivElement | null,
+  ) => {
     if (!canPan || !view) return;
     // Only the primary button starts a drag; otherwise native scrolling
     // (wheel / touch / scrollbars) still works.
@@ -104,7 +112,10 @@ export function Image({
     event.preventDefault();
   };
 
-  const movePan = (event: ReactPointerEvent<HTMLDivElement>, view: HTMLDivElement | null) => {
+  const movePan = (
+    event: ReactPointerEvent<HTMLSpanElement | HTMLDivElement>,
+    view: HTMLSpanElement | HTMLDivElement | null,
+  ) => {
     const drag = dragRef.current;
     if (!drag || !view) return;
     view.scrollLeft = drag.left - (event.clientX - drag.x);
@@ -205,7 +216,7 @@ export function Image({
         style={{ aspectRatio: ratio }}
       >
         {toolbar(false)}
-        <div
+        <span
           ref={viewportRef}
           className={viewportClass}
           onPointerDown={(event) => startPan(event, viewportRef.current)}
@@ -230,7 +241,7 @@ export function Image({
               onError={() => setStatus("error")}
             />
           )}
-        </div>
+        </span>
         {status !== "loaded" && (
           <span className={styles.placeholder} role="img" aria-label={alt}>
             <ImageIcon size={22} strokeWidth={1.8} aria-hidden="true" />

@@ -17,25 +17,23 @@ import { FontFamilySelect } from "../FontFamilySelect/FontFamilySelect";
 import { ColorPickerPanel } from "../ui/ColorPickerPanel/ColorPickerPanel";
 import { AiSelectionBubble } from "../AiSelectionBubble/AiSelectionBubble";
 import { useReaderSettings } from "../../hooks/useReaderSettings.ts";
-import type { MarkdownBlockTheme } from "../../hooks/useReaderSettings.ts";
 import { getSelectionEndRect } from "../../shared/selection";
 import { MermaidDiagram } from "./MermaidDiagram";
 import { safeUrlTransform } from "./safeUrl";
 import styles from "./Markdown.module.css";
 
 interface BlockAppearance {
-  codeTheme: MarkdownBlockTheme | null;
-  diagramTheme: MarkdownBlockTheme | null;
   codeBackground: string | null;
   diagramBackground: string | null;
 }
 
 /** Builds the react-markdown component map with code/diagram renderers bound
- *  to the effective block appearance. Split out from `baseComponents` so a
- *  code/diagram theme change rebuilds only these two renderers — the rest of
- *  the map (headings, lists, tables, …) stays shared. */
+ *  to the effective block backgrounds. Split out from `baseComponents` so a
+ *  background change rebuilds only these two renderers — the rest of
+ *  the map (headings, lists, tables, …) stays shared. Syntax/diagram themes
+ *  always follow the app theme; only the backgrounds are customizable. */
 function createBlockComponents(appearance: BlockAppearance): Pick<Components, "code" | "pre"> {
-  const { codeTheme, diagramTheme, codeBackground, diagramBackground } = appearance;
+  const { codeBackground, diagramBackground } = appearance;
   return {
     code: ({ className, children }) => {
       const match = /language-(\w+)/.exec(className ?? "");
@@ -45,7 +43,6 @@ function createBlockComponents(appearance: BlockAppearance): Pick<Components, "c
           return (
             <MermaidDiagram
               chart={textContent(children).trim()}
-              themeOverride={diagramTheme}
               background={diagramBackground}
             />
           );
@@ -54,12 +51,19 @@ function createBlockComponents(appearance: BlockAppearance): Pick<Components, "c
           <Code
             code={textContent(children)}
             language={match[1]}
-            themeOverride={codeTheme}
             background={codeBackground}
           />
         );
       }
-      return <code dir="ltr" className={styles.inlineCode}>{children}</code>;
+      return (
+        <code
+          dir="ltr"
+          className={styles.inlineCode}
+          style={codeBackground ? { backgroundColor: codeBackground } : undefined}
+        >
+          {children}
+        </code>
+      );
     },
     pre: ({ children, node }) => {
       const root = toMdNode(node);
@@ -85,46 +89,6 @@ function createBlockComponents(appearance: BlockAppearance): Pick<Components, "c
       return <>{children}</>;
     },
   };
-}
-
-/** Segmented Follow/Light/Dark picker shared by the toolbar blocks panel.
- *  `null` means "follow the app theme". */
-function BlockThemeSegment({
-  label,
-  value,
-  onChange,
-}: {
-  label: string;
-  value: MarkdownBlockTheme | null;
-  onChange: (next: MarkdownBlockTheme | null) => void;
-}) {
-  const options: Array<{ id: MarkdownBlockTheme | null; text: string }> = [
-    { id: null, text: "Follow" },
-    { id: "light", text: "Light" },
-    { id: "dark", text: "Dark" },
-  ];
-  return (
-    <div className={styles.blockGroup}>
-      <span className={styles.blockLabel}>{label}</span>
-      <div className={styles.segment} role="radiogroup" aria-label={label}>
-        {options.map((option) => {
-          const active = value === option.id;
-          return (
-            <button
-              key={option.text}
-              type="button"
-              role="radio"
-              aria-checked={active}
-              className={`${styles.segmentButton} ${active ? styles.segmentActive : ""}`}
-              onClick={() => onChange(option.id)}
-            >
-              {option.text}
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
 }
 
 /** Compact background row: custom color input + per-field Follow button. */
@@ -724,10 +688,6 @@ export function Markdown({
     setCustomBg,
     customText,
     setCustomText,
-    codeTheme,
-    setCodeTheme,
-    diagramTheme,
-    setDiagramTheme,
     codeBackground,
     setCodeBackground,
     diagramBackground,
@@ -894,8 +854,6 @@ export function Markdown({
   };
 
   const handleResetBlocks = () => {
-    setCodeTheme(null);
-    setDiagramTheme(null);
     setCodeBackground(null);
     setDiagramBackground(null);
     setBlocksOpen(false);
@@ -917,20 +875,20 @@ export function Markdown({
     [content, rawHtml],
   );
 
-  /** Component map with the effective code/diagram appearance bound in.
-   *  Only rebuilds when those four values change. */
+  /** Component map with the effective code/diagram backgrounds bound in.
+   *  Only rebuilds when those two values change. */
   const components = useMemo<Components>(
     () => ({
       ...baseComponents,
-      ...createBlockComponents({ codeTheme, diagramTheme, codeBackground, diagramBackground }),
+      ...createBlockComponents({ codeBackground, diagramBackground }),
     }),
-    [codeTheme, diagramTheme, codeBackground, diagramBackground],
+    [codeBackground, diagramBackground],
   );
 
   /** The rendered document is expensive to build (markdown parse + per-node
    *  RTL analysis + syntax highlighting), so zoom, page colors, fonts,
    *  fullscreen and menu state change just CSS/classes around it. Code and
-   *  diagram themes *do* rebuild it because both syntax colors and Mermaid
+   *  diagram backgrounds *do* rebuild it because both syntax colors and Mermaid
    *  colors are baked into the output at render time. */
   const documentElement = useMemo(
     () => (
@@ -1076,12 +1034,6 @@ export function Markdown({
                   aria-label="Code and diagram appearance"
                 >
                   <span className={styles.blocksTitle}>Code & diagrams</span>
-                  <BlockThemeSegment label="Code theme" value={codeTheme} onChange={setCodeTheme} />
-                  <BlockThemeSegment
-                    label="Diagram theme"
-                    value={diagramTheme}
-                    onChange={setDiagramTheme}
-                  />
                   <BlockBackgroundRow
                     label="Code background"
                     value={codeBackground}
