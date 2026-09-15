@@ -962,10 +962,15 @@ export function Markdown({
   const backgroundColor = customBg ?? (themeVars.page || "#ffffff");
   const textColor = customText ?? (themeVars.text || "#322b26");
 
-  const hostStyle: CSSProperties = {
+  /* Reader page styling lives on the body only — like the EPUB viewer injects
+   * colors into the iframe and the PDF viewer paints only the scroll area, the
+   * toolbar keeps the app theme (card/glass) and never takes the custom page
+   * background, text color or reader font. */
+  const bodyStyle: CSSProperties = {
     ...(customBg ? { backgroundColor: customBg } : {}),
     ...(customText ? ({ "--color-text": customText, color: customText } as CSSProperties) : {}),
     ...(fontFamily ? { fontFamily } : {}),
+    zoom: zoomPct / 100,
   };
 
   const classes = [
@@ -977,7 +982,7 @@ export function Markdown({
 
   return (
     <>
-      <div ref={hostRef} className={classes} style={hostStyle} aria-label="Markdown document">
+      <div ref={hostRef} className={classes} aria-label="Markdown document">
         {toolbar && (
           <div className={styles.toolbar} role="toolbar" aria-label="Markdown reader controls">
             {toolbarExtra}
@@ -1113,7 +1118,7 @@ export function Markdown({
             </button>
           </div>
         )}
-        <div ref={scrollHostRef} className={`${styles.body}${toolbar ? ` ${styles.bodyScroll}` : ""}`} style={{ zoom: zoomPct / 100 }}>
+        <div ref={scrollHostRef} className={`${styles.body}${toolbar ? ` ${styles.bodyScroll}` : ""}`} style={bodyStyle}>
           <ImageZoomContext.Provider value={imageZoomValue}>
             {documentElement}
           </ImageZoomContext.Provider>

@@ -1,7 +1,6 @@
 .host {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
   color: var(--color-text);
   font-size: var(--font-size-md);
   line-height: var(--line-height-relaxed);
@@ -262,7 +261,6 @@ ol.list ol ol {
 .toolbarHost {
   overflow: hidden;
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-card);
   background: var(--color-card);
   box-shadow: var(--shadow-md);
 }
@@ -299,7 +297,13 @@ ol.list ol ol {
   flex: 1;
   min-width: 0;
   min-height: 0;
-  padding: 0 0.5rem;
+  padding: 1rem;
+}
+
+/* Reader mode: content area follows the page background like the EPUB
+ * hostWrap, while the outer host + toolbar stay on card/glass (app theme). */
+.toolbarHost .body {
+  background: var(--color-page);
 }
 
 .bodyScroll {
