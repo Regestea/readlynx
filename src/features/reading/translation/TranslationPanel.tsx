@@ -42,7 +42,7 @@ interface TranslationSettingsPanelProps {
   onTranslate: () => void;
   onRegenerate: () => void;
   onTranslateRange: (from: number, to: number) => void;
-  /** Stops the running range translation at the next page boundary. */
+  /** Stops the running range translation immediately (aborts the AI request). */
   onCancel: () => void;
   /** Rate-limit retry attempt (null when not retrying). */
   rateLimitRetry: number | null;
@@ -148,7 +148,7 @@ export function TranslationSettingsPanel({
             variant="ghost"
             className={styles.cancelButton}
             onClick={onCancel}
-            title="Stop the translation at the next safe point"
+            title="Cancel the running translation"
           >
             <X size={14} strokeWidth={1.8} aria-hidden="true" />
             Cancel

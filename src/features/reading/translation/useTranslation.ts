@@ -70,6 +70,16 @@ function chunkKeyFor(chapterKey: string, index: number): string {
  *  caught by the callers and surfaced as a status message, not an error. */
 class TranslationCancelledError extends Error {}
 
+/** True when an `ai.chat` rejection is an intentional abort from the Cancel
+ *  button (main process throws `AbortError: Translation cancelled.`). Mapped
+ *  to `TranslationCancelledError` so no failover / error toast follows. */
+function isAiAbortError(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) return false;
+  if ((error as { name?: unknown }).name === "AbortError") return true;
+  const message = error instanceof Error ? error.message : String(error);
+  return /^\s*(translation cancelled|request cancelled)\.?\s*$/i.test(message);
+}
+
 /**
  * Resolves `[REGION-n]` tokens in vision output into persisted figure images.
  * Crops are cut from the clean page image with the locally detected boxes
@@ -194,8 +204,14 @@ export function useTranslation({
    *  while a new chapter starts its own translation independently. */
   const busyUnitRef = useRef<TranslationUnitKey | null>(null);
   /** Set by the toolbar's Cancel button; checked at every pipeline
-   *  checkpoint so a running translation stops at the next safe point. */
+   *  checkpoint so a running translation stops at the next safe point. The
+   *  in-flight AI HTTP request itself is aborted via `ai.cancel`, so the
+   *  checkpoints below are reached within milliseconds. */
   const cancelRequestedRef = useRef(false);
+  /** Ids of the currently in-flight `ai.chat` calls started by this hook.
+   *  Cancel aborts exactly these ids, so an unrelated chat panel request is
+   *  never killed by accident. */
+  const activeAiRequestIdsRef = useRef<Set<string>>(new Set());
   const hasTranslationRef = useRef(false);
   const unitKeyRef = useRef<TranslationUnitKey | null>(null);
   const settingsRef = useRef(settings);
@@ -544,7 +560,10 @@ export function useTranslation({
 
   /** Runs one AI chat request through the ordered model list: a failed
    *  request (network, provider, empty output, invalid config) is retried
-   *  with the next model until one succeeds or every model has failed. */
+   *  with the next model until one succeeds or every model has failed. A
+   *  user Cancel aborts the in-flight HTTP call (via `ai.cancel`) and is
+   *  re-thrown as `TranslationCancelledError` immediately — never failed
+   *  over to the next model. */
   const chatWithFailover = useCallback(
     async (params: {
       messages: { role: "system" | "user" | "assistant"; content: string }[];
@@ -558,6 +577,9 @@ export function useTranslation({
       }
       const failures: string[] = [];
       for (let index = 0; index < candidates.length; index += 1) {
+        if (cancelRequestedRef.current) {
+          throw new TranslationCancelledError("Translation cancelled.");
+        }
         const candidate = candidates[index];
         const label = candidate.DisplayName ?? candidate.ModelName ?? candidate.Id;
         if (!candidate.APIKey || !candidate.ModelName) {
@@ -575,8 +597,18 @@ export function useTranslation({
           failures.push(`${label}: ${err instanceof Error ? err.message : String(err)}`);
           continue;
         }
+        const requestId = crypto.randomUUID();
+        activeAiRequestIdsRef.current.add(requestId);
         try {
-          const response = await ai.chat({ input, messages: params.messages, images: params.images });
+          const response = await ai.chat({
+            input,
+            messages: params.messages,
+            images: params.images,
+            requestId,
+          });
+          if (cancelRequestedRef.current) {
+            throw new TranslationCancelledError("Translation cancelled.");
+          }
           const text = response.trim();
           if (!text) {
             failures.push(`${label}: returned an empty translation`);
@@ -584,12 +616,27 @@ export function useTranslation({
           }
           return text;
         } catch (err) {
+          if (
+            cancelRequestedRef.current ||
+            isAiAbortError(err) ||
+            err instanceof TranslationCancelledError
+          ) {
+            throw new TranslationCancelledError("Translation cancelled.");
+          }
           failures.push(`${label}: ${err instanceof Error ? err.message : String(err)}`);
+        } finally {
+          activeAiRequestIdsRef.current.delete(requestId);
+        }
+        if (cancelRequestedRef.current) {
+          throw new TranslationCancelledError("Translation cancelled.");
         }
         const next = candidates[index + 1];
         if (next) {
           setStatus(`"${label}" failed — retrying with "${next.DisplayName ?? next.ModelName ?? next.Id}"…`);
         }
+      }
+      if (cancelRequestedRef.current) {
+        throw new TranslationCancelledError("Translation cancelled.");
       }
       throw new Error(
         `All ${candidates.length} model${candidates.length === 1 ? "" : "s"} failed — ${failures.join("; ")}`,
@@ -887,7 +934,7 @@ export function useTranslation({
         // Pages finished before the failure keep their rows; the rest are
         // untouched.
         setRangeProgress(null);
-        if (err instanceof TranslationCancelledError) {
+        if (err instanceof TranslationCancelledError || isAiAbortError(err)) {
           setStatus(`Cancelled — ${done} of ${count} page${count === 1 ? "" : "s"} translated.`);
         } else {
           setError(err instanceof Error ? err.message : String(err));
@@ -902,11 +949,24 @@ export function useTranslation({
     [sourceType, translatePdfPage, orderedModelCandidates],
   );
 
-  /** Asks the running translation to stop at the next checkpoint. The
-   *  toolbar shows this as the Cancel action while a range is in flight. */
+  /** Cancels the running translation: flags every pipeline checkpoint and
+   *  aborts the in-flight AI HTTP request(s) in the main process, so the
+   *  `await ai.chat()` below rejects within milliseconds instead of waiting
+   *  for the model response. Finished pages / chunks keep their rows. */
   const cancelTranslation = useCallback(() => {
     cancelRequestedRef.current = true;
     setStatus("Cancelling…");
+    const ids = [...activeAiRequestIdsRef.current];
+    const cancel = window.readlynx?.ai.cancel;
+    if (typeof cancel === "function") {
+      if (ids.length > 0) {
+        void Promise.allSettled(ids.map((id) => cancel(id))).catch(() => {});
+      } else {
+        // No chat in flight (e.g. stuck in OCR / image save) — still abort
+        // anything pending in main as a safety net.
+        void cancel().catch(() => {});
+      }
+    }
   }, []);
 
   /** Translates the current unit. With `force`, regeneration bypasses the
@@ -1103,7 +1163,7 @@ export function useTranslation({
     } catch (err) {
       // Previous translations are kept untouched — rows are only written
       // after a successful generation.
-      if (err instanceof TranslationCancelledError) {
+      if (err instanceof TranslationCancelledError || isAiAbortError(err)) {
         setStatus("Translation cancelled.");
       } else {
         setError(err instanceof Error ? err.message : String(err));

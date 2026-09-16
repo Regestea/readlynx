@@ -31,8 +31,32 @@ function createClient(input: AiConnectionInput): OpenAI {
   });
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) {
+    return Promise.reject(signal.reason ?? new Error("Aborted."));
+  }
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(signal?.reason ?? new Error("Aborted."));
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
+/** True when the error is an intentional abort (user pressed Cancel). The
+ *  OpenAI SDK throws `APIUserAbortError` on aborted requests; native fetch
+ *  throws a `DOMException` named `AbortError`. */
+export function isAbortError(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) return false;
+  const name = (error as { name?: unknown }).name;
+  if (name === "AbortError" || name === "APIUserAbortError") return true;
+  const message = error instanceof Error ? error.message : String(error);
+  return /abort(ed)?/i.test(message);
 }
 
 /** True when the provider answered 429 (rate limited / quota exhausted). */
@@ -48,24 +72,33 @@ function isRateLimitError(error: unknown): boolean {
 /** Runs `request` and retries it after a fixed delay when the provider
  *  rate-limits us, up to `maxAttempts` tries. Non-429 errors pass through
  *  immediately. `onRetry(attempt)` is called before each retry so the caller
- *  can update UI (e.g. show "retrying due to rate limit"). */
+ *  can update UI (e.g. show "retrying due to rate limit"). When `signal` is
+ *  aborted (user pressed Cancel) the pending delay is interrupted and the
+ *  abort error is re-thrown immediately instead of retrying. */
 async function withRateLimitRetry<T>(
   request: () => Promise<T>,
   maxAttempts = 10,
   delayMs = 6000,
   onRetry?: (attempt: number) => void,
+  signal?: AbortSignal,
 ): Promise<T> {
   let lastError: unknown;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    if (signal?.aborted) {
+      throw signal.reason ?? new Error("Aborted.");
+    }
     try {
       return await request();
     } catch (error) {
       lastError = error;
+      if (isAbortError(error)) {
+        throw error;
+      }
       if (!isRateLimitError(error) || attempt === maxAttempts) {
         throw error;
       }
       onRetry?.(attempt);
-      await sleep(delayMs);
+      await sleep(delayMs, signal);
     }
   }
   throw lastError;
@@ -125,12 +158,16 @@ export async function listGeminiModels(
 /** Plain chat completion over IPC (mirrors `sendChatMessage`). `images`
  *  (data URLs) are attached to the final user message, which lets vision
  *  models read pages directly. `onRetry(attempt)` is called before each
- *  rate-limit retry so the caller can surface it in the UI. */
+ *  rate-limit retry so the caller can surface it in the UI. When `signal` is
+ *  aborted the in-flight HTTP request is cancelled and the 429 backoff sleep
+ *  is interrupted, so a user Cancel resolves within milliseconds instead of
+ *  waiting for the model response. */
 export async function chatCompletion(
   input: AiConnectionInput,
   messages: AiChatMessage[],
   images?: string[],
   onRetry?: (attempt: number) => void,
+  signal?: AbortSignal,
 ): Promise<string> {
   const client = createClient(input);
   const mapped: OpenAI.ChatCompletionMessageParam[] = messages.map((m) => ({
@@ -152,13 +189,17 @@ export async function chatCompletion(
   }
   const completion = await withRateLimitRetry(
     () =>
-      client.chat.completions.create({
-        model: input.modelName,
-        messages: mapped,
-      }),
+      client.chat.completions.create(
+        {
+          model: input.modelName,
+          messages: mapped,
+        },
+        { signal },
+      ),
     10,
     6000,
     onRetry,
+    signal,
   );
   const content = completion.choices[0]?.message?.content;
   if (!content) {
@@ -168,10 +209,12 @@ export async function chatCompletion(
 }
 
 /** Structured JSON completion. The renderer passes a JSON schema (from its
- *  Zod form schemas via `toJSONSchema`), parsed here against the response. */
+ *  Zod form schemas via `toJSONSchema`), parsed here against the response.
+ *  `signal` aborts the request the same way as `chatCompletion`. */
 export async function structuredCompletion(
   input: AiConnectionInput,
   options: AiStructuredOptions,
+  signal?: AbortSignal,
 ): Promise<unknown> {
   const client = createClient(input);
 
@@ -193,19 +236,27 @@ export async function structuredCompletion(
     { role: "user", content: userContent },
   ];
 
-  const completion = await withRateLimitRetry(() =>
-    client.chat.completions.create({
-      model: input.modelName,
-      messages,
-      response_format: {
-        type: "json_schema",
-        json_schema: {
-          name: "structured",
-          strict: true,
-          schema: options.jsonSchema,
+  const completion = await withRateLimitRetry(
+    () =>
+      client.chat.completions.create(
+        {
+          model: input.modelName,
+          messages,
+          response_format: {
+            type: "json_schema",
+            json_schema: {
+              name: "structured",
+              strict: true,
+              schema: options.jsonSchema,
+            },
+          },
         },
-      },
-    }),
+        { signal },
+      ),
+    10,
+    6000,
+    undefined,
+    signal,
   );
 
   const content = completion.choices[0]?.message?.content;

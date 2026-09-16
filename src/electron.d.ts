@@ -188,6 +188,8 @@ declare global {
           input: { url: string; apiKey: string; modelName: string };
           messages: { role: "system" | "user" | "assistant"; content: string }[];
           images?: string[];
+          /** Client-generated id so the request can be aborted via `cancel`. */
+          requestId?: string;
         }): Promise<string>;
         structured(payload: {
           input: { url: string; apiKey: string; modelName: string };
@@ -197,7 +199,14 @@ declare global {
             images?: string[];
             jsonSchema: Record<string, unknown>;
           };
+          requestId?: string;
         }): Promise<unknown>;
+        /** Aborts the in-flight AI HTTP request(s). With a `requestId` only
+         *  that request is aborted, without it every pending request is. */
+        cancel(requestId?: string): Promise<boolean>;
+        onRateLimitRetry(
+          callback: (data: { attempt: number }) => void,
+        ): () => void;
       };
       systemFonts: {
         /** All font families installed on the OS (queried from the main
