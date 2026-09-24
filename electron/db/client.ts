@@ -273,7 +273,10 @@ export class DbWorkerClient {
     return this.exec("backup-db", destinationPath);
   }
 
-  close(): void {
-    void this.worker.terminate();
+  /** Terminates the worker. Awaited by backup/restore so the SQLite file
+   *  lock is released before the database file is swapped (matters on
+   *  Windows where an open handle blocks `copyFile`/`rename`). */
+  close(): Promise<void> {
+    return this.worker.terminate().then(() => undefined);
   }
 }

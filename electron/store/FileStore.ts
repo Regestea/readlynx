@@ -59,19 +59,53 @@ export class FileStore {
     this.manifestPath = path.join(this.root, "manifest.json");
   }
 
-  /** Creates all bucket directories and loads the manifest. */
+  /** Creates all bucket directories and loads the manifest. Missing entries
+   *  (e.g. after upgrading from the legacy bare-key manifest) are rebuilt
+   *  from disk so `stat`/`list` keep working. */
   init(): void {
     fs.mkdirSync(this.root, { recursive: true });
     for (const bucket of Object.keys(BUCKETS) as BucketName[]) {
       fs.mkdirSync(bucketDir(this.root, bucket), { recursive: true });
     }
     this.loadManifest();
+    this.reconcileManifestWithDisk();
+  }
+
+  /** Adds manifest entries for files that exist on disk but are untracked
+   *  (legacy installs, manual copies) and drops orphans. Preserves
+   *  `createdAt` for already-tracked files. */
+  private reconcileManifestWithDisk(): void {
+    let dirty = false;
+    for (const bucket of Object.keys(BUCKETS) as BucketName[]) {
+      const entries = this.scanDir(bucket, bucketDir(this.root, bucket));
+      const prefix = `${bucket}/`;
+      for (const key of Object.keys(this.manifest)) {
+        if (key.startsWith(prefix) && !entries[key]) {
+          try {
+            if (!fs.existsSync(path.join(this.root, ...key.split("/")))) {
+              delete this.manifest[key];
+              dirty = true;
+            }
+          } catch {
+            // keep the entry on unexpected errors
+          }
+        }
+      }
+      for (const [key, meta] of Object.entries(entries)) {
+        if (!this.manifest[key]) {
+          this.manifest[key] = meta;
+          dirty = true;
+        }
+      }
+    }
+    if (dirty) this.saveManifest();
   }
 
   // ── Core API ──────────────────────────────────────────────────────
 
   /** Stores data under `bucket/key`. Overwrites any existing file.
-   *  Returns the bucket-relative key (e.g. `"covers/abc.png"`). */
+   *  Returns the bucket-relative key (e.g. `"covers/abc.png"`).
+   *  Manifest keys are always stored fully qualified (`"bucket/rel"`). */
   put(bucket: BucketName, key: string, data: Buffer | Uint8Array): string {
     this.assertValidKey(key);
     const ext = path.extname(key).slice(1).toLowerCase();
@@ -82,8 +116,9 @@ export class FileStore {
     fs.mkdirSync(path.dirname(full), { recursive: true });
     fs.writeFileSync(full, data);
     const now = new Date().toISOString();
-    const existing = this.manifest[key];
-    this.manifest[key] = {
+    const fullKey = this.fullKey(bucket, key);
+    const existing = this.manifest[fullKey];
+    this.manifest[fullKey] = {
       size: data.byteLength,
       contentType: guessContentType(ext),
       createdAt: existing?.createdAt ?? now,
@@ -106,7 +141,7 @@ export class FileStore {
 
   /** Reads the file and returns it as a base64 data URL. Returns null if not found. */
   getDataUrl(bucket: BucketName, key: string): string | null {
-    const meta = this.manifest[key];
+    const meta = this.manifest[this.fullKey(bucket, key)];
     const buf = this.get(bucket, key);
     if (!buf || !meta) return null;
     return `data:${meta.contentType};base64,${buf.toString("base64")}`;
@@ -121,8 +156,9 @@ export class FileStore {
     } catch {
       // already gone
     }
-    if (this.manifest[key]) {
-      delete this.manifest[key];
+    const fullKey = this.fullKey(bucket, key);
+    if (this.manifest[fullKey]) {
+      delete this.manifest[fullKey];
       this.saveManifest();
     }
   }
@@ -156,7 +192,7 @@ export class FileStore {
 
   /** Returns metadata for a single file, or null if not tracked. */
   stat(bucket: BucketName, key: string): FileMeta | null {
-    const meta = this.manifest[key];
+    const meta = this.manifest[this.fullKey(bucket, key)];
     if (!meta) return null;
     return { ...meta };
   }
@@ -229,6 +265,11 @@ export class FileStore {
     return path.join(this.root, bucket, key);
   }
 
+  /** Fully qualified manifest key (`"bucket/rel"`). */
+  private fullKey(bucket: BucketName, key: string): string {
+    return `${bucket}/${key}`;
+  }
+
   private assertValidKey(key: string): void {
     if (!key || key.includes("..") || key.includes("\\") || key.startsWith("/")) {
       throw new Error(`Invalid store key: "${key}"`);
@@ -240,10 +281,28 @@ export class FileStore {
   private loadManifest(): void {
     try {
       const raw = fs.readFileSync(this.manifestPath, "utf8");
-      this.manifest = JSON.parse(raw) as Manifest;
+      const parsed = JSON.parse(raw) as Manifest;
+      this.manifest = this.migrateLegacyManifest(parsed);
+      // Persist the migration straight away so old bare keys disappear.
+      if (this.manifest !== parsed) this.saveManifest();
     } catch {
       this.manifest = {};
     }
+  }
+
+  /** Older versions stored bare keys (`"uuid.png"`) instead of qualified
+   *  `"bucket/rel"` keys, which broke `list()`/`clearBucket()` and caused
+   *  cross-bucket collisions. Bare keys cannot be attributed reliably, so
+   *  drop them here — `init()` rebuilds them from disk below. */
+  private migrateLegacyManifest(parsed: Manifest): Manifest {
+    if (!parsed || typeof parsed !== "object") return {};
+    const needsMigration = Object.keys(parsed).some((key) => !key.includes("/"));
+    if (!needsMigration) return parsed;
+    const kept: Manifest = {};
+    for (const [key, value] of Object.entries(parsed)) {
+      if (key.includes("/")) kept[key] = value;
+    }
+    return kept;
   }
 
   private saveManifest(): void {
@@ -251,19 +310,26 @@ export class FileStore {
   }
 
   /** Rebuilds manifest entries for a bucket by scanning disk. Used after
-   *  raw restore operations that bypass the normal put() flow. */
+   *  raw restore operations that bypass the normal put() flow. Overwrites
+   *  stale entries and drops orphan entries for files that no longer exist. */
   private rebuildBucketManifest(bucket: BucketName): void {
     const dir = bucketDir(this.root, bucket);
-    const entries = this.scanDir(dir);
+    const entries = this.scanDir(bucket, dir);
+    const prefix = `${bucket}/`;
+    for (const key of Object.keys(this.manifest)) {
+      if (key.startsWith(prefix) && !entries[key]) delete this.manifest[key];
+    }
     for (const [key, meta] of Object.entries(entries)) {
-      if (!this.manifest[key]) {
-        this.manifest[key] = meta;
-      }
+      const existing = this.manifest[key];
+      this.manifest[key] = {
+        ...meta,
+        createdAt: existing?.createdAt ?? meta.createdAt,
+      };
     }
     this.saveManifest();
   }
 
-  private scanDir(dir: string, prefix = ""): Manifest {
+  private scanDir(bucket: BucketName, dir: string, prefix = ""): Manifest {
     const result: Manifest = {};
     let items: string[];
     try {
@@ -273,19 +339,24 @@ export class FileStore {
     }
     for (const item of items) {
       const full = path.join(dir, item);
-      const stat = fs.statSync(full);
+      let stat: fs.Stats;
+      try {
+        stat = fs.statSync(full);
+      } catch {
+        continue;
+      }
       if (stat.isFile()) {
-        const key = prefix ? `${prefix}/${item}` : item;
+        const rel = prefix ? `${prefix}/${item}` : item;
         const ext = path.extname(item).slice(1).toLowerCase();
-        result[key] = {
+        result[`${bucket}/${rel}`] = {
           size: stat.size,
           contentType: guessContentType(ext),
-          createdAt: stat.mtime.toISOString(),
+          createdAt: stat.birthtimeMs > 0 ? stat.birthtime.toISOString() : stat.mtime.toISOString(),
           updatedAt: stat.mtime.toISOString(),
         };
       } else if (stat.isDirectory()) {
         const subPrefix = prefix ? `${prefix}/${item}` : item;
-        Object.assign(result, this.scanDir(full, subPrefix));
+        Object.assign(result, this.scanDir(bucket, full, subPrefix));
       }
     }
     return result;

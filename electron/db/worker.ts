@@ -32,7 +32,7 @@ import { FileStore } from "../store/FileStore.ts";
 /** Migrates existing absolute `BookSources.filePath` values to relative
  *  store keys (e.g. `"books/<filename>"`). Moves the actual file from the
  *  old absolute path into the store bucket when possible. */
-function migrateAbsoluteSourcePaths(db: import("better-sqlite3").Database.Database, store: FileStore): void {
+function migrateAbsoluteSourcePaths(db: InstanceType<typeof import("better-sqlite3")>, store: FileStore): void {
   const rows = db
     .prepare("SELECT id, filePath FROM BookSources")
     .all() as Array<{ id: string; filePath: string }>;

@@ -19,36 +19,51 @@ export function BackupPage() {
 
   const handleCreate = async () => {
     setCreateStatus({ kind: "busy", label: "Creating backup…" });
-    const result = await window.readlynx?.backup.create();
-    if (!result) {
-      setCreateStatus({ kind: "idle" });
-      return;
+    try {
+      const result = await window.readlynx?.backup.create();
+      if (!result) {
+        setCreateStatus({ kind: "idle" });
+        return;
+      }
+      setCreateStatus(
+        result.ok && result.path
+          ? { kind: "done", message: `Backup saved to ${result.path}` }
+          : { kind: "error", message: result.error ?? "Creating the backup failed." },
+      );
+    } catch (error) {
+      setCreateStatus({
+        kind: "error",
+        message: error instanceof Error ? error.message : "Creating the backup failed.",
+      });
     }
-    setCreateStatus(
-      result.ok && result.path
-        ? { kind: "done", message: `Backup saved to ${result.path}` }
-        : { kind: "error", message: result.error ?? "Creating the backup failed." },
-    );
   };
 
   const handleRestore = async () => {
     setConfirmOpen(false);
     setRestoring(true);
     setRestoreStatus({ kind: "busy", label: "Restoring backup…" });
-    const result = await window.readlynx?.backup.restore();
-    if (!result) {
+    try {
+      const result = await window.readlynx?.backup.restore();
+      if (!result) {
+        setRestoring(false);
+        setRestoreStatus({ kind: "idle" });
+        return;
+      }
+      if (result.ok) {
+        // The database file was swapped under the running app — reload the
+        // renderer so every view re-reads the restored library.
+        window.location.reload();
+        return;
+      }
       setRestoring(false);
-      setRestoreStatus({ kind: "idle" });
-      return;
+      setRestoreStatus({ kind: "error", message: result.error ?? "Restoring the backup failed." });
+    } catch (error) {
+      setRestoring(false);
+      setRestoreStatus({
+        kind: "error",
+        message: error instanceof Error ? error.message : "Restoring the backup failed.",
+      });
     }
-    if (result.ok) {
-      // The database file was swapped under the running app — reload the
-      // renderer so every view re-reads the restored library.
-      window.location.reload();
-      return;
-    }
-    setRestoring(false);
-    setRestoreStatus({ kind: "error", message: result.error ?? "Restoring the backup failed." });
   };
 
   return (
@@ -68,7 +83,9 @@ export function BackupPage() {
           <h2 className={styles.cardTitle}>Create backup</h2>
           <p className={styles.cardDesc}>
             Write a snapshot of your whole library — books, documents, covers,
-            translations, reading progress and AI models — into one .zip file.
+            translation images, translations, reading progress and AI models —
+            into one .zip file. Downloaded OCR models are not included and can
+            be re-downloaded later.
           </p>
           {createStatus.kind === "busy" ? (
             <span className={styles.status} role="status">

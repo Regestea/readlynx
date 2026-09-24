@@ -37,9 +37,10 @@ export function saveTranslationImages(
   return urls;
 }
 
-/** Deletes all translation images for a given book+chapter prefix. */
+/** Deletes all translation images for a given book+chapter prefix. The
+ *  trailing slash keeps sibling chapters (e.g. `ch` vs `ch2`) from matching. */
 export function deleteTranslationImages(store: FileStore, bookId: string, chapterKeyPrefix?: string): void {
-  const prefix = chapterKeyPrefix ? `${bookId}/${chapterKeyPrefix}` : bookId;
+  const prefix = chapterKeyPrefix ? `${bookId}/${chapterKeyPrefix}/` : `${bookId}/`;
   const entries = store.list("translation-images", prefix);
   for (const entry of entries) {
     const rel = entry.key.replace(/^translation-images\//, "");
@@ -49,7 +50,7 @@ export function deleteTranslationImages(store: FileStore, bookId: string, chapte
 
 /** Deletes all translation images for a book (used on book delete). */
 export function deleteAllBookTranslationImages(store: FileStore, bookId: string): void {
-  const entries = store.list("translation-images", bookId);
+  const entries = store.list("translation-images", `${bookId}/`);
   for (const entry of entries) {
     const rel = entry.key.replace(/^translation-images\//, "");
     store.delete("translation-images", rel);

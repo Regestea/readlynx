@@ -149,10 +149,12 @@ function openDb() {
 }
 
 /** Stops the DB worker and unregisters its IPC handlers, so the database
- *  file can be replaced safely. */
-function closeDb() {
-  dbClient?.close();
+ *  file can be replaced safely. Awaited so the SQLite handle is really
+ *  released before the file is swapped. */
+async function closeDb() {
+  const client = dbClient;
   dbClient = null;
+  if (client) await client.close();
 }
 
 app.whenReady().then(() => {
@@ -199,8 +201,9 @@ app.whenReady().then(() => {
 });
 
 app.on("before-quit", () => {
-  dbClient?.close();
+  const client = dbClient;
   dbClient = null;
+  if (client) void client.close();
   void terminateOcrWorker();
 });
 

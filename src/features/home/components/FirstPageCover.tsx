@@ -73,7 +73,6 @@ function waitUntil(predicate: () => boolean, timeout: number): Promise<boolean> 
 export function FirstPageCover({
   sourcePath,
   sourceType,
-  title,
   busy = false,
   emptyIcon,
   onPick,
