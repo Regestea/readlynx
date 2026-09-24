@@ -399,11 +399,23 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
     await flushSession();
   });
 
+  /** Latest scroll saver, mirrored into a ref so the unmount cleanup below
+   *  can stay unmount-only. `flushScrollMemory` gets a new identity on every
+   *  page/chapter turn (it closes over `translation.unitKey`) — listing it in
+   *  the cleanup's deps would run `flushSession()` on every turn, and the
+   *  first run permanently closes the session (`timeFlushedRef`), freezing
+   *  the daily-minutes counter (usually at 0m). */
+  const flushScrollMemoryRef = useRef(flushScrollMemory);
+  useEffect(() => {
+    flushScrollMemoryRef.current = flushScrollMemory;
+  });
+
   /** Leaving the page (sidebar navigation, back) without going through the
-   *  back button still counts the session and saves the last EPUB position. */
+   *  back button still counts the session and saves the last EPUB position.
+   *  Unmount-only: see `flushScrollMemoryRef` above. */
   useEffect(() => {
     return () => {
-      flushScrollMemory();
+      flushScrollMemoryRef.current();
       void flushSession();
       const progress = epubProgressRef.current;
       if (progress > 0) {
@@ -412,7 +424,7 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
         });
       }
     };
-  }, [flushSession, flushScrollMemory, bookId]);
+  }, [flushSession, bookId]);
 
   /** PDF click-to-ask: follows the translate panel's top setting — OCR the
    *  whole current page locally and seed the chat with the recognized text
@@ -878,6 +890,11 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
                   onChapterChange={handleChapterChange}
                   onProgressChange={(progress) => {
                     epubProgressRef.current = progress;
+                    // The EPUB renders inside an iframe, whose interactions
+                    // never reach the page-level activity listeners — a
+                    // position update proves the user is reading and keeps
+                    // the session from idling out.
+                    onActivity();
                   }}
                   onAskAi={setAiContext}
                 />
