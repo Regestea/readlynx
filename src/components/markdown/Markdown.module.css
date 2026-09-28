@@ -110,14 +110,22 @@
   font-family: inherit;
 }
 
+/* The rule sits on the inline-start edge and the block mirrors with `dir`,
+   so a Persian quote is marked on the right and reads right-to-left while a
+   Latin one keeps the usual left rule. Direction itself comes from the quote's
+   own text (see `dirProps` in Markdown.tsx). */
 .blockquote {
   margin: var(--space-4) 0;
   padding: var(--space-3) var(--space-5);
-  border-left: 3px solid var(--color-primary);
-  border-radius: 0 var(--radius-medium) var(--radius-medium) 0;
+  border-inline-start: 3px solid var(--color-primary);
+  border-start-start-radius: 0;
+  border-start-end-radius: var(--radius-medium);
+  border-end-end-radius: var(--radius-medium);
+  border-end-start-radius: 0;
   background: var(--color-glass);
   color: var(--color-text-secondary);
   font-style: italic;
+  text-align: start;
 }
 
 .blockquote:first-child {

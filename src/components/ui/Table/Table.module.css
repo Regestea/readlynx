@@ -15,7 +15,11 @@
 
 .headCell {
   padding: 12px 16px;
-  text-align: left;
+
+  /* Logical, not `left`: a header cell holding Persian text must align with
+     the rest of its column. The `dir` attribute (set per cell from the text)
+     decides which way that is. */
+  text-align: start;
   font-size: 11px;
   font-weight: var(--font-weight-semibold);
   text-transform: uppercase;
@@ -27,6 +31,7 @@
 
 .cell {
   padding: 12px 16px;
+  text-align: start;
   font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
   border-bottom: 1px solid var(--color-border);

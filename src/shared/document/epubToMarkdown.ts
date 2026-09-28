@@ -779,9 +779,17 @@ export function normalizeTranslatedMarkdown(markdown: string): string {
 }
 
 /** Block-level tags: a leaked one marks a paragraph boundary, so it becomes
- *  a blank line instead of gluing the surrounding words together. */
+ *  a blank line instead of gluing the surrounding words together. `<br>` is
+ *  not in this list — it is handled per line by `inTableRegion`. */
 const LEAKED_BLOCK_TAG_RE =
-  /<\/?(?:p|div|h[1-6]|table|thead|tbody|tfoot|tr|td|th|ul|ol|li|blockquote|pre|section|article|header|footer|figure|figcaption|aside|main|nav|hr|br)(?:\s[^<>]*)?\/?>/gi;
+  /<\/?(?:p|div|h[1-6]|table|thead|tbody|tfoot|tr|td|th|ul|ol|li|blockquote|pre|section|article|header|footer|figure|figcaption|aside|main|nav|hr)(?:\s[^<>]*)?\/?>/gi;
+
+/** Standalone `<br>` (a line break, not a paragraph mark). */
+const LINE_BREAK_RE = /<br\s*\/?>/gi;
+
+/** Stands in for a `<br>` that must survive the tag strip (table cells); a
+ *  NUL sentinel cannot appear in the source text. */
+const BR_PLACEHOLDER = "\u0000rlx-br\u0000";
 
 /** Any other tag shape (`<span …>`, `</a>`, …): its inner text (if any) is
  *  already in the flow, so only the markup itself is dropped. The strict
@@ -794,6 +802,32 @@ const LEAKED_INLINE_TAG_RE = /<\/?[a-zA-Z][a-zA-Z0-9-]*(?:\s[^<>]*)?\/?>/g;
  *  Only complete tag patterns are touched — `&lt;3` or `a &lt; b` survive. */
 const LEAKED_ENTITY_TAG_RE = /&lt;(\/?[a-zA-Z][a-zA-Z0-9-]*(?:\s[^;<>]*)?\/?)&gt;/g;
 
+/** A line that looks like part of a Markdown table: a pipe-delimited row. */
+const TABLE_ROW_RE = /^\s*\|?.*\|.*$/;
+/** The header separator that turns pipe rows into a table (`| --- | --- |`). */
+const TABLE_SEPARATOR_RE = /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$/;
+
+/**
+ * True when the line at `index` sits inside a Markdown table.
+ *
+ * A `<br>` there has to survive as real markup: a blank line terminates the
+ * table, and GFM has no way to break a line inside a cell. Everywhere else the
+ * tag becomes a paragraph break, so it can never show up as literal text.
+ */
+function inTableRegion(lines: string[], index: number): boolean {
+  const isRow = (line: string | undefined) => !!line && TABLE_ROW_RE.test(line);
+  if (!isRow(lines[index])) return false;
+  // A table needs a header separator above the rows; look back a couple of
+  // lines so a row following a blank line still finds it.
+  for (let back = 1; back <= 2; back += 1) {
+    const line = lines[index - back];
+    if (line === undefined) break;
+    if (TABLE_SEPARATOR_RE.test(line)) return true;
+    if (!isRow(line)) break;
+  }
+  return false;
+}
+
 function stripLeakedTagsOutsideCode(text: string): string {
   // Inline code spans may legitimately show tags as teaching examples
   // (`` `<div>` ``) — only the prose around them is cleaned.
@@ -801,8 +835,21 @@ function stripLeakedTagsOutsideCode(text: string): string {
   for (let i = 0; i < bits.length; i += 2) {
     let seg = bits[i].replace(/<!--[\s\S]*?-->/g, "");
     seg = seg.replace(LEAKED_ENTITY_TAG_RE, "<$1>");
+    // A `<br>` inside a table is stashed behind a placeholder: it is the only
+    // way to break a line within a Markdown cell, and the generic inline
+    // strip below would otherwise eat it. Prose `<br>` becomes a paragraph
+    // break right away.
+    const lines = seg.split("\n");
+    seg = lines
+      .map((line, index) =>
+        inTableRegion(lines, index)
+          ? line.replace(LINE_BREAK_RE, BR_PLACEHOLDER)
+          : line.replace(LINE_BREAK_RE, "\n\n"),
+      )
+      .join("\n");
     seg = seg.replace(LEAKED_BLOCK_TAG_RE, "\n\n");
     seg = seg.replace(LEAKED_INLINE_TAG_RE, "");
+    seg = seg.replaceAll(BR_PLACEHOLDER, "<br>");
     bits[i] = seg.replace(/\n{3,}/g, "\n\n").replace(/[ \t]+$/gm, "");
   }
   return bits.join("");

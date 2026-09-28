@@ -6,8 +6,9 @@ import { Braces, Maximize2, Minus, Minimize2, Palette, Plus } from "lucide-react
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
-import rehypeRaw from "rehype-raw";
 import "katex/dist/katex.min.css";
+import { REHYPE_LINE_BREAKS_ONLY, REHYPE_SAFE_HTML } from "./rehypeSafeHtml";
+import { escapeHtmlInMarkdown } from "./markdownSource";
 import { Code } from "../ui/Code/Code";
 import { Image } from "../ui/Image/Image";
 import { Table } from "../ui/Table/Table";
@@ -18,6 +19,7 @@ import { ColorPickerPanel } from "../ui/ColorPickerPanel/ColorPickerPanel";
 import { AiSelectionBubble } from "../AiSelectionBubble/AiSelectionBubble";
 import { useReaderSettings } from "../../hooks/useReaderSettings.ts";
 import { getSelectionEndRect } from "../../shared/selection";
+import { getTextDir, textAlignForDir } from "../../shared/document/direction";
 import { MermaidDiagram } from "./MermaidDiagram";
 import { safeUrlTransform } from "./safeUrl";
 import styles from "./Markdown.module.css";
@@ -130,148 +132,18 @@ const ZOOM_MAX = 200;
 
 /** Stable plugin lists: react-markdown re-parses the whole document whenever
  *  the plugin-array identity changes, so these must never be recreated on
- *  every render. */
+ *  every render.
+ *
+ *  The "no raw HTML" mode still parses the one tag the source escaper spared
+ *  (`<br>`), which is how line breaks inside a table cell survive in
+ *  AI-written content. */
 const REMARK_PLUGINS = [remarkGfm, remarkMath];
-const REHYPE_PLUGINS = [markGeneratedElements, rehypeRaw, sanitizeRawHtml, rehypeKatex];
-const REHYPE_PLUGINS_NO_RAW = [rehypeKatex];
+const REHYPE_PLUGINS = [...REHYPE_SAFE_HTML, rehypeKatex];
+const REHYPE_PLUGINS_NO_RAW = [...REHYPE_LINE_BREAKS_ONLY, rehypeKatex];
 
-/** Attribute names allowed on raw-HTML elements. Anything else — e.g. names
- *  mangled by markdown emphasis inside a tag (`**classname`, `border-**`) —
- *  is dropped so React never sees an invalid attribute. */
-const RAW_HTML_ATTRIBUTES = new Set([
-  "href",
-  "src",
-  "alt",
-  "title",
-  "dir",
-  "colspan",
-  "rowspan",
-  "start",
-]);
-
-/** Tags whose raw-HTML subtrees are discarded entirely (script, media,
- *  interactive controls, …). */
-const DROP_RAW_HTML_TAGS = new Set([
-  "base",
-  "button",
-  "canvas",
-  "embed",
-  "form",
-  "iframe",
-  "input",
-  "label",
-  "link",
-  "meta",
-  "noscript",
-  "object",
-  "option",
-  "picture",
-  "script",
-  "select",
-  "source",
-  "style",
-  "svg",
-  "template",
-  "textarea",
-  "title",
-  "track",
-  "video",
-]);
-
-interface HastNode {
-  type?: string;
-  tagName?: unknown;
-  properties?: Record<string, unknown>;
-  children?: HastNode[];
-}
-
-/** Marker stamped on every element produced from Markdown syntax (see
- *  `markGeneratedElements`). Raw-HTML elements parsed later by `rehypeRaw`
- *  never carry it, so the sanitizer can tell the two apart — even though
- *  `rehypeRaw` rebuilds node identities (the marker travels as a `data-*`
- *  attribute through its HTML round-trip). Removed again by the sanitizer,
- *  so it never reaches React. */
-const GENERATED_MARKER = "dataReadlynxSafe";
-
-/** Runs before `rehypeRaw`: every element in the tree at this point was
- *  produced from Markdown syntax (raw HTML is still unparsed `raw` nodes),
- *  so stamp them for the sanitizer below. */
-function markGeneratedElements(): (tree: HastNode) => void {
-  const walk = (node: HastNode | undefined): void => {
-    if (!node || typeof node !== "object") return;
-    if (node.type === "element") {
-      node.properties = { ...(node.properties ?? {}), [GENERATED_MARKER]: "true" };
-    }
-    if (Array.isArray(node.children)) {
-      for (const child of node.children) walk(child);
-    }
-  };
-  return walk;
-}
-
-/** Sanitizes the raw-HTML tree produced by `rehypeRaw`. Translation output
- *  often carries JSX/Tailwind fragments (e.g. `<div className=…>` or
- *  `<div inline-flex flex-col…>`); tags survive but every attribute that is
- *  not in the whitelist is dropped, so no garbage classes/attributes reach
- *  React and no invalid-attribute warnings are raised. Elements stamped by
- *  `markGeneratedElements` keep their attributes (stripping them would kill
- *  code highlighting, KaTeX styling and task-list checkboxes) — only the
- *  marker itself is removed, and their children are still visited since raw
- *  HTML can nest inside them (e.g. a `<span>` inside a heading). */
-function sanitizeRawHtml(): (tree: HastNode) => void {
-  const walk = (node: HastNode | undefined): void => {
-    if (!node || typeof node !== "object") return;
-    if (node.type === "element") {
-      const props = node.properties;
-      if (props && props[GENERATED_MARKER] !== undefined) {
-        delete props[GENERATED_MARKER];
-      } else {
-        const tag = String(node.tagName ?? "").toLowerCase();
-        if (DROP_RAW_HTML_TAGS.has(tag)) {
-          node.tagName = "span";
-          node.properties = {};
-          node.children = [];
-          return;
-        }
-        if (props) {
-          for (const name of Object.keys(props)) {
-            if (!RAW_HTML_ATTRIBUTES.has(name)) {
-              delete props[name];
-            }
-          }
-        }
-      }
-    }
-    if (Array.isArray(node.children)) {
-      for (const child of node.children) walk(child);
-    }
-  };
-  return walk;
-}
-
-interface MarkdownProps {
-  content: string;
-  className?: string;
-  /** Shows the reader toolbar: zoom in/out, background/text colors, font
-   *  family and fullscreen (mirrors the EPUB viewer's settings). */
-  toolbar?: boolean;
-  /** Parses raw HTML embedded in the markdown. Defaults to true; disable for
-   *  AI-produced content so HTML/JSX snippets render as literal text. */
-  rawHtml?: boolean;
-  /** Book id for persisting reader settings (zoom, font, colors) in the
-   *  `ReaderSettings` table; the EPUB viewer uses the same book id with
-   *  its own viewer key. Omit in previews to keep settings in memory. */
-  settingsBookId?: string;
-  /** When provided, a floating "Ask AI" bubble appears next to text
-   *  selections and hands the selected text to the host. */
-  onAskAi?: (text: string) => void;
-  /** Extra controls rendered at the start of the reader toolbar — e.g. the
-   *  reading view's page/chapter indicator and prev/next navigation. */
-  toolbarExtra?: ReactNode;
-  /** Receives the scrollable content element so hosts can read or set the
-   *  scroll position (e.g. syncing with the original book view). */
-  scrollHostRef?: Ref<HTMLDivElement>;
-}
+/** The raw-HTML rehype chain (stamp generated nodes, parse embedded HTML,
+  *  whitelist what survives) lives in `rehypeSafeHtml.ts` so the export
+  *  writers sanitize exactly like the reader does. */
 
 /* ---------- RTL helpers ---------- */
 
@@ -285,78 +157,37 @@ function extractText(node: ReactNode): string {
   return "";
 }
 
-function isRtlCodePoint(cp: number): boolean {
-  return (
-    (cp >= 0x0590 && cp <= 0x05ff) || // Hebrew
-    (cp >= 0x0600 && cp <= 0x06ff) || // Arabic
-    (cp >= 0x0750 && cp <= 0x077f) || // Arabic Supplement
-    (cp >= 0xfb50 && cp <= 0xfdff) || // Arabic Presentation Forms-A
-    (cp >= 0xfe70 && cp <= 0xfeff) // Arabic Presentation Forms-B
-  );
-}
-
-function isArabicDigit(cp: number): boolean {
-  return (
-    (cp >= 0x0660 && cp <= 0x0669) || // Arabic-Indic digits ٠-٩
-    (cp >= 0x06f0 && cp <= 0x06f9) // Extended Arabic-Indic (Persian) digits ۰-۹
-  );
-}
-
-// Direction is decided by the DOMINANT language of the prose, counted per WORD
-// rather than per letter, so a long Latin token can't drown out several short
-// Persian words. Digits, spaces and punctuation are neutral and don't vote.
-function classifyWord(word: string): "rtl" | "ltr" | undefined {
-  for (const ch of word) {
-    const cp = ch.codePointAt(0) ?? 0;
-    if (isArabicDigit(cp)) continue; // Arabic/Persian digits are neutral
-    if (isRtlCodePoint(cp)) return "rtl";
-    if (/[a-zA-Z]/.test(ch)) return "ltr";
-  }
-  return undefined; // only digits/symbols -> neutral
-}
-
+/** Direction of a rendered block, shared with the export writers so a
+  *  translated block lays out identically in the reader and in every
+  *  exported file. */
 function getDir(node: ReactNode): "rtl" | "ltr" | undefined {
-  const text = extractText(node);
-  // A text that opens with a Persian/Arabic digit ("۱...", "۰۲...", …)
-  // is conventionally Persian — align it right regardless of the rest.
-  const lead = text.trim();
-  if (lead) {
-    const leadCp = lead.codePointAt(0) ?? 0;
-    // Opens with a Persian/Arabic digit ("۱...", "۰۲...", …) — conventionally
-    // Persian, align right regardless of the rest.
-    if (isArabicDigit(leadCp)) return "rtl";
-    // Opens with a Persian/Arabic letter — treat as an RTL-run heading/list.
-    if (isRtlCodePoint(leadCp)) return "rtl";
-  }
-  let rtlWords = 0;
-  let ltrWords = 0;
-
-  for (const raw of text.split(/\s+/)) {
-    if (!raw) continue;
-    const cls = classifyWord(raw);
-    if (cls === "rtl") rtlWords++;
-    else if (cls === "ltr") ltrWords++;
-  }
-
-  if (rtlWords > ltrWords) return "rtl";
-  if (ltrWords > rtlWords) return "ltr";
-
-  // Equal or no words: decide by first strong letter
-  for (const ch of text) {
-    const cp = ch.codePointAt(0) ?? 0;
-    if (isArabicDigit(cp)) continue;
-    if (isRtlCodePoint(cp)) return "rtl";
-    if (/[a-zA-Z]/.test(ch)) return "ltr";
-  }
-  return undefined;
+  return getTextDir(extractText(node));
 }
 
 function dirProps(node: ReactNode): { dir?: "rtl" | "ltr"; style?: CSSProperties } {
   const dir = getDir(node);
+  const textAlign = textAlignForDir(dir);
   return {
     ...(dir ? { dir } : {}),
-    ...(dir === "rtl" ? { style: { textAlign: "right" } } : {}),
+    ...(textAlign ? { style: { textAlign } } : {}),
   };
+}
+
+/** True when this subtree contains a KaTeX root.
+ *
+ *  `rehypeKatex` expands one formula into hundreds of nested spans (`.katex`,
+ *  `.base`, `.mord`, `.mrel`, …). None of them may be given a `dir` or a
+ *  `text-align`: KaTeX builds the expression out of inline-blocks and relies on
+ *  their natural order, and stamping `text-align` on `.base`/`.mord` re-flows
+ *  the symbols and the spacing between them. The failure is subtle because the
+ *  formula still *parses* — it just comes out visibly wrong. So a span that
+ *  contains math is rendered exactly as KaTeX emitted it. */
+function hasMath(node: ReactNode): boolean {
+  if (Array.isArray(node)) return node.some(hasMath);
+  if (!isValidElement(node)) return false;
+  const props = node.props as { className?: unknown; children?: ReactNode };
+  if (String(props.className ?? "").includes("katex")) return true;
+  return hasMath(props.children);
 }
 
 interface MdNode {
@@ -382,54 +213,9 @@ function textContent(children: ReactNode): string {
   return Array.isArray(children) ? children.join("") : String(children ?? "");
 }
 
-/** Escapes `<` characters outside fenced code blocks and inline code spans,
- *  so raw HTML / JSX snippets in AI-written markdown stay visible as plain
- *  text instead of being parsed as elements (which mangles JSX attribute
- *  syntax and can swallow whole paragraphs). */
-function escapeHtmlInMarkdown(markdown: string): string {
-  if (!markdown.includes("<")) return markdown;
-  const lines = markdown.split("\n");
-  const out: string[] = [];
-  let fence: string | null = null;
-  for (const line of lines) {
-    const match = /^\s*(`{3,}|~{3,})/.exec(line);
-    if (match) {
-      const marker = match[1][0];
-      if (fence === null) {
-        fence = marker;
-      } else if (fence === marker) {
-        fence = null;
-      }
-      out.push(line);
-      continue;
-    }
-    out.push(fence ? line : escapeHtmlInLine(line));
-  }
-  return out.join("\n");
-}
+// The source escaper now lives in `markdownSource.ts` so the export writers
+// prepare AI-written Markdown exactly like the reader does.
 
-function escapeHtmlInLine(line: string): string {
-  let out = "";
-  let index = 0;
-  while (index < line.length) {
-    const tick = line.indexOf("`", index);
-    if (tick === -1) {
-      out += line.slice(index).replace(/</g, "&lt;");
-      break;
-    }
-    out += line.slice(index, tick).replace(/</g, "&lt;");
-    let run = 0;
-    while (tick + run < line.length && line[tick + run] === "`") run += 1;
-    const closing = line.indexOf("`".repeat(run), tick + run);
-    if (closing === -1) {
-      out += line.slice(tick).replace(/</g, "&lt;");
-      break;
-    }
-    out += line.slice(tick, closing + run);
-    index = closing + run;
-  }
-  return out;
-}
 
 /** Per-book global image zoom shared by every image of the book. Provided by
  *  the `Markdown` host (persisted via `useReaderSettings(bookId, "image")`)
@@ -493,11 +279,15 @@ const baseComponents: Components = {
       {children}
     </div>
   ),
-  span: ({ children, node: _node, ...props }) => (
-    <span {...props} {...dirProps(children)}>
-      {children}
-    </span>
-  ),
+  span: ({ children, node: _node, ...props }) =>
+    // Math subtrees pass through untouched (see `hasMath`).
+    hasMath(children) ? (
+      <span {...props}>{children}</span>
+    ) : (
+      <span {...props} {...dirProps(children)}>
+        {children}
+      </span>
+    ),
   p: ({ children, node: _node, ...props }) => {
     const kids = Array.isArray(children) ? children : [children];
     const mathOnly =
@@ -535,7 +325,11 @@ const baseComponents: Components = {
     const cn = Array.isArray(className) ? className.join(" ") : (className ?? "");
     const isTaskList = typeof cn === "string" && cn.includes("contains-task-list");
     return (
-      <ul className={`${isTaskList ? styles.tasks : styles.list}${cn ? ` ${cn}` : ""}`} {...props}>
+      <ul
+        className={`${isTaskList ? styles.tasks : styles.list}${cn ? ` ${cn}` : ""}`}
+        {...props}
+        {...dirProps(children)}
+      >
         {children}
       </ul>
     );
@@ -544,7 +338,11 @@ const baseComponents: Components = {
     const cn = Array.isArray(className) ? className.join(" ") : (className ?? "");
     const isTaskList = typeof cn === "string" && cn.includes("contains-task-list");
     return (
-      <ol className={`${isTaskList ? styles.tasks : styles.list}${cn ? ` ${cn}` : ""}`} {...props}>
+      <ol
+        className={`${isTaskList ? styles.tasks : styles.list}${cn ? ` ${cn}` : ""}`}
+        {...props}
+        {...dirProps(children)}
+      >
         {children}
       </ol>
     );
@@ -647,14 +445,10 @@ const baseComponents: Components = {
         key: `md-col-${index}`,
         header,
         headerDir: getDir(header),
-        render: (row) => {
-          const cell = row[index] ?? "";
-          return (
-            <span dir={getDir(cell)} style={getDir(cell) === "rtl" ? { textAlign: "right" } : undefined}>
-              {cell}
-            </span>
-          );
-        },
+        // Decided per cell, so a Persian description in an English-headed
+        // table still reads right-to-left and sits on the right.
+        cellDir: (row) => getDir(row[index] ?? ""),
+        render: (row) => row[index] ?? "",
       }));
       return <Table columns={columns} rows={rows} />;
     }
@@ -668,6 +462,30 @@ const baseComponents: Components = {
     );
   },
 };
+
+interface MarkdownProps {
+  content: string;
+  className?: string;
+  /** Shows the reader toolbar: zoom in/out, background/text colors, font
+   *  family and fullscreen (mirrors the EPUB viewer's settings). */
+  toolbar?: boolean;
+  /** Parses raw HTML embedded in the markdown. Defaults to true; disable for
+   *  AI-produced content so HTML/JSX snippets render as literal text. */
+  rawHtml?: boolean;
+  /** Book id for persisting reader settings (zoom, font, colors) in the
+   *  `ReaderSettings` table; the EPUB viewer uses the same book id with its
+   *  own viewer key. Omit in previews to keep settings in memory. */
+  settingsBookId?: string;
+  /** When provided, a floating "Ask AI" bubble appears next to text
+   *  selections inside the book and hands the selected text to the host. */
+  onAskAi?: (text: string) => void;
+  /** Extra controls rendered at the start of the reader toolbar — e.g. the
+   *  reading view's page/chapter indicator and prev/next navigation. */
+  toolbarExtra?: ReactNode;
+  /** Receives the scrollable content element so hosts can read or set the
+   *  scroll position (e.g. syncing with the original book view). */
+  scrollHostRef?: Ref<HTMLDivElement>;
+}
 
 export function Markdown({
   content,
