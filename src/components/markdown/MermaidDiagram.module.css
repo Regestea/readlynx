@@ -87,11 +87,54 @@
 }
 
 .error {
-  display: grid;
-  place-items: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
   height: 100%;
   padding: var(--space-5);
   color: var(--color-text-muted);
   font-size: var(--font-size-sm);
   text-align: center;
+}
+
+.errorTitle {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-weight: var(--font-weight-medium);
+}
+
+.errorDetails {
+  max-width: 100%;
+  text-align: start;
+}
+
+.errorDetails > summary {
+  cursor: pointer;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+}
+
+.errorSource {
+  max-width: 100%;
+  max-height: 12em;
+  margin: var(--space-2) 0 0;
+  padding: var(--space-2) var(--space-3);
+  overflow: auto;
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-small);
+  color: var(--color-text-secondary);
+  font-family: ui-monospace, "Cascadia Mono", "SF Mono", Consolas, Menlo, monospace;
+  font-size: var(--font-size-xs);
+  text-align: start;
+  white-space: pre-wrap;
+}
+
+.errorMessage {
+  max-width: 100%;
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
 }

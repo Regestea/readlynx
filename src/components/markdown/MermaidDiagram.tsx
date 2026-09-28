@@ -5,6 +5,8 @@ import type {
   TouchEvent as ReactTouchEvent,
 } from "react";
 import mermaid from "mermaid";
+import { mermaidRecoveryLadder } from "./mermaidRepair";
+import { mermaidConfig } from "./mermaidTheme";
 import { RotateCcw, ZoomIn, ZoomOut } from "lucide-react";
 import { useTheme } from "../../app/providers/theme/ThemeContext";
 import type { MarkdownBlockTheme } from "../../infrastructure/db/entities/ReaderSettings.ts";
@@ -17,54 +19,6 @@ const DOUBLE_TAP_MS = 300;
 /** Fraction of the container the diagram should occupy, so it renders with
  *  20% of breathing space around it. */
 const FIT_MARGIN = 0.8;
-
-/** Mermaid "base" theme recolored from the app's design tokens so diagrams
- *  match the active theme (calm mountain morning / moonlit mountain evening)
- *  instead of mermaid's defaults. The svg background stays transparent so
- *  the card surface shows through. */
-const MERMAID_LIGHT_THEME = {
-  theme: "base",
-  themeVariables: {
-    background: "transparent",
-    fontFamily: '"Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
-    primaryColor: "#fff8f0",
-    primaryTextColor: "#322b26",
-    primaryBorderColor: "#5b6b50",
-    secondaryColor: "#efe3d2",
-    secondaryTextColor: "#4c382b",
-    tertiaryColor: "#e6ded0",
-    lineColor: "#6f675e",
-    textColor: "#322b26",
-    edgeLabelBackground: "#fff8f0",
-    clusterBkg: "rgba(239, 227, 210, 0.55)",
-    clusterBorder: "#9b9289",
-    noteBkgColor: "rgba(239, 227, 210, 0.8)",
-    noteBorderColor: "#9b9289",
-    titleColor: "#322b26",
-  },
-} as const;
-
-const MERMAID_DARK_THEME = {
-  theme: "base",
-  themeVariables: {
-    background: "transparent",
-    fontFamily: '"Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
-    primaryColor: "#1f2b43",
-    primaryTextColor: "#eef2f7",
-    primaryBorderColor: "#8fa8c7",
-    secondaryColor: "#162033",
-    secondaryTextColor: "#d9e0ee",
-    tertiaryColor: "#2c3a57",
-    lineColor: "#c5ccd8",
-    textColor: "#eef2f7",
-    edgeLabelBackground: "#1f2b43",
-    clusterBkg: "rgba(22, 32, 51, 0.7)",
-    clusterBorder: "#95a0b2",
-    noteBkgColor: "rgba(44, 58, 87, 0.8)",
-    noteBorderColor: "#95a0b2",
-    titleColor: "#eef2f7",
-  },
-} as const;
 
 const createMermaidId = (() => {
   let count = 0;
@@ -196,6 +150,21 @@ interface MermaidDiagramProps {
   background?: string | null;
 }
 
+interface MermaidFailure {
+  /** Full parser message, shown verbatim rather than summarised away. */
+  message: string;
+  /** The model's own source, so a bad diagram can be read and fixed. */
+  source: string;
+}
+
+/** Mermaid's parser dumps the offending line plus a long list of expected
+ *  tokens. Keep the whole thing — it is the only clue to what went wrong — but
+ *  on one line so it cannot blow up the card. */
+function describeFailure(err: unknown, source: string): MermaidFailure {
+  const message = err instanceof Error ? err.message : String(err);
+  return { message: message.replace(/\s*\n\s*/g, " ").trim(), source };
+}
+
 export function MermaidDiagram({ chart, themeOverride, background }: MermaidDiagramProps) {
   const { theme } = useTheme();
   const effectiveTheme = themeOverride ?? theme;
@@ -206,7 +175,7 @@ export function MermaidDiagram({ chart, themeOverride, background }: MermaidDiag
   const [scale, setScale] = useState(1);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [failure, setFailure] = useState<MermaidFailure | null>(null);
 
   const scaleRef = useRef(1);
   const positionRef = useRef({ x: 0, y: 0 });
@@ -241,40 +210,67 @@ export function MermaidDiagram({ chart, themeOverride, background }: MermaidDiag
 
   /** Renders the chart into the container; re-runs when the chart or the
    *  effective theme changes because mermaid bakes the colors into the svg
-   *  at render time. */
+   *  at render time.
+   *
+   *  A model-produced diagram is often *nearly* valid — one label holding a
+   *  bracket or a parenthesis is enough. So the render is attempted over a
+   *  list of candidates: the source as written first, then the repair that
+   *  quotes offending labels, then a lossy repair that drops them. Each
+   *  candidate is only accepted once mermaid itself has parsed it, so the
+   *  original text is never lost and a wrong guess cannot corrupt the diagram. */
   useEffect(() => {
-    const config = effectiveTheme === "dark" ? MERMAID_DARK_THEME : MERMAID_LIGHT_THEME;
-    mermaid.initialize({ startOnLoad: false, ...config });
+    mermaid.initialize({ startOnLoad: false, ...mermaidConfig(effectiveTheme) });
     let cancelled = false;
-    mermaid
-      .render(createMermaidId(), chart)
-      .then(({ svg }) => {
-        if (cancelled) return;
-        const host = diagramRef.current;
-        if (!host) return;
-        host.innerHTML = svg;
-        setError(null);
-        fixLabelContrast(host);
-        // Render the svg at its natural size (drop mermaid's max-width: 100%)
-        // so the fit scale below is exact instead of compounding with the
-        // squish mermaid would otherwise apply.
-        const svgEl = host.querySelector("svg");
-        const vb = svgEl?.viewBox?.baseVal;
-        if (svgEl && vb && vb.width > 0 && vb.height > 0) {
-          svgEl.style.maxWidth = "none";
-          svgEl.setAttribute("width", String(vb.width));
-          svgEl.setAttribute("height", String(vb.height));
-          naturalSizeRef.current = { width: vb.width, height: vb.height };
-        } else {
-          naturalSizeRef.current = null;
+    const paint = (svg: string) => {
+      const host = diagramRef.current;
+      if (!host) return;
+      host.innerHTML = svg;
+      setFailure(null);
+      fixLabelContrast(host);
+      // Render the svg at its natural size (drop mermaid's max-width: 100%)
+      // so the fit scale below is exact instead of compounding with the
+      // squish mermaid would otherwise apply.
+      const svgEl = host.querySelector("svg");
+      const vb = svgEl?.viewBox?.baseVal;
+      if (svgEl && vb && vb.width > 0 && vb.height > 0) {
+        svgEl.style.maxWidth = "none";
+        svgEl.setAttribute("width", String(vb.width));
+        svgEl.setAttribute("height", String(vb.height));
+        naturalSizeRef.current = { width: vb.width, height: vb.height };
+      } else {
+        naturalSizeRef.current = null;
+      }
+      fitToContainer();
+    };
+    void (async () => {
+      let lastError: unknown = null;
+      // The ladder asks the parser first and yields only sources it accepts, so
+      // the common failure is skipped over without paying for a layout pass.
+      for await (const attempt of mermaidRecoveryLadder(chart, (source) =>
+        mermaid.parse(source).then(
+          () => true,
+          () => false,
+        ),
+      )) {
+        // A fresh id per attempt: mermaid leaves its scratch element behind
+        // when a parse fails, and a reused id would collide with it.
+        try {
+          const { svg } = await mermaid.render(createMermaidId(), attempt.source);
+          if (cancelled) return;
+          paint(svg);
+          return;
+        } catch (err) {
+          lastError = err;
         }
-        fitToContainer();
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : String(err));
-        }
-      });
+      }
+      // Nothing in the ladder parsed: surface the real parser message.
+      try {
+        await mermaid.render(createMermaidId(), chart);
+      } catch (err) {
+        lastError = err;
+      }
+      if (!cancelled) setFailure(describeFailure(lastError, chart));
+    })();
     return () => {
       cancelled = true;
     };
@@ -419,8 +415,15 @@ export function MermaidDiagram({ chart, themeOverride, background }: MermaidDiag
       </div>
       <span className={styles.scaleBadge}>{Math.round(scale * 100)}%</span>
       <span className={styles.hint}>Drag to pan · Double-tap to reset</span>
-      {error ? (
-        <div className={styles.error}>Failed to render diagram — {error}</div>
+      {failure ? (
+        <div className={styles.error}>
+          <p className={styles.errorTitle}>This diagram could not be rendered</p>
+          <details className={styles.errorDetails}>
+            <summary>Show the diagram source</summary>
+            <pre className={styles.errorSource}>{failure.source}</pre>
+          </details>
+          <p className={styles.errorMessage}>{failure.message}</p>
+        </div>
       ) : (
         <div ref={diagramRef} className={styles.diagram} style={transformStyle} />
       )}
