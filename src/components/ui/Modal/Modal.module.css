@@ -10,6 +10,11 @@
   animation: fade-in var(--transition-base) ease both;
 }
 
+/* A dialog opened on top of another one (export over Manage translations). */
+.overlayRaised {
+  z-index: calc(var(--z-dialog) + 10);
+}
+
 @keyframes fade-in {
   from {
     opacity: 0;
@@ -20,13 +25,17 @@
   }
 }
 
+/* The dialog no longer scrolls itself: the header and footer are pinned and
+   only the body between them moves, so the title and the action buttons stay
+   put however long the content is. `overflow: hidden` clips the rounded
+   corners, which `auto` used to do on the whole box. */
 .dialog {
   display: flex;
   flex-direction: column;
   gap: var(--space-5);
   width: min(520px, 100%);
   max-height: 85vh;
-  overflow-y: auto;
+  overflow: hidden;
   padding: var(--space-6);
   background: var(--color-bg);
   border: 1px solid var(--color-border);
@@ -60,8 +69,10 @@
   }
 }
 
+/* `flex: 0 0 auto` keeps a bar from being squeezed when the body is long. */
 .head {
   display: flex;
+  flex: 0 0 auto;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-4);
@@ -79,14 +90,20 @@
   height: 38px;
 }
 
+/* `min-height: 0` is what actually lets a flex child scroll: without it the
+   body grows to its content size and pushes the footer off the dialog. */
 .body {
   display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
   gap: var(--space-4);
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .footer {
   display: flex;
+  flex: 0 0 auto;
   justify-content: flex-end;
   gap: var(--space-3);
   padding-top: var(--space-2);
