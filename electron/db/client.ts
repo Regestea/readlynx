@@ -234,8 +234,17 @@ export class DbWorkerClient {
     method?: TranslationMethod | null;
     pageNumber?: number | null;
     chunkKeyPrefix?: string | null;
+    /** Read every row of the book instead of one page / chapter. */
+    all?: boolean;
   }): Promise<TranslationEntity[]> {
     return this.exec("translation-get", options);
+  }
+
+  /** Every PDF page / chapter of a book that already has a translation —
+   *  key-only, so the Manage translations dialog can render a status list
+   *  without pulling the markdown bodies. */
+  getTranslationUnits(bookId: string): Promise<{ pages: number[]; chapters: string[] }> {
+    return this.exec("translation-units", { bookId });
   }
 
   putTranslation(translation: TranslationEntity): Promise<boolean> {

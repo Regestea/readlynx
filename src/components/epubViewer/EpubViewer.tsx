@@ -292,6 +292,14 @@ export interface EpubExtraction {
   images: EpubImageRef[];
 }
 
+export interface EpubChapterRef {
+  /** Spine index — the same key the reader and the translation cache use. */
+  index: number;
+  key: string;
+  /** Table-of-contents label, or a positional `Chapter N` fallback. */
+  title: string;
+}
+
 export interface EpubViewerHandle {
   /** Markdown of the currently rendered section, or null when unavailable. */
   getCurrentChapterMarkdown(): string | null;
@@ -308,6 +316,10 @@ export interface EpubViewerHandle {
   getCurrentChapterHtmlExtraction(): EpubHtmlExtraction | null;
   /** Total spine chapters of the loaded book (0 before it loads). */
   getChapterCount(): number;
+  /** Every spine chapter with its title, in reading order. Cheap: titles come
+   *  from the parsed table of contents, no chapter is loaded. Powers the
+   *  per-chapter status list of the Manage translations dialog. */
+  getChapterList(): EpubChapterRef[];
   /** Jumps to a spine chapter by index (clamped to the book bounds). */
   goToChapter(index: number): void;
   /** Current scroll offset and scrollable range (px) of the rendered chapter,
@@ -315,6 +327,20 @@ export interface EpubViewerHandle {
   getChapterScroll(): { top: number; max: number } | null;
   /** Sets the chapter scroll offset in px (clamped to the scrollable range). */
   setChapterScroll(top: number): void;
+}
+
+/** Flattens a table of contents (which nests) into one list, depth first. */
+function flattenToc(items: unknown[]): Array<{ label: string; href: string }> {
+  const out: Array<{ label: string; href: string }> = [];
+  for (const raw of items) {
+    if (!raw || typeof raw !== "object") continue;
+    const item = raw as { label?: unknown; href?: unknown; subitems?: unknown };
+    if (typeof item.href === "string") {
+      out.push({ label: typeof item.label === "string" ? item.label.trim() : "", href: item.href });
+    }
+    if (Array.isArray(item.subitems)) out.push(...flattenToc(item.subitems));
+  }
+  return out;
 }
 
 export function EpubViewer({
@@ -520,6 +546,31 @@ export function EpubViewer({
     return null;
   }, []);
 
+  /** Every spine chapter with its table-of-contents title. The TOC is already
+   *  parsed by the time the book is ready, so listing chapters costs nothing
+   *  (no chapter is loaded). Chapters the TOC does not mention get a
+   *  positional label. */
+  const chapterList = useCallback((): EpubChapterRef[] => {
+    const current = bookRef.current;
+    const spine = (current?.spine as { spineItems?: unknown[] } | undefined)?.spineItems ?? [];
+    const titles = new Map<number, string>();
+    try {
+      for (const entry of flattenToc((current?.navigation?.toc ?? []) as unknown[])) {
+        if (!entry.label) continue;
+        const section = current?.spine?.get(entry.href) as { index?: number } | undefined;
+        const index = section?.index;
+        if (typeof index === "number" && !titles.has(index)) titles.set(index, entry.label);
+      }
+    } catch {
+      // A broken TOC is not fatal — chapters fall back to positional labels.
+    }
+    return spine.map((_item, index) => ({
+      index,
+      key: String(index),
+      title: titles.get(index) || `Chapter ${index + 1}`,
+    }));
+  }, []);
+
   useImperativeHandle(ref, () => ({
     getCurrentChapterMarkdown: currentChapterMarkdown,
     getCurrentChapterText: currentChapterText,
@@ -528,6 +579,7 @@ export function EpubViewer({
     // `spineItems` exists at runtime but is missing from epubjs's typings.
     getChapterCount: () =>
       (bookRef.current?.spine as { spineItems?: unknown[] } | undefined)?.spineItems?.length ?? 0,
+    getChapterList: chapterList,
     goToChapter: (index: number) => {
       const rendition = renditionRef.current;
       const count = (bookRef.current?.spine as { spineItems?: unknown[] } | undefined)?.spineItems

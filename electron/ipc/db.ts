@@ -131,6 +131,8 @@ export function registerDbIpc(db: DbWorkerClient) {
 
   handle("db:translation-get", (_event, options) => db.getTranslations(options));
 
+  handle("db:translation-units", (_event, bookId) => db.getTranslationUnits(bookId));
+
   handle("db:translation-put", (_event, translation) => db.putTranslation(translation));
 
   handle("db:translation-delete", (_event, options) =>

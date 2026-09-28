@@ -14,11 +14,15 @@ import {
 import type { EpubImageRef } from "../../../shared/document/epubToMarkdown.ts";
 import { getDefaultAiModel, resolveProviderBaseUrl } from "../../../infrastructure/ai/modelResolver";
 import { chunkChapter } from "./epubChunker.ts";
+import { imageRefToDataUrl, openEpubContents } from "./epubContents.ts";
+import type { EpubContents } from "./epubContents.ts";
+import type { TranslatedUnit } from "../export/translatedBookContent.tsx";
 import {
   buildLanguageRepairPrompts,
   buildTranslationSystemPrompt,
   buildTranslationUserPrompt,
 } from "./prompt.ts";
+import type { TranslationPromptContext } from "./prompt.ts";
 import { languageLabel } from "./languages.ts";
 import { passesLanguageGate } from "./languageGate.ts";
 import {
@@ -40,11 +44,31 @@ import {
   unitToPage,
 } from "./types.ts";
 import type {
+  EpubExtractionMode,
   TranslationMethod,
   TranslationSettings,
   TranslationUnitKey,
   TranslationViewMode,
 } from "./types.ts";
+
+/** Which units of a book already have a cached translation — drives the
+ *  per-page / per-chapter status list of the Manage translations dialog. */
+export interface TranslationUnitIndex {
+  /** Translated PDF page numbers. */
+  pages: number[];
+  /** Chapter keys with at least one cached chunk (EPUB / Markdown). */
+  chapters: string[];
+}
+
+const EMPTY_UNIT_INDEX: TranslationUnitIndex = { pages: [], chapters: [] };
+
+/** One page or chapter the Manage dialog asked to translate. */
+export interface BulkTranslationRequest {
+  /** PDF page numbers, ascending (PDF books only). */
+  pages: number[];
+  /** EPUB spine keys / the Markdown document key (EPUB and Markdown books). */
+  chapters: string[];
+}
 
 interface UseTranslationOptions {
   bookId: string;
@@ -58,6 +82,10 @@ interface UseTranslationOptions {
    *  pipeline chunks it (like an EPUB chapter) so no AI request overloads
    *  the model; null until the file is loaded. Irrelevant for PDF/EPUB. */
   markdownText?: string | null;
+  /** Absolute path of the book's source file. EPUB books need it to open a
+   *  second, headless copy of the archive when the Manage dialog translates
+   *  chapters the reading view is not showing. */
+  sourceFilePath?: string | null;
 }
 
 /** Chunk keys are ordered by their index, zero-padded so string ordering
@@ -70,6 +98,31 @@ function chunkKeyFor(chapterKey: string, index: number): string {
  *  caught by the callers and surfaced as a status message, not an error. */
 class TranslationCancelledError extends Error {}
 
+/** Turns a chapter's images into data URLs the FileStore can persist,
+ *  dropping the ones that cannot be read. Images whose URL could not be read
+ *  are removed from the returned list too, so the two arrays stay aligned
+ *  with the `[IMG-n]` tokens they replace (index drift would otherwise splice
+ *  one chapter's picture into another's slot). */
+async function resolveImageDataUrls(images: EpubImageRef[]): Promise<{
+  images: EpubImageRef[];
+  dataUrls: string[];
+}> {
+  const resolved = await Promise.all(
+    images.map(async (image) => ({
+      image,
+      dataUrl: extractDataUrlFromImageRef(image) ?? (await imageRefToDataUrl(image)),
+    })),
+  );
+  const kept: EpubImageRef[] = [];
+  const dataUrls: string[] = [];
+  for (const entry of resolved) {
+    if (!entry.dataUrl) continue;
+    kept.push(entry.image);
+    dataUrls.push(entry.dataUrl);
+  }
+  return { images: kept, dataUrls };
+}
+
 /** True when an `ai.chat` rejection is an intentional abort from the Cancel
  *  button (main process throws `AbortError: Translation cancelled.`). Mapped
  *  to `TranslationCancelledError` so no failover / error toast follows. */
@@ -78,6 +131,38 @@ function isAiAbortError(error: unknown): boolean {
   if ((error as { name?: unknown }).name === "AbortError") return true;
   const message = error instanceof Error ? error.message : String(error);
   return /^\s*(translation cancelled|request cancelled)\.?\s*$/i.test(message);
+}
+
+/** Attempts per model before failing over to the next one. Providers
+ *  intermittently answer with an empty body (especially on long multimodal
+ *  requests) or drop a connection; those are worth a second chance instead of
+ *  failing the whole book. */
+const MAX_ATTEMPTS_PER_MODEL = 3;
+
+/** Pause before attempt 2 and attempt 3. */
+const RETRY_DELAYS_MS = [0, 1_200, 3_000];
+
+/** Failures that will not fix themselves by asking again: bad credentials, an
+ *  unknown model, a rejected request. Retrying those only wastes the user's
+ *  time, so the model is failed over (or the error surfaced) immediately. */
+function isPermanentAiError(message: string): boolean {
+  return /\b(401|403|404)\b|invalid[ _]?api[ _]?key|incorrect api key|unauthorized|forbidden|unknown model|invalid[ _]?request|invalid_request_error/i.test(
+    message,
+  );
+}
+
+/** Waits `ms`, returning early as soon as the user cancels so a queued retry
+ *  never delays the Cancel button. */
+function waitForRetry(ms: number, isCancelled: () => boolean): Promise<void> {
+  if (ms <= 0) return Promise.resolve();
+  return new Promise((resolve) => {
+    const started = Date.now();
+    const tick = () => {
+      if (isCancelled() || Date.now() - started >= ms) resolve();
+      else window.setTimeout(tick, Math.min(200, ms));
+    };
+    tick();
+  });
 }
 
 /**
@@ -157,6 +242,7 @@ export function useTranslation({
   epubRef,
   epubReady,
   markdownText = null,
+  sourceFilePath = null,
 }: UseTranslationOptions) {
   const [viewMode, setViewModeState] = useState<TranslationViewMode>("original");
   const [settings, setSettings] = useState<TranslationSettings>(DEFAULT_TRANSLATION_SETTINGS);
@@ -177,6 +263,10 @@ export function useTranslation({
   const [refreshTick, setRefreshTick] = useState(0);
   /** Progress of a running page-range translation (null while idle). */
   const [rangeProgress, setRangeProgress] = useState<{ done: number; total: number } | null>(null);
+  /** Which pages / chapters of the whole book already have a translation.
+   *  Read once for the Manage translations dialog and then kept up to date
+   *  in memory as bulk units finish, so the dialog never re-queries. */
+  const [unitIndex, setUnitIndex] = useState<TranslationUnitIndex>(EMPTY_UNIT_INDEX);
   /** Rate-limit retry attempt counter (null when not retrying). */
   const [rateLimitRetry, setRateLimitRetry] = useState<number | null>(null);
   /** True while waiting for the EPUB viewer to finish loading so cached
@@ -197,6 +287,11 @@ export function useTranslation({
   useEffect(() => {
     markdownTextRef.current = markdownText;
   }, [markdownText]);
+
+  const sourceFilePathRef = useRef<string | null>(sourceFilePath);
+  useEffect(() => {
+    sourceFilePathRef.current = sourceFilePath;
+  }, [sourceFilePath]);
 
   const busyRef = useRef(false);
   /** Tracks which unit key is currently being translated by `translate`.
@@ -558,12 +653,16 @@ export function useTranslation({
     return fallback ? [fallback] : [];
   }, []);
 
-  /** Runs one AI chat request through the ordered model list: a failed
-   *  request (network, provider, empty output, invalid config) is retried
-   *  with the next model until one succeeds or every model has failed. A
-   *  user Cancel aborts the in-flight HTTP call (via `ai.cancel`) and is
-   *  re-thrown as `TranslationCancelledError` immediately — never failed
-   *  over to the next model. */
+  /** Runs one AI chat request through the ordered model list.
+   *
+   *  Each model gets up to `MAX_ATTEMPTS_PER_MODEL` tries before the request
+   *  is failed over to the next model — providers intermittently answer with
+   *  an empty body or drop the connection, and one blank answer should not
+   *  abort a whole book. Permanent errors (bad key, unknown model) skip the
+   *  retries; a user Cancel aborts the in-flight call via `ai.cancel` and is
+   *  re-thrown as `TranslationCancelledError` immediately, never failed over.
+   *  When every model has run out of attempts the original aggregated error is
+   *  thrown, so an unrecoverable run fails exactly as it did before. */
   const chatWithFailover = useCallback(
     async (params: {
       messages: { role: "system" | "user" | "assistant"; content: string }[];
@@ -597,36 +696,56 @@ export function useTranslation({
           failures.push(`${label}: ${err instanceof Error ? err.message : String(err)}`);
           continue;
         }
-        const requestId = crypto.randomUUID();
-        activeAiRequestIdsRef.current.add(requestId);
-        try {
-          const response = await ai.chat({
-            input,
-            messages: params.messages,
-            images: params.images,
-            requestId,
-          });
+
+        let failure = "";
+        for (let attempt = 1; attempt <= MAX_ATTEMPTS_PER_MODEL; attempt += 1) {
           if (cancelRequestedRef.current) {
             throw new TranslationCancelledError("Translation cancelled.");
           }
-          const text = response.trim();
-          if (!text) {
-            failures.push(`${label}: returned an empty translation`);
-            continue;
+          if (attempt > 1) {
+            // Backs off before the repeat so a rate-limited provider gets a
+            // moment, and gives up the wait instantly if the user cancels.
+            await waitForRetry(RETRY_DELAYS_MS[attempt - 1] ?? 0, () => cancelRequestedRef.current);
+            if (cancelRequestedRef.current) {
+              throw new TranslationCancelledError("Translation cancelled.");
+            }
           }
-          return text;
-        } catch (err) {
-          if (
-            cancelRequestedRef.current ||
-            isAiAbortError(err) ||
-            err instanceof TranslationCancelledError
-          ) {
-            throw new TranslationCancelledError("Translation cancelled.");
+          const requestId = crypto.randomUUID();
+          activeAiRequestIdsRef.current.add(requestId);
+          try {
+            const response = await ai.chat({
+              input,
+              messages: params.messages,
+              images: params.images,
+              requestId,
+            });
+            if (cancelRequestedRef.current) {
+              throw new TranslationCancelledError("Translation cancelled.");
+            }
+            const text = response.trim();
+            if (text) return text;
+            failure = "returned an empty translation";
+          } catch (err) {
+            if (
+              cancelRequestedRef.current ||
+              isAiAbortError(err) ||
+              err instanceof TranslationCancelledError
+            ) {
+              throw new TranslationCancelledError("Translation cancelled.");
+            }
+            failure = err instanceof Error ? err.message : String(err);
+          } finally {
+            activeAiRequestIdsRef.current.delete(requestId);
           }
-          failures.push(`${label}: ${err instanceof Error ? err.message : String(err)}`);
-        } finally {
-          activeAiRequestIdsRef.current.delete(requestId);
+          if (attempt < MAX_ATTEMPTS_PER_MODEL && !isPermanentAiError(failure)) {
+            const retrying = `"${label}" — ${failure}. Retrying (${attempt + 1}/${MAX_ATTEMPTS_PER_MODEL})…`;
+            baseStatusRef.current = retrying;
+            setStatus(retrying);
+            setRateLimitRetry(null);
+          }
         }
+        failures.push(`${label}: ${failure}`);
+
         if (cancelRequestedRef.current) {
           throw new TranslationCancelledError("Translation cancelled.");
         }
@@ -781,6 +900,11 @@ export function useTranslation({
       const currentSettings = settingsRef.current;
       const method = methodFor("pdf", currentSettings.pdfMethod);
       const docType = docTypeFor("pdf", currentSettings.pdfMethod);
+      // Built without `regions` on purpose: the numbered-section
+      // instructions only exist in the branch below that needs them. The
+      // prompt helpers skip the whole block when `regions` is unset, so with
+      // "Auto include required pictures" off the model is never told about
+      // `[REGION-n]` and never invents one.
       const promptContext = {
         docType,
         ocrLangs: currentSettings.ocrLangs,
@@ -857,7 +981,10 @@ export function useTranslation({
             ],
             images: [image],
           });
-          result = await ensureTargetLanguage(raw);
+          // The prompt above never mentioned numbered sections, so a token in
+          // the output is the model inventing one. Drop it rather than saving
+          // `[REGION-7]` as visible text; real images are text, not tokens.
+          result = await ensureTargetLanguage(raw).then((text) => text.replace(REGION_TOKEN_RE, ""));
         } else {
           const regionPromptContext = {
             ...promptContext,
@@ -887,16 +1014,154 @@ export function useTranslation({
     [bookId, pdfRef, saveRow, chatWithFailover, ensureTargetLanguage],
   );
 
-  /** Translates a contiguous range of PDF pages in ascending order, applying
-   *  the toolbar settings (method, model, languages, instruction) to every
-   *  page. Pages already cached are regenerated. */
-  const translateRange = useCallback(
-    async (from: number, to: number) => {
+  /**
+   * Runs the chunked-text pipeline (EPUB chapters and Markdown documents)
+   * for one unit and persists its rows. Shared by the current-unit action and
+   * the Manage dialog's whole-book / selective runs.
+   *
+   * A partially translated chapter is useless, so chunk results stay in memory
+   * and are written only once every chunk has been translated: a cancel or a
+   * failure mid-chapter leaves the previously cached (complete) translation
+   * untouched.
+   */
+  const translateChunkedUnit = useCallback(
+    async (input: {
+      chapterKey: string;
+      /** Request-sized pieces, already split by the caller. */
+      chunks: string[];
+      images: EpubImageRef[];
+      method: TranslationMethod;
+      promptContext: TranslationPromptContext;
+      systemPrompt: string;
+      /** What a single chunk is called in the status line ("chapter",
+       *  "document"). */
+      unitLabel: string;
+    }): Promise<string> => {
+      const { chapterKey, chunks, method, promptContext, systemPrompt, unitLabel } = input;
+      if (chunks.length === 0) {
+        throw new Error(
+          unitLabel === "document"
+            ? "The Markdown file has no text to translate."
+            : "The chapter has no text to translate.",
+        );
+      }
+      const targetLang = settingsRef.current.targetLang;
+      const results: string[] = [];
+      for (let index = 0; index < chunks.length; index += 1) {
+        // Cancel checkpoint: stop at the chunk boundary — nothing has been
+        // written yet, so the cache is untouched.
+        if (cancelRequestedRef.current) {
+          throw new TranslationCancelledError("Translation cancelled.");
+        }
+        const chunkStatus =
+          chunks.length === 1
+            ? `Translating ${unitLabel}…`
+            : `Translating chunk ${index + 1} of ${chunks.length}…`;
+        baseStatusRef.current = chunkStatus;
+        setRateLimitRetry(null);
+        setStatus(chunkStatus);
+        const chunkRaw = await chatWithFailover({
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: buildTranslationUserPrompt(promptContext, chunks[index]) },
+          ],
+        });
+        // Normalize each chunk so the rows written below are clean, then drop
+        // any HTML the model echoed despite the "Markdown only" contract
+        // (`<br><br>` becoming literal text is the most visible symptom).
+        // Enforced for every source, not just the EPUB HTML mode: every
+        // prompt asks for Markdown only, and the reader renders translations
+        // with raw HTML disabled, so a surviving tag is always wrong. Fenced
+        // and inline code are left alone by the stripper.
+        const normalized = stripLeakedHtmlTags(normalizeTranslatedMarkdown(chunkRaw));
+        results.push(normalized);
+        setRateLimitRetry(null);
+        baseStatusRef.current = null;
+      }
+      // Save chapter images to the FileStore and replace [IMG-n] tokens with
+      // protocol URLs so the cached translation works without the viewer.
+      const joined = normalizeTranslatedMarkdown(results.join("\n\n"));
+      let result = joined;
+      let chunkMarkdowns = results;
+      if (joined.includes("[IMG-") && input.images.length > 0) {
+        const { images, dataUrls } = await resolveImageDataUrls(input.images);
+        if (dataUrls.length > 0) {
+          // Remove old images for this chapter before saving new ones so
+          // regenerated chapters don't leave orphaned files.
+          await window.readlynx?.translationImages?.delete({ bookId, chapterKeyPrefix: chapterKey });
+          const protocolUrls = await window.readlynx?.translationImages?.save({
+            bookId,
+            chapterKey,
+            dataUrls,
+          });
+          if (protocolUrls) {
+            result = replaceImageTokensWithProtocolUrls(joined, images, protocolUrls);
+            chunkMarkdowns = results.map((chunk) =>
+              replaceImageTokensWithProtocolUrls(chunk, images, protocolUrls),
+            );
+          } else {
+            result = replaceImageTokens(joined, images);
+          }
+        } else {
+          result = replaceImageTokens(joined, input.images);
+        }
+      }
+      // The complete unit is ready: drop every cached chunk of it (incl. stale
+      // chunks from earlier, differently-chunked generations) and write the
+      // fresh set in one pass — prevents duplicate rows when re-translating
+      // and never leaves a partial chapter in the database.
+      await window.readlynx?.db.deleteTranslations({ bookId, chunkKeyPrefix: chapterKey });
+      for (let index = 0; index < chunks.length; index += 1) {
+        await window.readlynx?.db.putTranslation({
+          id: crypto.randomUUID(),
+          bookId,
+          sourceType,
+          method,
+          pageNumber: null,
+          chunkKey: chunkKeyFor(chapterKey, index),
+          sourceLang: "",
+          targetLang,
+          customPrompt: customPromptRef.current,
+          markdown: chunkMarkdowns[index],
+          updatedAt: "",
+        });
+      }
+      return result;
+    },
+    [bookId, sourceType, chatWithFailover],
+  );
+
+  /** Reads the currently rendered chapter's translation input out of the live
+   *  viewer (used by the current-unit action, which only ever sees one
+   *  chapter at a time). */
+  const readViewerChapter = useCallback(
+    (extraction: EpubExtractionMode): { chunks: string[]; images: EpubImageRef[] } | null => {
+      if (extraction === "html") {
+        const htmlExtraction = epubRef.current?.getCurrentChapterHtmlExtraction();
+        if (!htmlExtraction || htmlExtraction.chunks.length === 0) return null;
+        return { chunks: htmlExtraction.chunks, images: htmlExtraction.images };
+      }
+      const extracted = epubRef.current?.getCurrentChapterExtraction();
+      if (!extracted || !extracted.text) return null;
+      return { chunks: chunkChapter(extracted.text), images: extracted.images };
+    },
+    [epubRef],
+  );
+
+  /** Translates the given PDF pages in ascending order, applying the toolbar
+   *  settings (method, model, languages, instruction) to every one of them.
+   *  Pages already cached are regenerated. Progress is reported through
+   *  `rangeProgress`; a cancel or a failure keeps every page finished so far
+   *  and leaves the rest untouched. */
+  const translatePages = useCallback(
+    async (pages: number[]) => {
       if (sourceType !== "pdf") return;
       if (busyRef.current) return;
-      const count = to - from + 1;
-      if (!Number.isInteger(from) || !Number.isInteger(to) || count <= 0) {
-        setError("Pick a valid page range (from ≤ to).");
+      const ordered = [...new Set(pages)]
+        .filter((page) => Number.isInteger(page) && page > 0)
+        .sort((a, b) => a - b);
+      if (ordered.length === 0) {
+        setError("Select at least one page to translate.");
         return;
       }
       if (orderedModelCandidates().length === 0) {
@@ -910,22 +1175,29 @@ export function useTranslation({
       setError(null);
       setStatus(null);
       cancelRequestedRef.current = false;
+      const count = ordered.length;
       let done = 0;
       setRangeProgress({ done: 0, total: count });
       try {
-        for (let page = from; page <= to; page += 1) {
+        for (let index = 0; index < count; index += 1) {
+          const page = ordered[index];
           // Cancel checkpoint: stop at the page boundary — every finished
           // page keeps its fresh row, the rest are left untouched.
           if (cancelRequestedRef.current) break;
-          setStatus(`Page ${page} of ${to}…`);
+          setStatus(`Page ${page} of ${ordered[count - 1]}…`);
           await translatePdfPage(page);
           done += 1;
           setRangeProgress({ done, total: count });
+          setUnitIndex((current) =>
+            current.pages.includes(page)
+              ? current
+              : { ...current, pages: [...current.pages, page].sort((a, b) => a - b) },
+          );
         }
         setStatus(
           cancelRequestedRef.current
             ? `Cancelled — ${done} of ${count} page${count === 1 ? "" : "s"} translated.`
-            : `Translated ${count} page${count === 1 ? "" : "s"} (${from}–${to}).`,
+            : `Translated ${count} page${count === 1 ? "" : "s"}.`,
         );
         setRangeProgress(null);
         // The on-screen unit may fall inside the range: re-read its rows.
@@ -947,6 +1219,235 @@ export function useTranslation({
       }
     },
     [sourceType, translatePdfPage, orderedModelCandidates],
+  );
+
+  /** Translates a contiguous range of PDF pages (the range slider in the
+   *  toolbar); every page is regenerated with the current settings. */
+  const translateRange = useCallback(
+    async (from: number, to: number) => {
+      if (!Number.isInteger(from) || !Number.isInteger(to) || to < from) {
+        setError("Pick a valid page range (from ≤ to).");
+        return;
+      }
+      const pages: number[] = [];
+      for (let page = from; page <= to; page += 1) pages.push(page);
+      await translatePages(pages);
+    },
+    [translatePages],
+  );
+
+  /** Re-reads which units of the book already have a translation. Cheap
+   *  (key columns only) — the Manage translations dialog calls it on open
+   *  and after a bulk run, so a status list is never stale. */
+  const refreshUnitIndex = useCallback(async () => {
+    const db = window.readlynx?.db;
+    if (!db) return;
+    try {
+      const index = await db.getTranslationUnits(bookId);
+      setUnitIndex({
+        pages: [...index.pages].sort((a, b) => a - b),
+        chapters: [...index.chapters],
+      });
+    } catch {
+      // keep the previous index; the dialog still works, just less precisely
+    }
+  }, [bookId]);
+
+  /**
+   * The whole book's cached translation, in reading order — the input of the
+   * export pipeline. PDF books come back as one entry per translated page;
+   * EPUB and Markdown books as one entry per translated chapter (a chapter's
+   * chunks joined, matching what the reader shows). Units that have no
+   * translation yet are skipped.
+   */
+  const getAllTranslatedUnits = useCallback(
+    async (chapterTitles: Record<string, string> = {}): Promise<TranslatedUnit[]> => {
+      const db = window.readlynx?.db;
+      if (!db) return [];
+      // One explicit whole-book query, then split by row shape: PDF rows carry
+      // a page number, EPUB and Markdown rows carry only a chunk key.
+      const rows = await db.getTranslations({ bookId, all: true });
+      console.info(
+        `[export] ${rows.length} translation row(s) loaded for book ${bookId} (${sourceType})`,
+      );
+      const pages = new Map<number, string>();
+      const chapters = new Map<string, string[]>();
+      for (const row of rows) {
+        if (typeof row.pageNumber === "number") {
+          // Later rows win, matching how the reader picks the freshest row.
+          pages.set(row.pageNumber, row.markdown);
+          continue;
+        }
+        if (!row.chunkKey) continue;
+        // Chunk rows are `<chapterKey>#<zero-padded index>`; fold them back
+        // into one document per chapter, in chunk order.
+        const at = row.chunkKey.lastIndexOf("#");
+        const chapter = at > 0 ? row.chunkKey.slice(0, at) : row.chunkKey;
+        const parts = chapters.get(chapter);
+        if (parts) parts.push(row.markdown);
+        else chapters.set(chapter, [row.markdown]);
+      }
+      const fallbackTitle = (chapter: string): string => {
+        if (chapterTitles[chapter]) return chapterTitles[chapter];
+        if (sourceType === "markdown") return "Document";
+        const index = Number(chapter);
+        return Number.isFinite(index) ? `Chapter ${index + 1}` : chapter;
+      };
+      return [
+        ...[...pages.entries()]
+          .sort((a, b) => a[0] - b[0])
+          .map(([page, markdown]) => ({
+            id: `page:${page}`,
+            kind: "page" as const,
+            title: `Page ${page}`,
+            markdown,
+          })),
+        ...[...chapters.entries()]
+          .sort((a, b) => a[0].localeCompare(b[0], undefined, { numeric: true }))
+          .map(([chapter, parts]) => ({
+            id: `chapter:${chapter}`,
+            kind: "chapter" as const,
+            title: fallbackTitle(chapter),
+            markdown: parts.join("\n\n"),
+          })),
+      ];
+    },
+    [bookId, sourceType],
+  );
+
+  /**
+   * Translates a whole set of EPUB chapters (or the single Markdown
+   * document) chosen in the Manage dialog. Chapters are read headlessly
+   * through `openEpubContents` instead of the visible viewer, so translating
+   * the entire book never hijacks the reading position.
+   */
+  const translateChapters = useCallback(
+    async (chapterKeys: string[]) => {
+      if (!isChunkedSourceType(sourceType)) return;
+      if (busyRef.current) return;
+      const ordered = [...new Set(chapterKeys)].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+      if (ordered.length === 0) {
+        setError("Select at least one chapter to translate.");
+        return;
+      }
+      if (orderedModelCandidates().length === 0) {
+        setError("No AI model configured. Add one in Settings → AI Models.");
+        return;
+      }
+
+      const currentSettings = settingsRef.current;
+      const method = methodFor(sourceType, currentSettings.pdfMethod);
+      const promptContext: TranslationPromptContext = {
+        docType: docTypeFor(sourceType, currentSettings.pdfMethod, currentSettings.epubExtraction),
+        ocrLangs: currentSettings.ocrLangs,
+        targetLang: currentSettings.targetLang,
+        customPrompt: customPromptRef.current,
+      };
+      const systemPrompt = buildTranslationSystemPrompt(promptContext);
+      const unitLabel = sourceType === "markdown" ? "document" : "chapter";
+      const count = ordered.length;
+
+      busyRef.current = true;
+      busyUnitRef.current = unitKeyRef.current;
+      setBusy(true);
+      setError(null);
+      setStatus(null);
+      cancelRequestedRef.current = false;
+      let done = 0;
+      setRangeProgress({ done: 0, total: count });
+      // One archive is opened for the whole run and closed when it ends.
+      let contents: EpubContents | null = null;
+      try {
+        if (sourceType === "epub") {
+          const filePath = sourceFilePathRef.current;
+          if (!filePath) throw new Error("The EPUB file path is not available yet.");
+          setStatus("Opening the book…");
+          contents = await openEpubContents(filePath);
+        }
+        for (let index = 0; index < count; index += 1) {
+          const chapterKey = ordered[index];
+          if (cancelRequestedRef.current) break;
+          if (sourceType === "markdown") {
+            const source = (markdownTextRef.current ?? "").trim();
+            if (!source) throw new Error("The Markdown file text is not available yet.");
+            setStatus(`Translating document (${index + 1} of ${count})…`);
+            await translateChunkedUnit({
+              chapterKey,
+              chunks: chunkChapter(source),
+              images: [],
+              method,
+              promptContext,
+              systemPrompt,
+              unitLabel,
+            });
+          } else {
+            setStatus(`Translating chapter ${index + 1} of ${count}…`);
+            const content = await contents?.readChapter(Number(chapterKey), currentSettings.epubExtraction);
+            if (!content) {
+              setError(`Chapter ${Number(chapterKey) + 1} could not be read from the EPUB.`);
+              break;
+            }
+            await translateChunkedUnit({
+              chapterKey,
+              chunks: content.chunks,
+              images: content.images,
+              method,
+              promptContext,
+              systemPrompt,
+              unitLabel,
+            });
+          }
+          done += 1;
+          setRangeProgress({ done, total: count });
+          setUnitIndex((current) =>
+            current.chapters.includes(chapterKey)
+              ? current
+              : { ...current, chapters: [...current.chapters, chapterKey] },
+          );
+        }
+        setStatus(
+          cancelRequestedRef.current
+            ? `Cancelled — ${done} of ${count} ${unitLabel}${count === 1 ? "" : "s"} translated.`
+            : `Translated ${count} ${unitLabel}${count === 1 ? "" : "s"}.`,
+        );
+        setRangeProgress(null);
+        // The on-screen unit may be among them: re-read its rows.
+        setRefreshTick((tick) => tick + 1);
+      } catch (err) {
+        // Units finished before the failure keep their rows; the rest are
+        // untouched.
+        setRangeProgress(null);
+        if (err instanceof TranslationCancelledError || isAiAbortError(err)) {
+          setStatus(`Cancelled — ${done} of ${count} ${unitLabel}${count === 1 ? "" : "s"} translated.`);
+        } else {
+          setError(err instanceof Error ? err.message : String(err));
+          setStatus(null);
+        }
+      } finally {
+        contents?.close();
+        busyRef.current = false;
+        busyUnitRef.current = null;
+        setBusy(false);
+      }
+    },
+    [
+      sourceType,
+      orderedModelCandidates,
+      translateChunkedUnit,
+    ],
+  );
+
+  /** Single entry point for the Manage dialog: translates the chosen PDF
+   *  pages or the chosen EPUB / Markdown chapters. */
+  const translateUnits = useCallback(
+    async (request: BulkTranslationRequest) => {
+      if (sourceType === "pdf") {
+        await translatePages(request.pages);
+        return;
+      }
+      await translateChapters(request.chapters);
+    },
+    [sourceType, translatePages, translateChapters],
   );
 
   /** Cancels the running translation: flags every pipeline checkpoint and
@@ -1015,11 +1516,12 @@ export function useTranslation({
         // Original-HTML mode (EPUB only) sends the chapter's cleaned tags
         // instead of converted Markdown (chunked by element, never mid-tag);
         // the default mode sends the extracted plain text as usual.
+        const chapterKey =
+          sourceType === "markdown"
+            ? MARKDOWN_CHAPTER_KEY
+            : (unitToChapter(key) ?? "chapter");
         let chunks: string[];
         let images: EpubImageRef[];
-        // Original-HTML mode primes the model with tags, so echoed markup
-        // is stripped from its output (outside code) before saving.
-        const cleanLeaks = sourceType === "epub" && currentSettings.epubExtraction === "html";
         if (sourceType === "markdown") {
           const source = (markdownTextRef.current ?? "").trim();
           if (!source) {
@@ -1027,116 +1529,23 @@ export function useTranslation({
           }
           chunks = chunkChapter(source);
           images = [];
-        } else if (cleanLeaks) {
-          const htmlExtraction = epubRef.current?.getCurrentChapterHtmlExtraction();
-          if (!htmlExtraction || htmlExtraction.chunks.length === 0) {
-            throw new Error("The chapter HTML is not available yet.");
-          }
-          chunks = htmlExtraction.chunks;
-          images = htmlExtraction.images;
         } else {
-          const extraction = epubRef.current?.getCurrentChapterExtraction();
-          if (!extraction || !extraction.text) {
+          const extracted = readViewerChapter(currentSettings.epubExtraction);
+          if (!extracted) {
             throw new Error("The chapter text is not available yet.");
           }
-          chunks = chunkChapter(extraction.text);
-          images = extraction.images;
+          chunks = extracted.chunks;
+          images = extracted.images;
         }
-        if (chunks.length === 0) {
-          throw new Error(
-            sourceType === "markdown"
-              ? "The Markdown file has no text to translate."
-              : "The chapter has no text to translate.",
-          );
-        }
-        const chapterKey =
-          sourceType === "markdown"
-            ? MARKDOWN_CHAPTER_KEY
-            : (unitToChapter(key) ?? "chapter");
-        // A partially translated chapter is useless: chunk results stay in
-        // memory and are only written to the database once every chunk has
-        // been translated, so a cancel or failure mid-chapter leaves the
-        // previously cached (complete) translation untouched.
-        const results: string[] = [];
-        for (let index = 0; index < chunks.length; index += 1) {
-          // Cancel checkpoint: stop at the chunk boundary — nothing has been
-          // written yet, so the cache is untouched.
-          if (cancelRequestedRef.current) {
-            throw new TranslationCancelledError("Translation cancelled.");
-          }
-          const singleLabel = sourceType === "markdown" ? "Translating document…" : "Translating chapter…";
-          const chunkStatus =
-            chunks.length === 1
-              ? singleLabel
-              : `Translating chunk ${index + 1} of ${chunks.length}…`;
-          baseStatusRef.current = chunkStatus;
-          setRateLimitRetry(null);
-          setStatus(chunkStatus);
-          const chunkRaw = await chatWithFailover({
-            messages: [
-              { role: "system", content: systemPrompt },
-              { role: "user", content: buildTranslationUserPrompt(promptContext, chunks[index]) },
-            ],
-          });
-          // Normalize each chunk so the rows written below are clean; the
-          // final joined result is normalized again after image replacement.
-          const normalized = normalizeTranslatedMarkdown(chunkRaw);
-          const chunk = cleanLeaks ? stripLeakedHtmlTags(normalized) : normalized;
-          setRateLimitRetry(null);
-          baseStatusRef.current = null;
-          results.push(chunk);
-        }
-        // Save EPUB images to FileStore and replace [IMG-n] tokens with
-        // protocol URLs so the cached translation works without the viewer.
-        const joined = normalizeTranslatedMarkdown(results.join("\n\n"));
-        const hasImgTokens = joined.includes("[IMG-");
-        let chunkMarkdowns = results;
-        if (hasImgTokens && images.length > 0) {
-          const dataUrls = images.map((img) => extractDataUrlFromImageRef(img)).filter((d): d is string => d !== null);
-          if (dataUrls.length > 0) {
-            // Remove old images for this chapter before saving new ones
-            // so regenerated chapters don't leave orphaned files.
-            await window.readlynx?.translationImages?.delete({ bookId, chapterKeyPrefix: chapterKey });
-            const protocolUrls = await window.readlynx?.translationImages?.save({
-              bookId,
-              chapterKey,
-              dataUrls,
-            });
-            if (protocolUrls) {
-              result = replaceImageTokensWithProtocolUrls(joined, images, protocolUrls);
-              chunkMarkdowns = results.map((chunk) =>
-                replaceImageTokensWithProtocolUrls(chunk, images, protocolUrls),
-              );
-            } else {
-              result = replaceImageTokens(joined, images);
-            }
-          } else {
-            result = replaceImageTokens(joined, images);
-          }
-        } else {
-          result = joined;
-        }
-        // The complete chapter is ready: drop every cached chunk of this
-        // chapter (incl. stale chunks from earlier, differently-chunked
-        // generations) and write the fresh set in one pass — prevents
-        // duplicate rows when re-translating and never leaves a partial
-        // chapter in the database.
-        await window.readlynx?.db.deleteTranslations({ bookId, chunkKeyPrefix: chapterKey });
-        for (let index = 0; index < chunks.length; index += 1) {
-          await window.readlynx?.db.putTranslation({
-            id: crypto.randomUUID(),
-            bookId,
-            sourceType,
-            method,
-            pageNumber: null,
-            chunkKey: chunkKeyFor(chapterKey, index),
-            sourceLang: "",
-            targetLang: currentSettings.targetLang,
-            customPrompt: customPromptRef.current,
-            markdown: chunkMarkdowns[index],
-            updatedAt: "",
-          });
-        }
+        result = await translateChunkedUnit({
+          chapterKey,
+          chunks,
+          images,
+          method,
+          promptContext,
+          systemPrompt,
+          unitLabel: sourceType === "markdown" ? "document" : "chapter",
+        });
       } else {
         const page = unitToPage(key) ?? 1;
         setStatus(method === "ocr" ? "Recognizing page…" : "Translating page with AI vision…");
@@ -1179,7 +1588,15 @@ export function useTranslation({
         setBusy(false);
       }
     }
-  }, [epubRef, saveRow, translatePdfPage, sourceType, bookId, chatWithFailover, orderedModelCandidates]);
+  }, [
+    saveRow,
+    translatePdfPage,
+    translateChunkedUnit,
+    readViewerChapter,
+    sourceType,
+    bookId,
+    orderedModelCandidates,
+  ]);
 
   const regenerate = useCallback(() => {
     void translate(true);
@@ -1237,6 +1654,18 @@ markdown,
     refreshCustomPrompt,
     translate,
     translateRange,
+    /** Translates an explicit set of PDF pages (Manage dialog). */
+    translatePages,
+    /** Translates an explicit set of EPUB chapters or the Markdown
+     *  document (Manage dialog). */
+    translateChapters,
+    /** Dispatches a Manage dialog request to the right pipeline. */
+    translateUnits,
+    /** Which units of the book already have a translation. */
+    unitIndex,
+    refreshUnitIndex,
+    /** The whole book's cached translation, for the export pipeline. */
+    getAllTranslatedUnits,
     cancelTranslation,
     rangeProgress,
     regenerate,

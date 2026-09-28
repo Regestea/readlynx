@@ -160,7 +160,13 @@ declare global {
           method?: TranslationMethod;
           pageNumber?: number | null;
           chunkKeyPrefix?: string | null;
+          /** Read every row of the book instead of one page / chapter. */
+          all?: boolean;
         }): Promise<TranslationEntity[]>;
+        getTranslationUnits(bookId: string): Promise<{
+          pages: number[];
+          chapters: string[];
+        }>;
         putTranslation(translation: TranslationEntity): Promise<boolean>;
         deleteTranslations(options: {
           bookId: string;

@@ -1,14 +1,21 @@
-import { useEffect, useRef, useState } from "react";
-import { ChevronDown, Languages, Loader2, RefreshCw, X } from "lucide-react";
+import { useCallback, useState } from "react";
+import { Languages, ListChecks, Loader2, RefreshCw, X } from "lucide-react";
 import type { AiModel } from "../../../infrastructure/db/entities/AiModel.ts";
 import type { BookSourceType } from "../../../infrastructure/db/entities/types.ts";
 import { Button } from "../../../components/ui/Button/Button";
-import { Select } from "../../../components/ui/Select/Select";
-import { CustomInstructionSelect } from "../../../components/customInstruction/CustomInstructionSelect";
-import { OcrPanel } from "../../../components/pdfViewer/OcrPanel";
+import { ExportDialog } from "../../../components/export/ExportDialog";
+import type { ExportContent, ExportSettings } from "../../../components/export/types";
 import { PageRangeModal } from "./PageRangeModal.tsx";
-import { NO_LANGUAGE, TRANSLATION_LANGUAGES, languageLabel, ocrLanguagesLabel } from "./languages.ts";
+import { TranslationControls } from "./TranslationControls.tsx";
+import { TranslationManageModal } from "./TranslationManageModal.tsx";
+import { runContentExport } from "../export/runContentExport.ts";
+import {
+  renderTranslatedBook,
+  translatedBookContent,
+} from "../export/translatedBookContent.tsx";
+import { languageLabel } from "./languages.ts";
 import type { TranslationMethod, TranslationSettings } from "./types.ts";
+import type { TranslationUnitIndex } from "./useTranslation.ts";
 import styles from "./TranslationPanel.module.css";
 
 interface TranslationSettingsPanelProps {
@@ -37,11 +44,32 @@ interface TranslationSettingsPanelProps {
   onDelete: (lang: string) => void;
   /** Total PDF pages (0 while unknown). */
   pageCount: number;
+  /** False while the source is still loading, so the Manage dialog does not
+   *  report an empty unit list before the page/chapter count is known. */
+  unitsReady: boolean;
+  /** Chapters of the loaded EPUB, read from the viewer when the Manage
+   *  dialog opens (the viewer's own handle is the only source that has the
+   *  parsed table of contents). */
+  listChapters: () => Array<{ index: number; key: string; title: string }>;
+  /** Which pages / chapters of the book already have a translation. */
+  unitIndex: TranslationUnitIndex;
   /** Progress of a running page-range translation (null while idle). */
   progress: { done: number; total: number } | null;
   onTranslate: () => void;
   onRegenerate: () => void;
   onTranslateRange: (from: number, to: number) => void;
+  /** Translates an explicit set of pages / chapters (Manage dialog). */
+  onTranslateUnits: (request: { pages: number[]; chapters: string[] }) => void;
+  /** Re-reads which units of the book have a translation. */
+  onRefreshUnitIndex: () => void;
+  /** Loads the whole book's cached translation for the export pipeline. */
+  onLoadTranslatedUnits: (
+    chapterTitles: Record<string, string>,
+  ) => Promise<import("../export/translatedBookContent.tsx").TranslatedUnit[]>;
+  /** Base file name for the export (the book title). */
+  exportFileName: string;
+  /** Noun shown in the export dialog, e.g. "Translated book". */
+  exportTitle: string;
   /** Stops the running range translation immediately (aborts the AI request). */
   onCancel: () => void;
   /** Rate-limit retry attempt (null when not retrying). */
@@ -73,49 +101,32 @@ export function TranslationSettingsPanel({
   onDownload,
   onDelete,
   pageCount,
+  unitsReady,
+  listChapters,
+  unitIndex,
   progress,
   onTranslate,
   onRegenerate,
   onTranslateRange,
+  onTranslateUnits,
+  onRefreshUnitIndex,
+  onLoadTranslatedUnits,
+  exportFileName,
+  exportTitle,
   onCancel,
   rateLimitRetry,
 }: TranslationSettingsPanelProps) {
-  const [ocrOpen, setOcrOpen] = useState(false);
-  const [modelOpen, setModelOpen] = useState(false);
   const [rangeOpen, setRangeOpen] = useState(false);
-  const [rangeSelect, setRangeSelect] = useState("current");
-  const ocrAnchorRef = useRef<HTMLDivElement>(null);
-  const modelAnchorRef = useRef<HTMLDivElement>(null);
-
-  /** Closes the OCR languages and AI model dropdowns on outside click or
-   *  Escape. */
-  useEffect(() => {
-    if (!ocrOpen && !modelOpen) return;
-    const onDown = (event: MouseEvent) => {
-      const inOcr = ocrAnchorRef.current?.contains(event.target as Node) ?? false;
-      const inModel = modelAnchorRef.current?.contains(event.target as Node) ?? false;
-      if (!inOcr && !inModel) {
-        setOcrOpen(false);
-        setModelOpen(false);
-      }
-    };
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setOcrOpen(false);
-        setModelOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", onDown);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDown);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [ocrOpen, modelOpen]);
+  const [manageOpen, setManageOpen] = useState(false);
+  const [manageChapters, setManageChapters] = useState<
+    Array<{ index: number; key: string; title: string }>
+  >([]);
+  const [exportOpen, setExportOpen] = useState(false);
+  const [exportContent, setExportContent] = useState<ExportContent | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   const isPdf = sourceType === "pdf";
   const isEpub = sourceType === "epub";
-  const isOcr = isPdf && pdfMethod === "ocr";
   const actionLabel = hasTranslation ? "Regenerate" : "Translate";
   const rangeMethodLabel = isPdf
     ? pdfMethod === "ocr"
@@ -130,6 +141,76 @@ export function TranslationSettingsPanel({
         .map((id) => models.find((row) => row.Id === id)?.DisplayName ?? id)
         .join(", ")
     : "app default";
+  const manageSettingsSummary = `${rangeMethodLabel}, target ${rangeTargetLabel}, model ${rangeModelLabel}`;
+
+  /** The same settings row, mounted per host: the toolbar adds the
+   *  "current page / page range…" picker and shows the run status; the Manage
+   *  dialog drops both because it has its own scope and progress display. */
+  const renderControls = (host: "toolbar" | "manage") => (
+    <TranslationControls
+      sourceType={sourceType}
+      models={models}
+      modelsError={modelsError}
+      modelIds={modelIds}
+      onModelIdsChange={onModelIdsChange}
+      pdfMethod={pdfMethod}
+      onPdfMethodChange={onPdfMethodChange}
+      settings={settings}
+      onSettingsChange={onSettingsChange}
+      onInstructionEdited={onInstructionEdited}
+      busy={busy}
+      installed={installed}
+      downloading={downloading}
+      downloadProgress={downloadProgress}
+      onDownload={onDownload}
+      onDelete={onDelete}
+      showStatus={host === "toolbar"}
+      status={status}
+      error={error}
+      rateLimitRetry={rateLimitRetry}
+      showUnitPicker={host === "toolbar"}
+      onOpenRange={() => setRangeOpen(true)}
+      className={host === "toolbar" ? styles.controlsToolbar : styles.controlsDialog}
+    />
+  );
+
+  /** The Manage dialog needs the chapter list, which only the viewer can
+   *  produce (it owns the parsed table of contents) — read on demand. */
+  const openManage = () => {
+    if (isEpub) {
+      setManageChapters(listChapters());
+    } else {
+      setManageChapters([]);
+    }
+    setManageOpen(true);
+  };
+
+  /** Reads the translated book, then opens the shared export dialog on top of
+   *  the Manage dialog. The units are loaded up front because the dialog
+   *  asks for the body HTML synchronously. */
+  const openExport = useCallback(async () => {
+    setExportError(null);
+    try {
+      const titles: Record<string, string> = {};
+      for (const chapter of manageChapters) titles[chapter.key] = chapter.title;
+      const units = await onLoadTranslatedUnits(titles);
+      if (units.length === 0) {
+        setExportError(
+          "No translated pages or chapters were found for this book. " +
+            "If translations exist, the app needs a full restart — the database " +
+            "worker does not reload while the window is open.",
+        );
+        return;
+      }
+      // Rendered once here so the dialog can re-paginate its preview and
+      // switch formats without re-parsing every chapter each time.
+      const bodyHtml = await renderTranslatedBook(units);
+      setExportContent(translatedBookContent(exportTitle, bodyHtml));
+      setExportOpen(true);
+    } catch (err) {
+      setExportError(err instanceof Error ? err.message : String(err));
+    }
+  }, [manageChapters, onLoadTranslatedUnits, exportTitle]);
 
   return (
     <div className={styles.toolbar} role="toolbar" aria-label="Translation settings">
@@ -156,232 +237,30 @@ export function TranslationSettingsPanel({
         </>
       ) : (
         <>
-          {models.length > 0 ? (
-            <div className={styles.anchor} ref={modelAnchorRef}>
-              <button
-                type="button"
-                className={`${styles.ocrTrigger} ${modelOpen ? styles.ocrTriggerActive : ""}`}
-                onClick={() => setModelOpen((current) => !current)}
-                aria-expanded={modelOpen}
-                aria-haspopup="dialog"
-                title="AI models, in failover order — when one fails the next one retries the request"
-              >
-                <span className={styles.ocrSummary}>
-                  {modelIds.length
-                    ? modelIds
-                        .map((id) => models.find((row) => row.Id === id)?.DisplayName ?? id)
-                        .join(", ")
-                    : "App default"}
-                </span>
-                <ChevronDown size={14} strokeWidth={1.8} aria-hidden="true" />
-              </button>
+          {renderControls("toolbar")}
 
-              {modelOpen && (
-                <div className={styles.modelPanel} role="dialog" aria-label="AI models">
-                  <div className={styles.modelPanelHeader}>
-                    <span className={styles.modelPanelTitle}>AI models</span>
-                    <Button
-                      variant="ghost"
-                      className={styles.modelClose}
-                      onClick={() => setModelOpen(false)}
-                      aria-label="Close"
-                    >
-                      <X size={14} strokeWidth={1.8} aria-hidden="true" />
-                    </Button>
-                  </div>
-                  <p className={styles.modelHint}>
-                    Pick one or more models — the order is the failover order:
-                    when a request fails, it is retried with the next model
-                    automatically. Leave empty to use the app default.
-                  </p>
-                  <ul className={styles.modelList}>
-                    {models.map((row) => {
-                      const index = modelIds.indexOf(row.Id);
-                      const label = row.DisplayName ?? row.ModelName ?? row.Id;
-                      return (
-                        <li key={row.Id}>
-                          <label className={styles.modelRow}>
-                            <input
-                              type="checkbox"
-                              checked={index !== -1}
-                              onChange={() =>
-                                onModelIdsChange(
-                                  index !== -1
-                                    ? modelIds.filter((id) => id !== row.Id)
-                                    : [...modelIds, row.Id],
-                                )
-                              }
-                            />
-                            {index !== -1 && (
-                              <span className={styles.modelBadge}>{index + 1}</span>
-                            )}
-                            <span className={styles.modelName}>{label}</span>
-                            {row.IsDefault ? (
-                              <span className={styles.modelTag}>default</span>
-                            ) : null}
-                          </label>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </div>
-              )}
-            </div>
-          ) : (
-            <span
-              className={styles.modelWarning}
-              role="status"
-              title={modelsError ?? "No AI model configured"}
-            >
-              No AI model
-            </span>
-          )}
-
-      {isPdf && (
-        <Select
-          compact
-          className={styles.control}
-          value={pdfMethod}
-          onChange={(event) => onPdfMethodChange(event.target.value as TranslationMethod)}
-          options={[
-            { value: "ocr", label: "OCR" },
-            { value: "vision", label: "AI Vision" },
-          ]}
-          disabled={busy}
-          aria-label="Translation method"
-          title="How the page text is collected: local OCR or AI vision"
-        />
-      )}
-
-      {isPdf && (
-        <Select
-          compact
-          className={styles.control}
-          value={rangeSelect}
-          onChange={(event) => {
-            setRangeSelect("current");
-            if (event.target.value === "range") setRangeOpen(true);
-          }}
-          options={[
-            { value: "current", label: "Current page" },
-            { value: "range", label: "Page range…" },
-          ]}
-          disabled={busy}
-          aria-label="Pages to translate"
-          title="Translate the current page, or a range of pages with the settings above"
-        />
-      )}
-
-      {isOcr && (
-        <div className={styles.anchor} ref={ocrAnchorRef}>
-          <button
-            type="button"
-            className={`${styles.ocrTrigger} ${ocrOpen ? styles.ocrTriggerActive : ""}`}
-            onClick={() => setOcrOpen((current) => !current)}
-            aria-expanded={ocrOpen}
-            aria-haspopup="dialog"
-            title="OCR languages on the page"
+          <Button
+            variant="primary"
+            className={styles.action}
+            onClick={() => (hasTranslation ? onRegenerate() : onTranslate())}
+            disabled={models.length === 0}
           >
-            <span className={styles.ocrSummary}>{ocrLanguagesLabel(settings.ocrLangs)}</span>
-            <ChevronDown size={14} strokeWidth={1.8} aria-hidden="true" />
-          </button>
+            {hasTranslation ? (
+              <RefreshCw size={14} strokeWidth={1.8} aria-hidden="true" />
+            ) : null}
+            {actionLabel}
+          </Button>
 
-          {ocrOpen && (
-            <OcrPanel
-              open
-              title="OCR languages"
-              hint="Pick the languages on the page — multi-language pages need more than one selection. Models are stored locally in the app data tessdata folder."
-              installed={installed}
-              selected={settings.ocrLangs}
-              onSelectedChange={(langs) => onSettingsChange({ ocrLangs: langs })}
-              downloading={downloading}
-              downloadProgress={downloadProgress}
-              onDownload={onDownload}
-              onDelete={onDelete}
-              extracting={busy}
-              onClose={() => setOcrOpen(false)}
-            />
-          )}
-        </div>
-      )}
-
-      <Select
-        compact
-        className={styles.control}
-        value={settings.targetLang}
-        onChange={(event) => onSettingsChange({ targetLang: event.target.value })}
-        options={[{ value: NO_LANGUAGE, label: "None" }, ...TRANSLATION_LANGUAGES]}
-        disabled={busy}
-        aria-label="Target language"
-        title="Target language"
-      />
-
-      <CustomInstructionSelect
-        compact
-        className={styles.control}
-        value={settings.customPromptId}
-        onChange={(id) => onSettingsChange({ customPromptId: id })}
-        onInstructionEdited={() => onInstructionEdited()}
-        disabled={busy}
-        ariaLabel="Custom instruction"
-        title="Custom instruction layered on the translation"
-      />
-
-      {isEpub && (
-        <label
-          className={styles.htmlToggle}
-          title="Enhance translation: check this if the translation is not displaying correctly — for example, broken or missing code blocks or tables. It sends more detail about the chapter to the AI, but uses more data and can be slower."
-        >
-          <input
-            type="checkbox"
-            checked={settings.epubExtraction === "html"}
-            onChange={(event) =>
-              onSettingsChange({ epubExtraction: event.target.checked ? "html" : "markdown" })
-            }
-            disabled={busy}
-            aria-label="Enhance translation"
-          />
-          <span>Enhance translation</span>
-        </label>
-      )}
-
-      {(status || error) && (
-        <span
-          className={error ? styles.errorText : rateLimitRetry ? styles.retryWarning : styles.statusText}
-          role={error ? "alert" : "status"}
-          title={error ?? status ?? ""}
-        >
-          {error ?? status}
-        </span>
-      )}
-
-      {isPdf && pdfMethod === "vision" && (
-        <label
-          className={styles.htmlToggle}
-          title="Auto include required pictures: figures, diagrams, photos and charts that can't be translated are detected automatically and placed into the translation at the right spot. Text-only pages are unaffected. Experimental — results may be unstable."
-        >
-          <input
-            type="checkbox"
-            checked={settings.pdfAutoFigures}
-            onChange={(event) => onSettingsChange({ pdfAutoFigures: event.target.checked })}
-            disabled={busy}
-            aria-label="Auto include required pictures"
-          />
-          <span>Auto include required pictures</span>
-        </label>
-      )}
-
-      <Button
-        variant="primary"
-        className={styles.action}
-        onClick={() => (hasTranslation ? onRegenerate() : onTranslate())}
-        disabled={models.length === 0}
-      >
-        {hasTranslation ? (
-          <RefreshCw size={14} strokeWidth={1.8} aria-hidden="true" />
-        ) : null}
-        {actionLabel}
-      </Button>
+          <Button
+            variant="secondary"
+            className={styles.action}
+            onClick={openManage}
+            disabled={models.length === 0 || !unitsReady}
+            title="Translation state of the whole book — translate the entire book or a selection of pages / chapters, and export"
+          >
+            <ListChecks size={14} strokeWidth={1.8} aria-hidden="true" />
+            Manage / Export
+          </Button>
         </>
       )}
 
@@ -395,6 +274,43 @@ export function TranslationSettingsPanel({
         modelLabel={rangeModelLabel}
         onTranslate={(from, to) => onTranslateRange(from, to)}
       />
+
+      <TranslationManageModal
+        open={manageOpen}
+        onClose={() => setManageOpen(false)}
+        sourceType={sourceType}
+        unitsReady={unitsReady}
+        pageCount={pageCount}
+        chapters={manageChapters}
+        unitIndex={unitIndex}
+        busy={busy}
+        progress={progress}
+        status={status}
+        error={error}
+        settingsSummary={manageSettingsSummary}
+        controls={renderControls("manage")}
+        onRefresh={onRefreshUnitIndex}
+        onTranslate={onTranslateUnits}
+        onCancel={onCancel}
+        onOpenExport={() => void openExport()}
+        exportError={exportError}
+      />
+
+      {exportContent && (
+        <ExportDialog
+          open={exportOpen}
+          raised
+          content={exportContent}
+          onClose={() => setExportOpen(false)}
+          onExport={(settings: ExportSettings) => {
+            const content = exportContent;
+            setExportOpen(false);
+            void runContentExport(content, settings, exportFileName).catch((err: unknown) => {
+              setExportError(err instanceof Error ? err.message : String(err));
+            });
+          }}
+        />
+      )}
     </div>
   );
 }

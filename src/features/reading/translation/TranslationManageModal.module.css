@@ -1,0 +1,270 @@
+.hint {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
+  color: var(--color-text-secondary);
+}
+
+.error {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-small);
+  background: var(--color-danger-soft, var(--color-hover));
+  color: var(--color-terracotta);
+  font-size: var(--font-size-sm);
+}
+
+.summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.summaryCount {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.summaryCount strong {
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.summaryRight {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.miniButton {
+  height: 26px;
+  padding: 0 10px;
+  font-size: var(--font-size-xs);
+}
+
+/* PDF pages: a compact grid so a 900-page book stays scannable, each cell
+ * tinted by whether it already has a translation. */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(52px, 1fr));
+  gap: 4px;
+  max-height: 320px;
+  overflow-y: auto;
+  padding: var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-small);
+  background: var(--color-bg-secondary);
+}
+
+.cell {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 30px;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-small);
+  background: var(--color-bg);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition:
+    border-color var(--transition-base) ease,
+    background var(--transition-base) ease;
+}
+
+.cell:hover {
+  border-color: var(--color-primary);
+}
+
+.cell[data-translated="yes"] {
+  background: var(--color-success-soft);
+  border-color: var(--color-success);
+  color: var(--color-text);
+}
+
+.cell[data-selected="yes"] {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px var(--color-glow);
+  color: var(--color-text);
+  font-weight: var(--font-weight-semibold);
+}
+
+.cellCheck {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  color: var(--color-success);
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-small);
+  background: var(--color-bg-secondary);
+  cursor: pointer;
+}
+
+.row[data-selected="yes"] {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px var(--color-glow);
+}
+
+.rowInfo {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.rowLabel {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rowMeta {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.badge {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--color-border);
+  background: var(--color-bg);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+  white-space: nowrap;
+}
+
+.badge[data-translated="yes"] {
+  border-color: var(--color-success);
+  background: var(--color-success-soft);
+  color: var(--color-text-secondary);
+}
+
+.empty {
+  margin: 0;
+  padding: var(--space-4);
+  text-align: center;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-5) 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+/* Shared block look for the Settings and Export sections. */
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-small);
+  background: var(--color-bg-secondary);
+}
+
+.sectionHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.sectionTitle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+}
+
+.sectionNote {
+  padding: 1px 8px;
+  border-radius: var(--radius-full);
+  background: var(--color-active);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  white-space: nowrap;
+}
+
+.sectionHint {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  line-height: 1.5;
+  color: var(--color-text-muted);
+}
+
+.exportButton {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 var(--space-3);
+  font-size: var(--font-size-sm);
+}
+
+.footerButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 var(--space-4);
+  font-size: var(--font-size-sm);
+  white-space: nowrap;
+}
+
+.runStatus {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.spinner {
+  animation: translation-manage-spin 0.9s linear infinite;
+}
+
+@keyframes translation-manage-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

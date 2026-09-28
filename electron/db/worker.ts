@@ -379,13 +379,22 @@ const handlers: Record<string, (payload: unknown) => unknown> = {
     return true;
   },
   "translation-get": (payload) => {
-    const { bookId, method, pageNumber, chunkKeyPrefix } = payload as {
+    const { bookId, method, pageNumber, chunkKeyPrefix, all } = payload as {
       bookId: string;
       method?: TranslationMethod | null;
       pageNumber?: number | null;
       chunkKeyPrefix?: string | null;
+      /** Explicit "whole book" read (export). Needed because an omitted
+       *  filter arrives here as `undefined` and would be indistinguishable
+       *  from an explicit null below. */
+      all?: boolean;
     };
+    if (all) return translations.findAllForBook(bookId);
     return translations.findByKey(bookId, method ?? null, pageNumber ?? null, chunkKeyPrefix ?? null);
+  },
+  "translation-units": (payload) => {
+    const { bookId } = payload as { bookId: string };
+    return translations.findUnitKeys(bookId);
   },
   "translation-put": (payload) => {
     translations.upsert(payload as TranslationEntity);

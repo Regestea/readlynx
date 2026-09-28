@@ -121,8 +121,16 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
     epubRef,
     epubReady,
     markdownText: markdownSource,
+    sourceFilePath: readyBook?.filePath ?? null,
   });
   const { setUnit: setTranslationUnit } = translation;
+
+  /** Chapter list for the Manage translations dialog, read from the viewer's
+   *  parsed table of contents only when the dialog is opened. */
+  const listChapters = useCallback(
+    () => epubRef.current?.getChapterList() ?? [],
+    [epubRef],
+  );
 
   /** Persists the current segment up to `endAt` into the ledger. With
    *  `keepActive` the session continues from `endAt` (crash checkpoint);
@@ -466,6 +474,12 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
 
   const book = state.status === "ready" ? state.book : null;
   const showTranslation = translation.viewMode === "translation";
+  /** True once the source's unit count (PDF pages / EPUB chapters) is known,
+   *  so the Manage dialog never opens onto an empty list. */
+  const unitsReady =
+    book === null ||
+    book.sourceType === "markdown" ||
+    (book.sourceType === "epub" ? epubReady : pageCount > 0);
 
   /** Saves the EPUB original scroll for a chapter as a 0..1 ratio. */
   const saveEpubScroll = useCallback(
@@ -835,10 +849,18 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
             onDownload={translation.downloadModel}
             onDelete={translation.deleteModel}
             pageCount={pageCount}
+            unitsReady={unitsReady}
+            listChapters={listChapters}
+            unitIndex={translation.unitIndex}
             progress={translation.rangeProgress}
             onTranslate={() => void translation.translate(false)}
             onRegenerate={translation.regenerate}
             onTranslateRange={translation.translateRange}
+            onTranslateUnits={(request) => void translation.translateUnits(request)}
+            onRefreshUnitIndex={() => void translation.refreshUnitIndex()}
+            onLoadTranslatedUnits={(titles) => translation.getAllTranslatedUnits(titles)}
+            exportFileName={book.title}
+            exportTitle="Translated book"
             onCancel={translation.cancelTranslation}
             rateLimitRetry={translation.rateLimitRetry}
           />
