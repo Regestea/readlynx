@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import {
   AlignCenter,
@@ -48,13 +48,16 @@ import { $createPageBreakNode } from "../nodes/PageBreakNode";
 import { ImageEditorDialog } from "../../../../components/ImageEditorDialog/ImageEditorDialog";
 import { FontFamilySelect } from "./FontFamilySelect";
 import { ColorPickerPanel } from "../../../../components/ui/ColorPickerPanel/ColorPickerPanel";
-import { ExportDialog, type ExportSettings } from "./ExportDialog";
+import { ExportDialog } from "../../../../components/export/ExportDialog";
+import type { ExportContent, ExportSettings } from "../../../../components/export/types";
+import { toHtml } from "../../../../infrastructure/export/lexicalToHtml";
 import { MarginDialog } from "./MarginDialog";
 import { DEFAULT_FONT_SIZE_VALUE, FONT_SIZE_OPTIONS, HEADING_OPTIONS, TEXT_COLORS, BACKGROUND_COLORS, PAGE_MARGIN_OPTIONS, PAGE_MARGIN_MM, uniformMargins } from "../constants";
 import type { PageFormat, PageMargins } from "../constants";
 import type { BlockType, ExportThemeOptions } from "../types";
 import { exportDocx } from "../exporters/docxExporter";
-import { exportEpub, zipEpubFiles } from "../exporters/epubExporter";
+import { exportEpub } from "../exporters/epubExporter";
+import { zipEpubFiles } from "../../../../infrastructure/export/epubWriter";
 import { exportHtml } from "../exporters/htmlExporter";
 import { buildPdfDocument } from "../../../../infrastructure/export/pdfExporter";
 import { Modal } from "../../../../components/ui/Modal/Modal";
@@ -321,28 +324,47 @@ export function Toolbar({
     downloadFile("document.md", api.exportMarkdown(), "text/markdown;charset=utf-8");
   };
 
+  /** The editor's adapter over the shared export contract: the dialog never
+   *  sees Lexical, it just asks for the body HTML (and, for the EPUB tab's
+   *  preview, a zipped archive built from the same editor state). Built once —
+   *  the Lexical editor instance is stable for the editor's lifetime, and a
+   *  fresh object each render would re-run the dialog's preview on every
+   *  keystroke. */
+  const editorExportContent = useMemo<ExportContent>(
+    () => ({
+      label: "Document",
+      formats: ["pdf", "docx", "html", "epub"],
+      bodyHtml: () => toHtml(editor),
+      epub: (theme, cover) => zipEpubFiles(exportEpub(editor, {}, theme, cover)).arrayBuffer(),
+    }),
+    [editor],
+  );
+
   const onExportPdf = async (settings: ExportSettings, resolvedCover?: string) => {
     if (window.readlynx?.exportPdf) {
-      const { html } = await buildPdfDocument(editor, {
-        pageFormat: settings.pageFormat,
-        margins: {
-          top: settings.marginTopMm,
-          right: settings.marginRightMm,
-          bottom: settings.marginBottomMm,
-          left: settings.marginLeftMm,
+      const { html } = await buildPdfDocument(
+        editorExportContent.bodyHtml(),
+        {
+          pageFormat: settings.pageFormat,
+          margins: {
+            top: settings.marginTopMm,
+            right: settings.marginRightMm,
+            bottom: settings.marginBottomMm,
+            left: settings.marginLeftMm,
+          },
+          fontFamily: settings.fontFamily || defaultFontFamily,
+          fontSizeScalePct: settings.fontSizeScalePct,
+          textColor: settings.textColor,
+          backgroundColor: settings.backgroundColor,
+          showPageNumbers: settings.showPageNumbers,
+          chapterLevels: settings.chapterLevels,
+          inlineImages: true,
+          coverImage: resolvedCover,
+          template: settings.template,
+          codeTheme: settings.codeTheme,
+          codeFontFamily: settings.codeFontFamily,
         },
-        fontFamily: defaultFontFamily,
-        fontSizeScalePct: settings.fontSizeScalePct,
-        textColor: settings.textColor,
-        backgroundColor: settings.backgroundColor,
-        showPageNumbers: settings.showPageNumbers,
-        chapterBreaks: settings.chapterBreaks,
-        inlineImages: true,
-        coverImage: resolvedCover,
-        template: settings.template,
-        codeTheme: settings.codeTheme,
-        codeFontFamily: settings.codeFontFamily,
-      });
+      );
       await window.readlynx.exportPdf({
         defaultPath: "document.pdf",
         html,
@@ -360,6 +382,9 @@ export function Toolbar({
 
   const themeFor = (settings: ExportSettings): ExportThemeOptions => ({
     fontSizeScalePct: settings.fontSizeScalePct,
+    // The dialog's font picker wins; without a pick the document's own font
+    // is kept, exactly as before.
+    fontFamily: settings.fontFamily || defaultFontFamily,
     textColor: settings.textColor,
     backgroundColor: settings.backgroundColor,
     margins: {
@@ -386,8 +411,7 @@ export function Toolbar({
     downloadBlob("document.epub", zipEpubFiles(files));
   };
 
-  const resolveCoverDataUrl = async (image: string | undefined): Promise<string | undefined> => {
-    if (!image) return undefined;
+  const resolveCoverDataUrl = async (image: string | undefined): Promise<string | undefined> => {    if (!image) return undefined;
     if (image.startsWith("data:")) return image;
     if (window.readlynx?.readCoverDataUrl) {
       const relativePath = image.startsWith("readlynx-cover://")
@@ -902,7 +926,7 @@ export function Toolbar({
       <ExportDialog
         key={`export-${exportSession}`}
         open={exportOpen}
-        editor={editor}
+        content={editorExportContent}
         onClose={() => setExportOpen(false)}
         onExport={runExport}
         defaultMarginMm={pageMargins.top}

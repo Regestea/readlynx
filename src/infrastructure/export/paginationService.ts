@@ -324,9 +324,12 @@ export function buildPrintCss(options: PdfExportOptions): string {
     `@page { size: ${cssSize}; margin: ${margins.top}mm ${margins.right}mm ${margins.bottom}mm ${margins.left}mm; }`,
     headerFragments,
     footerFragments,
-    options.chapterBreaks === false
+    // Chapter breaks: no rule at all when nothing is ticked. Otherwise an
+    // `!important` rule, level-agnostic because the class is stamped onto
+    // whichever heading levels the export dialog ticked.
+    (options.chapterLevels ?? []).length === 0
       ? ""
-      : "h1.rl-chapter-start { break-before: page !important; page-break-before: always !important; }",
+      : ".rl-chapter-start { break-before: page !important; page-break-before: always !important; }",
   ]
     .filter(Boolean)
     .join("\n");

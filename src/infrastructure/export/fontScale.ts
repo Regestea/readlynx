@@ -4,12 +4,18 @@
  * The document's own text carries the sizes the author chose (e.g. 18px
  * headings, 14px paragraphs). A scale of 0% keeps them exactly as authored;
  * 10% multiplies every size by 1.1 — inline `font-size` declarations and the
- * base size for unstyled text alike.
+ * base size for unstyled text alike. Negative values shrink (e.g. -10% →
+ * 0.9×), floored so a size can never collapse to zero.
  */
+
+/** Smallest scale: keeps 16px text at 1.6px instead of 0. */
+export const MIN_FONT_SCALE_PCT = -90;
+/** Largest scale the UI allows. */
+export const MAX_FONT_SCALE_PCT = 200;
 
 export function fontScaleFactor(scalePct: number | undefined): number {
   const pct = Number(scalePct) || 0;
-  return (100 + Math.max(0, pct)) / 100;
+  return (100 + Math.min(MAX_FONT_SCALE_PCT, Math.max(MIN_FONT_SCALE_PCT, pct))) / 100;
 }
 
 function formatScaled(value: number): string {

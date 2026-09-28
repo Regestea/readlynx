@@ -1,13 +1,12 @@
 import type { LexicalEditor } from "lexical";
-import type { PageMargins } from "./constants";
-import type { ExportCodeThemeId, ExportTemplateId } from "../../../infrastructure/export/exportTheme";
+import type { EpubFile, EpubMetadata } from "../../../infrastructure/export/types";
 
-/** Result of an EPUB export: the container files of an EPUB 3 book (unzipped). */
-export interface EpubFile {
-  path: string;
-  mime: string;
-  content: string;
-}
+/** EPUB package types and the visual export options now live with the shared
+ *  writers that consume them, so the reading view's translated books can build
+ *  the same files. Re-exported here because the editor's exporters import
+ *  them from this module. */
+export type { EpubFile, EpubMetadata } from "../../../infrastructure/export/types";
+export type { ExportThemeOptions } from "../../../infrastructure/export/exportTheme";
 
 /** Public API exposed to host apps (via `apiRef` or the editor context). */
 export interface EditorAPI {
@@ -25,13 +24,6 @@ export interface EditorAPI {
   redo(): void;
   focus(): void;
   getEditor(): LexicalEditor | null;
-}
-
-export interface EpubMetadata {
-  title?: string;
-  author?: string;
-  language?: string;
-  identifier?: string;
 }
 
 export type BlockType =
@@ -52,26 +44,6 @@ export type BlockType =
   | "table"
   | "hr"
   | "image";
-
-/** Visual options applied when exporting the document (PDF/DOCX/HTML/EPUB). */
-export interface ExportThemeOptions {
-  /** CSS font-family list ("" = document default). */
-  fontFamily?: string;
-  /** Global font-size scale in percent (0 = keep the sizes as authored). */
-  fontSizeScalePct?: number;
-  /** Text color, hex. */
-  textColor?: string;
-  /** Page / background color, hex. */
-  backgroundColor?: string;
-  /** Per-side page margins in millimeters. */
-  margins?: PageMargins;
-  /** Document look: none (plain), or a modern light/dark template. */
-  template?: ExportTemplateId;
-  /** Syntax highlight theme for code blocks (auto follows the document mode). */
-  codeTheme?: ExportCodeThemeId;
-  /** Monospace font family for code blocks ("" = default). */
-  codeFontFamily?: string;
-}
 
 export interface ToolbarState {
   blockType: BlockType;

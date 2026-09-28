@@ -4,7 +4,7 @@ import { Button } from "../../../../components/ui/Button/Button";
 import { NumberInput } from "../../../../components/ui/NumberInput/NumberInput";
 import { PAGE_FORMATS, marginPx } from "../constants";
 import type { PageFormat, PageMargins } from "../constants";
-import { clampInches, INCH_MAX, INCH_MIN, toInches, toMm } from "./marginUnits";
+import { clampInches, INCH_MAX, INCH_MIN, toInches, toMm } from "../../../../components/export/marginUnits";
 import styles from "./MarginDialog.module.css";
 
 const PREVIEW_WIDTH = 236;

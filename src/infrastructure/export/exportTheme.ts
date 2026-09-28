@@ -4,6 +4,7 @@ import monokaiCss from "highlight.js/styles/monokai.min.css?raw";
 import nightOwlCss from "highlight.js/styles/night-owl.min.css?raw";
 import vsCss from "highlight.js/styles/vs.min.css?raw";
 import nordCss from "highlight.js/styles/nord.min.css?raw";
+import type { PageMargins } from "../../shared/document/pageGeometry";
 
 /**
  * Export theming for PDF and EPUB.
@@ -31,6 +32,29 @@ export type ExportCodeThemeId =
 
 export type ThemeMode = "light" | "dark";
 export type CodeThemeKind = ThemeMode;
+
+/** Visual options applied when exporting a document. Shared by every export
+ *  format and by every source that can be exported (the document editor and
+ *  the reading view's translated books), so it lives here next to the theme
+ *  data it configures rather than inside one feature. */
+export interface ExportThemeOptions {
+  /** CSS font-family list ("" = document default). */
+  fontFamily?: string;
+  /** Global font-size scale in percent (0 = keep the sizes as authored). */
+  fontSizeScalePct?: number;
+  /** Text color, hex. */
+  textColor?: string;
+  /** Page / background color, hex. */
+  backgroundColor?: string;
+  /** Per-side page margins in millimeters. */
+  margins?: PageMargins;
+  /** Document look: none (plain), or a modern light/dark template. */
+  template?: ExportTemplateId;
+  /** Syntax highlight theme for code blocks (auto follows the document mode). */
+  codeTheme?: ExportCodeThemeId;
+  /** Monospace font family for code blocks ("" = default). */
+  codeFontFamily?: string;
+}
 
 /** Document template presets (the "None" template means: keep the plain look). */
 export interface ExportTemplatePreset {

@@ -21,16 +21,9 @@ export const FONT_SIZE_OPTIONS = [
   { value: "72px", label: "72px" },
 ] as const;
 
-export const TEXT_COLORS = [
-  { value: "", label: "Default", swatch: "transparent" },
-  { value: "#322b26", label: "Ink", swatch: "#322b26" },
-  { value: "#5b6b50", label: "Forest", swatch: "#5b6b50" },
-  { value: "#b9794c", label: "Terracotta", swatch: "#b9794c" },
-  { value: "#8c6248", label: "Warm brown", swatch: "#8c6248" },
-  { value: "#435542", label: "Moss", swatch: "#435542" },
-  { value: "#6c839f", label: "Slate", swatch: "#6c839f" },
-  { value: "#a63d2f", label: "Red", swatch: "#a63d2f" },
-] as const;
+/** Ink palette — shared with the export dialog, which is why it lives in
+ *  `shared/document` rather than in this feature. */
+export { TEXT_COLORS } from "../../../shared/document/textColors.ts";
 
 export const BACKGROUND_COLORS = [
   { value: "", label: "None", swatch: "transparent" },

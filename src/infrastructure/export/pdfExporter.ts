@@ -1,6 +1,5 @@
-import type { LexicalEditor } from "lexical";
 import { PAGE_FORMATS } from "../../shared/document/pageGeometry";
-import { escapeHtml, toHtml } from "./lexicalToHtml";
+import { escapeHtml } from "./htmlDocument";
 import {
   PaginationService,
   buildPrintCss,
@@ -12,6 +11,8 @@ import {
 } from "./paginationService";
 import { scaleHtmlFontSizes } from "./fontScale";
 import { katexCssForExport } from "./katexExportCss";
+import { paginateAvoidingEmptyPages } from "./emptyPageBreaks";
+import { DEFAULT_CHAPTER_MIN_LINES } from "./types";
 import { codeThemeCss, resolveDocumentMode } from "./exportTheme";
 import { highlightBodyCode } from "./epubHighlight";
 import printCss from "./PrintStyles.css?raw";
@@ -19,9 +20,13 @@ import { DEFAULT_PDF_EXPORT_OPTIONS } from "./types";
 import type { PagedDocument, PdfExportOptions } from "./types";
 
 /**
- * Top-level PDF pipeline: Lexical editor -> semantic HTML -> Paged.js
- * pagination -> standalone print-ready HTML (consumed by the Electron
- * `printToPDF` IPC, or by `window.print()` as a fallback).
+ * Top-level PDF pipeline: semantic HTML -> Paged.js pagination ->
+ * standalone print-ready HTML (consumed by the Electron `printToPDF` IPC, or
+ * by `window.print()` as a fallback).
+ *
+ * Source-agnostic: the caller supplies the body HTML, so both the document
+ * editor and the reading view's translated books go through the exact same
+ * pagination, theming and cover handling.
  *
  * The exported HTML is a *snapshot* of the already paginated document:
  * every `.pagedjs_page` carries its final geometry, and the head replays the
@@ -73,30 +78,40 @@ export async function fitCoverForExport(dataUrl: string): Promise<string> {
 
 /** Run the full pipeline and produce the standalone paginated HTML document. */
 export async function buildPdfDocument(
-  editor: LexicalEditor,
+  bodyHtml: string,
   options: PdfExportOptions,
 ): Promise<PagedDocument> {
   const opts: PdfExportOptions = { ...DEFAULT_PDF_EXPORT_OPTIONS, ...options };
 
   const contentHtml = highlightBodyCode(
-    scaleHtmlFontSizes(toHtml(editor, { chapterBreaks: opts.chapterBreaks }), opts.fontSizeScalePct),
+    scaleHtmlFontSizes(bodyHtml, opts.fontSizeScalePct),
   );
   const m = opts.margins;
   const coverImage = opts.coverImage ? await fitCoverForExport(opts.coverImage) : undefined;
   const coverHtml = coverImage
     ? `<div class="rl-cover-page" style="display:flex;align-items:center;justify-content:center;overflow:hidden;height:calc(100% + ${m.top + m.bottom}mm);margin:-${m.top}mm -${m.right}mm -${m.bottom}mm -${m.left}mm;page-break-after:always;break-after:page;"><img src="${escapeHtml(coverImage)}" style="width:100%;height:100%;object-fit:cover;" /></div>`
     : "";
-  const bodyHtml = `${coverHtml}${contentHtml}`;
+  const paginated = `${coverHtml}${contentHtml}`;
   const katexCss = katexCssForExport();
   const codeCss = codeThemeCss(opts.codeTheme, resolveDocumentMode(opts.template, opts.backgroundColor));
-  const service = new PaginationService();
-  const result = await service.paginate(bodyHtml, [
+  const stylesheets = [
     printCss,
     katexCss,
     themeVariables(opts),
     buildPrintCss(opts),
     codeCss,
-  ]);
+  ];
+  const service = new PaginationService();
+  // Chapter breaks, then the empty-page pass: a break is only worth inserting
+  // if the page it opens actually holds something. See `emptyPageBreaks.ts`.
+  const pass = await paginateAvoidingEmptyPages(
+    paginated,
+    opts.chapterLevels ?? [],
+    opts.chapterMinLines ?? DEFAULT_CHAPTER_MIN_LINES,
+    (stamped) => service.paginate(stamped, stylesheets),
+    (result) => result.pages,
+  );
+  const result = pass.result;
 
   try {
     const container = result.container;
@@ -119,6 +134,7 @@ export async function buildPdfDocument(
 
     return {
       pageCount: result.pageCount,
+      chapterBreaksDropped: pass.dropped.length,
       pages: result.pages,
       html,
       destroy: () => service.dispose(),

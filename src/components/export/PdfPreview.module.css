@@ -16,23 +16,35 @@
   scrollbar-gutter: stable;
 }
 
+/* Paged.js renders into this element and nothing else does. It is a separate
+ * node from `.viewport` so React's own status/error line (a sibling, not a
+ * child) can never be swept away by `replaceChildren()`. */
+.pages {
+  min-height: 1px;
+}
+
 /* Physical pages: paper sheet with shadow, laid out one after another.
    Prevents app-wide page-break rules from double-paging the preview. */
-.viewport :global(.pagedjs_page) {
+.pages :global(.pagedjs_page) {
   margin: 0 auto 28px;
   box-shadow: 0 2px 6px rgb(0 0 0 / 35%), 0 10px 32px rgb(0 0 0 / 45%);
   background: #fff;
   break-after: auto;
 }
 
-.viewport :global(.pagedjs_page:last-child) {
+.pages :global(.pagedjs_page:last-child) {
   margin-bottom: 0;
 }
 
-.status {
-  position: sticky;
+/* Status / error float over the pages instead of living inside the node
+   Paged.js clears. */
+.status,
+.error {
+  position: absolute;
   top: 50%;
-  transform: translateY(-50%);
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 2;
   text-align: center;
   color: rgb(255 255 255 / 75%);
   font-size: 13px;
@@ -40,14 +52,9 @@
 }
 
 .error {
-  position: sticky;
-  top: 50%;
-  transform: translateY(-50%);
   max-width: 420px;
-  margin: 0 auto;
-  text-align: center;
   color: #ffb4ab;
-  font-size: 13px;
+  letter-spacing: normal;
   line-height: 1.5;
   white-space: pre-wrap;
 }

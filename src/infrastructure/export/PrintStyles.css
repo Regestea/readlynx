@@ -29,7 +29,9 @@ html {
    every h1 that starts a chapter (all but the document opener), so neither
    the preview nor the printed PDF ever produces a leading blank page. */
 
-h1.rl-chapter-start {
+/* The heading level that starts a new page is chosen in the export dialog and
+   stamped onto the heading as `rl-chapter-start`, so one rule covers H1-H5. */
+.rl-chapter-start {
   break-before: page;
 }
 
@@ -144,7 +146,7 @@ h1.rl-chapter-start {
 .pagedjs_page_content ul,
 .pagedjs_page_content ol {
   margin: 0 0 0.9em;
-  padding-left: 1.5em;
+  padding-inline-start: 1.5em;
 }
 
 .pagedjs_page_content li {
@@ -158,12 +160,12 @@ h1.rl-chapter-start {
 
 .pagedjs_page_content ul[type="check"] {
   list-style: none;
-  padding-left: 0.2em;
+  padding-inline-start: 0.2em;
 }
 
 .pagedjs_page_content ul[type="check"] li {
   list-style: none;
-  padding-left: 1.5em;
+  padding-inline-start: 1.5em;
   position: relative;
 }
 
@@ -180,7 +182,7 @@ h1.rl-chapter-start {
 .pagedjs_page_content blockquote {
   margin: 0 0 0.9em;
   padding: 0.1em 1.2em;
-  border-left: 3px solid var(--rl-quote-border);
+  border-inline-start: 3px solid var(--rl-quote-border);
   color: var(--rl-muted);
   font-style: italic;
   break-inside: avoid;
@@ -230,20 +232,20 @@ h1.rl-chapter-start {
   margin: 0 0 0.9em;
   padding: 0.7em 1em;
   border-radius: 6px;
-  border-left: 3px solid var(--rl-accent);
+  border-inline-start: 3px solid var(--rl-accent);
   background-color: var(--rl-callout-bg);
 }
 
 .pagedjs_page_content aside[data-callout-tone="warning"] {
-  border-left-color: #b9794c;
+  border-inline-start-color: #b9794c;
 }
 
 .pagedjs_page_content aside[data-callout-tone="error"] {
-  border-left-color: #cf5b47;
+  border-inline-start-color: #cf5b47;
 }
 
 .pagedjs_page_content aside[data-callout-tone="success"] {
-  border-left-color: #5b6b50;
+  border-inline-start-color: #5b6b50;
 }
 
 /* Custom block produced by CustomBlockNode's exportDOM */
@@ -257,7 +259,7 @@ h1.rl-chapter-start {
 }
 
 .pagedjs_page_content section[data-block-kind="insight"] {
-  border-left: 3px solid var(--rl-accent);
+  border-inline-start: 3px solid var(--rl-accent);
 }
 
 /* --------------------------------------------------------------------------
@@ -276,7 +278,7 @@ h1.rl-chapter-start {
 .pagedjs_page_content td {
   border: 1px solid var(--rl-rule);
   padding: 0.4em 0.6em;
-  text-align: left;
+  text-align: start;
   vertical-align: top;
 }
 

@@ -1,157 +1,100 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, Download, FileDown, FileOutput, FileText, FileType2 } from "lucide-react";
-import type { LexicalEditor } from "lexical";
-import { TEXT_COLORS, PAGE_FORMATS } from "../constants";
-import type { PageFormat } from "../constants";
-import { PdfPreview } from "../../../../infrastructure/export/preview/PdfPreview";
-import { EpubViewer } from "../../../../components/epubViewer/EpubViewer";
-import type { PdfExportOptions } from "../../../../infrastructure/export/types";
-import type { ExportThemeOptions } from "../types";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Check, Download, FileDown } from "lucide-react";
+import { EpubViewer } from "../epubViewer/EpubViewer";
+import { buildHtmlDocument } from "../../infrastructure/export/htmlDocument";
+import { countChapterBreaks, countChapterHeadings } from "../../infrastructure/export/chapterBreaks";
+import type { PdfExportOptions } from "../../infrastructure/export/types";
 import {
   CODE_FONT_OPTIONS,
   EXPORT_CODE_THEME_OPTIONS,
-  EXPORT_TEMPLATES,
-} from "../../../../infrastructure/export/exportTheme";
-import type { ExportCodeThemeId, ExportTemplateId } from "../../../../infrastructure/export/exportTheme";
-import { exportHtml } from "../exporters/htmlExporter";
-import { exportEpub, zipEpubFiles } from "../exporters/epubExporter";
-import { Button } from "../../../../components/ui/Button/Button";
-import { Modal } from "../../../../components/ui/Modal/Modal";
+} from "../../infrastructure/export/exportTheme";
+import type { ExportCodeThemeId } from "../../infrastructure/export/exportTheme";
+import { Button } from "../ui/Button/Button";
+import { FontFamilySelect } from "../FontFamilySelect/FontFamilySelect";
+import { Modal } from "../ui/Modal/Modal";
+import {
+  MAX_FONT_SCALE_PCT,
+  MIN_FONT_SCALE_PCT,
+} from "../../infrastructure/export/fontScale";
 import { clampInches, INCH_MAX, INCH_MIN, toInches, toMm } from "./marginUnits";
+import { DEFAULT_EXPORT_SETTINGS, EXPORT_FORMAT_OPTIONS, usesPagedLook } from "./types.tsx";
+import type { ExportContent, ExportSettings } from "./types.tsx";
+import {
+  CHAPTER_LEVEL_OPTIONS,
+  CHAPTER_MIN_LINES_OPTIONS,
+  MARGIN_SIDES,
+  PAGE_FORMAT_OPTIONS,
+  PAPER_COLORS,
+  TEMPLATE_CHIPS,
+  TEXT_COLORS,
+  initialExportSettings,
+  isCustomColor,
+  safeHex,
+} from "./presets";
+import { PdfPreview } from "./PdfPreview";
 import styles from "./ExportDialog.module.css";
-
-export type ExportFormat = "pdf" | "docx" | "html" | "epub";
-
-export interface ExportSettings {
-  format: ExportFormat;
-  /** Global font-size scale in percent (0 = keep the sizes as authored). */
-  fontSizeScalePct: number;
-  textColor: string;
-  backgroundColor: string;
-  marginTopMm: number;
-  marginRightMm: number;
-  marginBottomMm: number;
-  marginLeftMm: number;
-  /** PDF-only: physical page size. */
-  pageFormat: PageFormat;
-  /** PDF-only: run a centred page number in the footer. */
-  showPageNumbers: boolean;
-  /** PDF-only: start every H1 on a new page. */
-  chapterBreaks: boolean;
-  /** PDF/EPUB-only: document look (none / modern light / modern dark). */
-  template: ExportTemplateId;
-  /** PDF/EPUB-only: code block highlight theme. */
-  codeTheme: ExportCodeThemeId;
-  /** PDF/EPUB-only: monospace font for code blocks ("" = default). */
-  codeFontFamily: string;
-}
-
-const DEFAULT_SETTINGS: ExportSettings = {
-  format: "pdf",
-  fontSizeScalePct: 0,
-  textColor: "",
-  backgroundColor: "",
-  marginTopMm: 12.7,
-  marginRightMm: 12.7,
-  marginBottomMm: 12.7,
-  marginLeftMm: 12.7,
-  pageFormat: "a4",
-  showPageNumbers: true,
-  chapterBreaks: true,
-  template: "none",
-  codeTheme: "auto",
-  codeFontFamily: "",
-};
-
-const FORMATS: { value: ExportFormat; label: string; icon: React.ReactNode }[] = [
-  { value: "pdf", label: "PDF", icon: <FileDown size={14} strokeWidth={1.8} aria-hidden="true" /> },
-  { value: "docx", label: "DOCX", icon: <FileOutput size={14} strokeWidth={1.8} aria-hidden="true" /> },
-  { value: "html", label: "HTML", icon: <FileText size={14} strokeWidth={1.8} aria-hidden="true" /> },
-  { value: "epub", label: "EPUB", icon: <FileType2 size={14} strokeWidth={1.8} aria-hidden="true" /> },
-];
-
-interface TemplateChip {
-  id: ExportTemplateId;
-  name: string;
-  desc: string;
-  textColor: string;
-  backgroundColor: string;
-  /** Uniform page margin in millimeters applied to every side. */
-  marginMm: number;
-}
-
-/** "None" keeps the plain look: no colours forced, default margins. */
-const TEMPLATES: TemplateChip[] = [
-  {
-    id: "none",
-    name: "None",
-    desc: "Plain look",
-    textColor: "",
-    backgroundColor: "",
-    marginMm: 0,
-  },
-  ...EXPORT_TEMPLATES.map(({ id, name, desc, textColor, backgroundColor, marginMm }) => ({
-    id,
-    name,
-    desc,
-    textColor,
-    backgroundColor,
-    marginMm,
-  })),
-];
-
-const PAPER_COLORS = [
-  { value: "#ffffff", label: "White", swatch: "#ffffff" },
-  { value: "#faf6ef", label: "Cream", swatch: "#faf6ef" },
-  { value: "#f4f4f0", label: "Stone", swatch: "#f4f4f0" },
-  { value: "#eef3f9", label: "Ice", swatch: "#eef3f9" },
-  { value: "#fdf6e3", label: "Sand", swatch: "#fdf6e3" },
-  { value: "#e9f1ec", label: "Mint", swatch: "#e9f1ec" },
-];
-
-const PAGE_FORMAT_OPTIONS: { value: PageFormat; label: string }[] = (
-  Object.keys(PAGE_FORMATS) as PageFormat[]
-).map((key) => ({ value: key, label: PAGE_FORMATS[key].label }));
-
-const MARGIN_SIDES: { key: "marginTopMm" | "marginRightMm" | "marginBottomMm" | "marginLeftMm"; label: string }[] = [
-  { key: "marginTopMm", label: "Top" },
-  { key: "marginRightMm", label: "Right" },
-  { key: "marginBottomMm", label: "Bottom" },
-  { key: "marginLeftMm", label: "Left" },
-];
 
 interface ExportDialogProps {
   open: boolean;
   onClose: () => void;
-  editor: LexicalEditor;
+  /** What is being exported. Supplies the body HTML (and, when supported, the
+   *  EPUB archive for the preview) plus the formats this source can produce —
+   *  the dialog itself knows nothing about where the content comes from. */
+  content: ExportContent;
+  /** Called with the chosen settings; the host performs the actual export. */
   onExport: (settings: ExportSettings) => void;
   defaultMarginMm?: number;
-  defaultPageFormat?: PageFormat;
+  defaultPageFormat?: ExportSettings["pageFormat"];
   coverImage?: string;
+  /** Stacks above a dialog that is already open. */
+  raised?: boolean;
+}
+
+/**
+ * The export dialog: pick a format, tune the look, preview the result, and
+ * hand the settings back to the host to write the file.
+ *
+ * Source-agnostic by design. It only ever asks its `ExportContent` for
+ * semantic HTML (and an EPUB archive for that tab's preview), so the document
+ * editor and the reading view's translated books share one dialog, one set of
+ * options and one preview implementation.
+ */
+function toggleChapterLevel(levels: readonly number[], level: number, on: boolean): number[] {
+  const next = on ? [...new Set([...levels, level])] : levels.filter((value) => value !== level);
+  return next.sort((a, b) => a - b);
 }
 
 export function ExportDialog({
   open,
   onClose,
-  editor,
+  content,
   onExport,
   defaultMarginMm,
   defaultPageFormat,
   coverImage,
+  raised = false,
 }: ExportDialogProps) {
-  const [settings, setSettings] = useState<ExportSettings>(() => ({
-    ...DEFAULT_SETTINGS,
-    marginTopMm: defaultMarginMm ?? DEFAULT_SETTINGS.marginTopMm,
-    marginRightMm: defaultMarginMm ?? DEFAULT_SETTINGS.marginRightMm,
-    marginBottomMm: defaultMarginMm ?? DEFAULT_SETTINGS.marginBottomMm,
-    marginLeftMm: defaultMarginMm ?? DEFAULT_SETTINGS.marginLeftMm,
-    pageFormat: defaultPageFormat ?? DEFAULT_SETTINGS.pageFormat,
-  }));
+  const [settings, setSettings] = useState<ExportSettings>(() =>
+    initialExportSettings(DEFAULT_EXPORT_SETTINGS, { defaultMarginMm, defaultPageFormat }),
+  );
   const textColorInputRef = useRef<HTMLInputElement>(null);
   const paperColorInputRef = useRef<HTMLInputElement>(null);
   const [pageCount, setPageCount] = useState<number | null>(null);
   const [resolvedCover, setResolvedCover] = useState<string | undefined>(undefined);
   const [epubSrc, setEpubSrc] = useState<ArrayBuffer | null>(null);
+
+  /** Formats the source can really produce; anything else is not offered, so
+   *  a host never shows a tab it cannot honour. */
+  const formats = useMemo(
+    () => EXPORT_FORMAT_OPTIONS.filter((option) => content.formats.includes(option.value)),
+    [content.formats],
+  );
+
+  /** Falls back to the first supported format if the current one is gone
+   *  (e.g. the source stopped supporting EPUB). */
+  if (open && !content.formats.includes(settings.format) && formats.length > 0) {
+    setSettings((current) => ({ ...current, format: formats[0].value }));
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -177,11 +120,12 @@ export function ExportDialog({
     };
   }, [coverImage]);
 
-  const themeOptions: ExportThemeOptions = useMemo(
+  const themeOptions = useMemo(
     () => ({
       textColor: settings.textColor,
       backgroundColor: settings.backgroundColor,
       fontSizeScalePct: settings.fontSizeScalePct,
+      fontFamily: settings.fontFamily,
       margins: {
         top: settings.marginTopMm,
         right: settings.marginRightMm,
@@ -196,6 +140,7 @@ export function ExportDialog({
       settings.textColor,
       settings.backgroundColor,
       settings.fontSizeScalePct,
+      settings.fontFamily,
       settings.marginTopMm,
       settings.marginRightMm,
       settings.marginBottomMm,
@@ -214,36 +159,61 @@ export function ExportDialog({
     }
   };
 
+  /** The body as the source produces it. Chapter breaks are stamped by the
+   *  pagination pass, not here, so switching the levels re-paginates instead of
+   *  re-parsing every chapter. */
+  const sourceBodyHtml = useMemo(() => content.bodyHtml(), [content]);
+
+  // Counted by the same routine that does the marking, so the number shown can
+  // never disagree with the number of breaks actually inserted. A break only
+  // appears from the *second* heading of a level onwards, so a level with one
+  // heading — or none — is a tick that silently does nothing.
+  const headingCountsByLevel = useMemo(
+    () => countChapterHeadings(sourceBodyHtml),
+    [sourceBodyHtml],
+  );
+  const totalChapterBreaks = useMemo(
+    () => countChapterBreaks(sourceBodyHtml, settings.chapterLevels),
+    [sourceBodyHtml, settings.chapterLevels],
+  );
+  const chapterLevelsAreInert =
+    settings.chapterLevels.length > 0 &&
+    settings.chapterLevels.every((level) => (headingCountsByLevel[level] ?? 0) <= 1);
+  const [chapterBreaksDropped, setChapterBreaksDropped] = useState(0);
+  const reportDroppedBreaks = useCallback((count: number) => {
+    setChapterBreaksDropped((previous) => (previous === count ? previous : count));
+  }, []);
+
   useEffect(() => {
-    if (!open || settings.format !== "epub") return;
+    if (!open || settings.format !== "epub" || !content.epub) return;
     let cancelled = false;
     const timer = window.setTimeout(() => {
-      try {
-        const files = exportEpub(editor, {}, themeOptions, resolvedCover);
-        void zipEpubFiles(files)
-          .arrayBuffer()
-          .then((buffer) => {
-            if (!cancelled) setEpubSrc(buffer);
-          })
-          .catch(() => {
-            if (!cancelled) setEpubSrc(null);
-          });
-      } catch {
-        if (!cancelled) setEpubSrc(null);
-      }
+      void (async () => {
+        try {
+          const buffer = (await content.epub?.(themeOptions, resolvedCover)) ?? null;
+          if (!cancelled) setEpubSrc(buffer);
+        } catch {
+          if (!cancelled) setEpubSrc(null);
+        }
+      })();
     }, 300);
     return () => {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [open, settings.format, editor, themeOptions, resolvedCover]);
+  }, [open, settings.format, content, themeOptions, resolvedCover]);
 
   const htmlSrc = useMemo(
     () =>
       settings.format === "docx" || settings.format === "html"
-        ? exportHtml(editor, themeOptions, resolvedCover)
+        ? buildHtmlDocument(
+            content.bodyHtml(),
+            themeOptions,
+            resolvedCover,
+            content.label,
+          )
         : "",
-    [editor, themeOptions, resolvedCover, settings.format],
+    [content, themeOptions, resolvedCover, settings.format],
   );
 
   const previewOptions: PdfExportOptions = useMemo(
@@ -258,8 +228,9 @@ export function ExportDialog({
       textColor: settings.textColor,
       backgroundColor: settings.backgroundColor,
       fontSizeScalePct: settings.fontSizeScalePct,
+      fontFamily: settings.fontFamily,
       showPageNumbers: settings.showPageNumbers,
-      chapterBreaks: settings.chapterBreaks,
+      chapterLevels: settings.chapterLevels,
       inlineImages: true,
       coverImage: resolvedCover,
       template: settings.template,
@@ -269,9 +240,9 @@ export function ExportDialog({
     [settings, resolvedCover],
   );
 
-  const applyTemplate = (template: TemplateChip) => {
+  const applyTemplate = (template: (typeof TEMPLATE_CHIPS)[number]) => {
     const marginMm =
-      template.marginMm || defaultMarginMm || DEFAULT_SETTINGS.marginTopMm;
+      template.marginMm || defaultMarginMm || DEFAULT_EXPORT_SETTINGS.marginTopMm;
     setSettings((prev) => ({
       ...prev,
       template: template.id,
@@ -284,20 +255,16 @@ export function ExportDialog({
     }));
   };
 
-  const isCustomColor = (value: string, presets: readonly { value: string }[]): boolean =>
-    value !== "" && !presets.some((preset) => preset.value.toLowerCase() === value.toLowerCase());
-
-  const safeHex = (value: string): string =>
-    /^#[0-9a-f]{6}$/i.test(value) ? value : "#000000";
-
-  const formatLabel = FORMATS.find((format) => format.value === settings.format)?.label ?? "PDF";
+  const formatLabel = formats.find((format) => format.value === settings.format)?.label ?? "PDF";
+  const pagedLook = usesPagedLook(settings.format);
 
   return (
     <Modal
       open={open}
       onClose={onClose}
-      title="Export document"
+      title={`Export ${content.label.toLowerCase()}`}
       wide
+      raised={raised}
       footer={
         <>
           {settings.format !== "docx" && settings.format !== "html" && (
@@ -320,7 +287,7 @@ export function ExportDialog({
           <div className={styles.section}>
             <span className={styles.sectionLabel}>Format</span>
             <div className={styles.tabs} role="group" aria-label="Export format">
-              {FORMATS.map(({ value, label, icon }) => (
+              {formats.map(({ value, label, icon }) => (
                 <button
                   key={value}
                   type="button"
@@ -335,11 +302,11 @@ export function ExportDialog({
             </div>
           </div>
 
-          {(settings.format === "pdf" || settings.format === "epub") && (
+          {pagedLook && (
             <div className={styles.section}>
               <span className={styles.sectionLabel}>Template</span>
               <div className={styles.templates}>
-                {TEMPLATES.map((template) => (
+                {TEMPLATE_CHIPS.map((template) => (
                   <button
                     key={template.id}
                     type="button"
@@ -363,7 +330,7 @@ export function ExportDialog({
             </div>
           )}
 
-          {(settings.format === "pdf" || settings.format === "epub") && (
+          {pagedLook && (
             <div className={styles.section}>
               <span className={styles.sectionLabel}>Code blocks</span>
               <label className={styles.codeField}>
@@ -404,20 +371,38 @@ export function ExportDialog({
           )}
 
           <div className={styles.section}>
+            <span className={styles.sectionLabel}>Font</span>
+            <div className={styles.row}>
+              <FontFamilySelect
+                value={settings.fontFamily}
+                onSelect={(fontFamily) => patch({ fontFamily })}
+                defaultLabel="Book font"
+                className={styles.fontSelect}
+              />
+            </div>
+          </div>
+
+          <div className={styles.section}>
             <span className={styles.sectionLabel}>Font size</span>
             <div className={styles.row}>
               <input
                 type="number"
                 className={styles.control}
-                min={0}
-                max={200}
+                min={MIN_FONT_SCALE_PCT}
+                max={MAX_FONT_SCALE_PCT}
                 step={5}
                 value={settings.fontSizeScalePct}
                 title="Font size scale (percent)"
                 aria-label="Font size scale (percent)"
                 onChange={(event) =>
                   patch({
-                    fontSizeScalePct: Math.max(0, Math.min(200, Number(event.target.value) || 0)),
+                    fontSizeScalePct: Math.min(
+                      MAX_FONT_SCALE_PCT,
+                      Math.max(
+                        MIN_FONT_SCALE_PCT,
+                        Number(event.target.value) || 0,
+                      ),
+                    ),
                   })
                 }
               />
@@ -425,7 +410,8 @@ export function ExportDialog({
             </div>
             <p className={styles.sectionHint}>
               0% keeps your heading and paragraph sizes as authored (e.g. 18px headings, 14px
-              paragraphs). 10% increases every size by 10%.
+              paragraphs). 10% increases every size by 10%; negative values shrink them, so -20%
+              makes everything 20% smaller.
             </p>
           </div>
 
@@ -512,10 +498,10 @@ export function ExportDialog({
                       title={`${label} margin in inches`}
                       aria-label={`${label} margin`}
                       onChange={(event) =>
-                        patch({
-                          [key]: toMm(clampInches(Number(event.target.value))),
-                        } as Partial<ExportSettings>)
-                      }
+                    patch({
+                      [key]: toMm(clampInches(Number(event.target.value))),
+                    } as Partial<ExportSettings>)
+                  }
                     />
                   </label>
                 ))}
@@ -532,7 +518,9 @@ export function ExportDialog({
                   value={settings.pageFormat}
                   title="Page size"
                   aria-label="Page size"
-                  onChange={(event) => patch({ pageFormat: event.target.value as PageFormat })}
+                  onChange={(event) =>
+                    patch({ pageFormat: event.target.value as ExportSettings["pageFormat"] })
+                  }
                 >
                   {PAGE_FORMAT_OPTIONS.map(({ value, label }) => (
                     <option key={value} value={value}>
@@ -552,14 +540,89 @@ export function ExportDialog({
                   />
                   <span>Page numbers</span>
                 </label>
-                <label className={styles.toggleRow}>
-                  <input
-                    type="checkbox"
-                    checked={settings.chapterBreaks}
-                    onChange={(event) => patch({ chapterBreaks: event.target.checked })}
-                  />
-                  <span>Start each H1 chapter on a new page</span>
-                </label>
+                <fieldset className={styles.checkboxGroup}>
+                  <legend className={styles.codeFieldLabel}>
+                    Start each chapter on a new page
+                  </legend>
+                  <div className={styles.checkboxRow}>
+                    {CHAPTER_LEVEL_OPTIONS.map((option) => {
+                      const total = headingCountsByLevel[option.value] ?? 0;
+                      const canBreak = total > 1;
+                      return (
+                        <label
+                          key={option.value}
+                          className={styles.checkboxOption}
+                          title={
+                            canBreak
+                              ? `${total} ${option.label.replace("Each ", "").toLowerCase()} in this document`
+                              : total === 0
+                                ? "This document has no headings at this level"
+                                : "Only one heading at this level, so there is nowhere to break"
+                          }
+                        >
+                          <input
+                            type="checkbox"
+                            checked={settings.chapterLevels.includes(option.value)}
+                            onChange={(event) =>
+                              patch({
+                                chapterLevels: toggleChapterLevel(
+                                  settings.chapterLevels,
+                                  option.value,
+                                  event.target.checked,
+                                ),
+                              })
+                            }
+                          />
+                          <span>{option.label}</span>
+                          <span className={canBreak ? styles.levelCount : styles.levelCountMuted}>
+                            {total}
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                  <span className={styles.sectionHint}>
+                    The number after each level is how many headings the document has. A break is
+                    inserted before every heading after the first one of that level, so a level with
+                    one heading can never break.
+                  </span>
+                  {chapterLevelsAreInert ? (
+                    <span className={styles.checkboxWarning}>
+                      None of the ticked levels has more than one heading, so no page break will be
+                      inserted.
+                    </span>
+                  ) : null}
+                  <label className={styles.codeField}>
+                    <span className={styles.codeFieldLabel}>Avoid empty pages</span>
+                    <select
+                      className={styles.control}
+                      value={String(settings.chapterMinLines)}
+                      title="Drop a chapter break when the page it opens would be nearly empty"
+                      aria-label="Minimum lines for a page to keep its chapter break"
+                      onChange={(event) =>
+                        patch({ chapterMinLines: Number(event.target.value) || 0 })
+                      }
+                    >
+                      {CHAPTER_MIN_LINES_OPTIONS.map(({ value, label }) => (
+                        <option key={value} value={value}>
+                          {label}
+                        </option>
+                      ))}
+                    </select>
+                    <span className={styles.sectionHint}>
+                      A heading that opens a page holding only a line or two makes for a very empty
+                      page. This drops that break and lets the text flow on, measured on the real
+                      page so it follows the page size and font size.
+                    </span>
+                  </label>
+                  {chapterBreaksDropped > 0 ? (
+                    <span className={styles.checkboxNote}>
+                      {chapterBreaksDropped} of {totalChapterBreaks} chapter break
+                      {chapterBreaksDropped === 1 ? "" : "s"} dropped because the page would have
+                      been nearly empty.
+                    </span>
+                  ) : null}
+                </fieldset>
               </div>
             </>
           )}
@@ -572,9 +635,10 @@ export function ExportDialog({
           </div>
           {settings.format === "pdf" && (
             <PdfPreview
-              editor={editor}
+              bodyHtml={sourceBodyHtml}
               options={previewOptions}
               onPageCountChange={setPageCount}
+              onChapterBreaksDropped={reportDroppedBreaks}
               className={styles.previewBody}
             />
           )}

@@ -1,30 +1,41 @@
 import { useEffect, useRef, useState } from "react";
-import type { LexicalEditor } from "lexical";
-import { toHtml } from "../lexicalToHtml";
-import { PaginationService, buildPrintCss, themeVariables } from "../paginationService";
-import { scaleHtmlFontSizes } from "../fontScale";
-import { codeThemeCss, resolveDocumentMode } from "../exportTheme";
-import { highlightBodyCode } from "../epubHighlight";
-import type { PdfExportOptions } from "../types";
-import printCss from "../PrintStyles.css?raw";
+import { PaginationService, buildPrintCss, themeVariables } from "../../infrastructure/export/paginationService";
+import { paginateAvoidingEmptyPages } from "../../infrastructure/export/emptyPageBreaks";
+import { DEFAULT_CHAPTER_MIN_LINES } from "../../infrastructure/export/types";
+import { scaleHtmlFontSizes } from "../../infrastructure/export/fontScale";
+import { codeThemeCss, resolveDocumentMode } from "../../infrastructure/export/exportTheme";
+import { highlightBodyCode } from "../../infrastructure/export/epubHighlight";
+import type { PdfExportOptions } from "../../infrastructure/export/types";
+import printCss from "../../infrastructure/export/PrintStyles.css?raw";
 import styles from "./PdfPreview.module.css";
 
 type PreviewState = "idle" | "rendering" | "ready" | "error";
 
 export interface PdfPreviewProps {
-  editor: LexicalEditor;
+  /** Semantic HTML body fragment of the whole document. The preview is
+   *  source-agnostic: whatever produces the export HTML produces this. */
+  bodyHtml: string;
   options: PdfExportOptions;
   onPageCountChange?: (count: number) => void;
+  /** How many chapter breaks the empty-page pass removed, so the dialog can
+   *  say so instead of the pages silently changing shape. */
+  onChapterBreaksDropped?: (count: number) => void;
   className?: string;
 }
 
 /**
  * Live print preview. Re-paginates the document with Paged.js each time the
- * options change and renders the resulting physical pages. Pagination is
- * triggered explicitly (opening the preview / editing an option) — never on
- * keystrokes in the editor.
+ * body or the options change and renders the resulting physical pages.
+ * Pagination is triggered explicitly (opening the preview / editing an
+ * option) — never on keystrokes in the source editor.
  */
-export function PdfPreview({ editor, options, onPageCountChange, className }: PdfPreviewProps) {
+export function PdfPreview({
+  bodyHtml,
+  options,
+  onPageCountChange,
+  onChapterBreaksDropped,
+  className,
+}: PdfPreviewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const currentServiceRef = useRef<PaginationService | null>(null);
   const [state, setState] = useState<PreviewState>("idle");
@@ -78,26 +89,33 @@ export function PdfPreview({ editor, options, onPageCountChange, className }: Pd
         setError(null);
 
         try {
-          const bodyHtml = highlightBodyCode(
-            scaleHtmlFontSizes(toHtml(editor, { chapterBreaks: options.chapterBreaks }), options.fontSizeScalePct),
+          const body = highlightBodyCode(
+            scaleHtmlFontSizes(bodyHtml, options.fontSizeScalePct),
           );
-          const result = await service.paginate(
-            bodyHtml,
-            [
-              printCss,
-              themeVariables(options),
-              buildPrintCss(options),
-              codeThemeCss(
-                options.codeTheme,
-                resolveDocumentMode(options.template, options.backgroundColor),
-              ),
-            ],
-            container,
+          const stylesheets = [
+            printCss,
+            themeVariables(options),
+            buildPrintCss(options),
+            codeThemeCss(
+              options.codeTheme,
+              resolveDocumentMode(options.template, options.backgroundColor),
+            ),
+          ];
+          // Same empty-page pass the export runs, so what is previewed is what
+          // gets written.
+          const pass = await paginateAvoidingEmptyPages(
+            body,
+            options.chapterLevels ?? [],
+            options.chapterMinLines ?? DEFAULT_CHAPTER_MIN_LINES,
+            (stamped) => service.paginate(stamped, stylesheets, container),
+            (result) => result.pages,
           );
+          const result = pass.result;
           if (cancelled) {
             service.dispose();
             return;
           }
+          onChapterBreaksDropped?.(pass.dropped.length);
           // Inline the paper/ink colours on the rendered page elements so the
           // theme always shows in the preview, independent of how Paged.js
           // re-emits the stylesheets into the document head.
@@ -125,13 +143,13 @@ export function PdfPreview({ editor, options, onPageCountChange, className }: Pd
           }
         }
       })();
-    }, 250);
+    }, 450);
 
     return () => {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [editor, options, onPageCountChange]);
+  }, [bodyHtml, options, onPageCountChange, onChapterBreaksDropped]);
 
   useEffect(() => {
     return () => {
@@ -143,13 +161,19 @@ export function PdfPreview({ editor, options, onPageCountChange, className }: Pd
   return (
     <div className={`${styles.stage} ${className ?? ""}`} data-preview-state={state}>
       <div
-        ref={containerRef}
         className={styles.viewport}
         aria-label="Print preview — pages appear exactly as they will be printed"
       >
-        {state === "rendering" && <div className={styles.status}>Paginating…</div>}
-        {state === "error" && <div className={styles.error}>Pagination failed: {error}</div>}
+        {/* Paged.js owns this element outright: React never renders children
+         * into it, and it is only ever emptied through `replaceChildren`.
+         * Letting React place the status/error line inside it (as it used to)
+         * made Paged.js's own cleanup delete a node React still tracked, and
+         * the next commit crashed with
+         * `removeChild ... not a child of this node`. */}
+        <div ref={containerRef} className={styles.pages} />
       </div>
+      {state === "rendering" && <div className={styles.status}>Paginating…</div>}
+      {state === "error" && <div className={styles.error}>Pagination failed: {error}</div>}
     </div>
   );
 }

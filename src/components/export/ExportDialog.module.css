@@ -199,6 +199,58 @@
   font-size: var(--font-size-xs);
 }
 
+/* Chapter-break levels: a row of tick boxes rather than a select, so several
+   levels can be chosen at once. */
+.checkboxGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.checkboxRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+}
+
+.checkboxOption {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  cursor: pointer;
+}
+
+/* How many headings of that level the document has. A level with fewer than two
+   can never produce a break, so it is dimmed rather than hidden. */
+.levelCount {
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--color-glass);
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.levelCountMuted {
+  opacity: 0.55;
+}
+
+.checkboxWarning {
+  color: var(--color-danger);
+  font-size: var(--font-size-xs);
+}
+
+/* What the empty-page pass actually did, so the pages silently changing shape
+   is accounted for instead of surprising. */
+.checkboxNote {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+}
+
 /* ---------- Swatches ---------- */
 
 .swatchRow {
@@ -275,6 +327,14 @@
 .percentSuffix {
   color: var(--color-text-muted);
   font-size: var(--font-size-sm);
+}
+
+/* The font dropdown is a self-positioning panel, so it must not be squeezed
+   into the row's flex track. */
+.fontSelect {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 /* ---------- Preview ---------- */
