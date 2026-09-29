@@ -358,6 +358,7 @@ export function Toolbar({
           backgroundColor: settings.backgroundColor,
           showPageNumbers: settings.showPageNumbers,
           chapterLevels: settings.chapterLevels,
+          chapterMinLines: settings.chapterMinLines,
           inlineImages: true,
           coverImage: resolvedCover,
           template: settings.template,
