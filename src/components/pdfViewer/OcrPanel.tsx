@@ -208,14 +208,13 @@ export function OcrPanel({
             const isInstalled = installedSet.has(lang.code);
             const isDownloading = downloading === lang.code;
             return (
-              <li key={lang.code} className={styles.langRow}>
+              <li key={lang.code} className={styles.langRow} title={lang.label}>
                 <Checkbox
                   checked={selectedSet.has(lang.code)}
                   onChange={(checked) => toggleLang(lang.code, checked)}
                   label={lang.label}
                   disabled={extracting}
                 />
-                <span className={styles.langCode}>{lang.code}</span>
                 {isDownloading ? (
                   <span className={styles.downloading} role="status">
                     <Loader2 size={13} strokeWidth={2} className={styles.spinner} aria-hidden="true" />
