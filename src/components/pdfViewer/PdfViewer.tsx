@@ -7,6 +7,7 @@ import type { PDFDocumentLoadingTask, PDFDocumentProxy, PDFPageProxy, RenderTask
 import type { PDFLinkService } from "pdfjs-dist/types/web/pdf_link_service";
 import { OcrPanel } from "./OcrPanel";
 import { AiSelectionBubble } from "../AiSelectionBubble/AiSelectionBubble";
+import { useToast } from "../ui/Toast/ToastContext";
 import { annotateRegions, extractPdfRegions } from "../../features/reading/translation/pdfRegions";
 import type { PdfRegionSnapshot } from "../../features/reading/translation/pdfRegions";
 import { usePdfTheme } from "./theme/PdfThemeContext";
@@ -159,6 +160,9 @@ function PdfViewerInner({
 
   const showOcr = ocrEnabled || Boolean(onOcrText) || Boolean(onAiVision);
   const { state: pdfTheme } = usePdfTheme();
+  /** OCR results and failures are reported as notifications; the panel's own
+   *  status line is left for live progress ("Recognizing page… 42%"). */
+  const toast = useToast();
 
   /** The subset of pdf.js's PDFLinkService the annotation layer touches. This
    *  viewer renders pages standalone (no document-outline navigation), so
@@ -334,27 +338,29 @@ function PdfViewerInner({
       if (!result || !result.ok) {
         throw new Error(result?.error ?? `Could not download the ${lang} model.`);
       }
-      setOcrStatus(`"${lang}" model installed.`);
+      setOcrStatus(null);
+      toast.success(`"${lang}" model installed.`);
       await refreshModels();
     } catch (err) {
-      setOcrStatus(err instanceof Error ? err.message : String(err));
+      setOcrStatus(null);
+      toast.error(err instanceof Error ? err.message : String(err));
     } finally {
       downloadingRef.current = null;
       setDownloading(null);
       setDownloadProgress(null);
     }
-  }, [refreshModels]);
+  }, [refreshModels, toast]);
 
   const handleDelete = useCallback(async (lang: string) => {
     await window.readlynx?.ocr.deleteModel(lang);
     await refreshModels();
-    setOcrStatus(`"${lang}" model removed.`);
-  }, [refreshModels]);
+    toast.info(`"${lang}" model removed.`);
+  }, [refreshModels, toast]);
 
   const handleExtract = useCallback(async () => {
     const canvas = canvasRef.current;
     if (!canvas) {
-      setOcrStatus("The page is still loading.");
+      toast.error("The page is still loading.");
       return;
     }
     if (selectedLangs.length === 0) return;
@@ -368,28 +374,31 @@ function PdfViewerInner({
       if (result.error) throw new Error(result.error);
       const text = (result.text ?? "").trim();
       if (!text) {
-        setOcrStatus("No text detected on this page.");
+        setOcrStatus(null);
+        toast.error("No text detected on this page.");
       } else {
         onOcrTextRef.current?.(text);
-        setOcrStatus(`${text.length.toLocaleString()} characters extracted and added to the editor.`);
+        setOcrStatus(null);
+        toast.success(`${text.length.toLocaleString()} characters extracted and added to the editor.`);
         setOcrOpen(false);
       }
     } catch (err) {
-      setOcrStatus(err instanceof Error ? err.message : String(err));
+      setOcrStatus(null);
+      toast.error(err instanceof Error ? err.message : String(err));
     } finally {
       extractingRef.current = false;
       setExtracting(false);
     }
-  }, [selectedLangs]);
+  }, [selectedLangs, toast]);
 
   /** AI vision extraction: hands the rendered page to the host's AI call
    *  and reports the outcome. The host inserts the returned Markdown into
-   *  the editor itself; this handler only drives the panel's busy state,
-   *  status line and closing. */
+   *  the editor itself; this handler only drives the panel's busy state and
+   *  the notification that reports the result. */
   const handleVisionExtract = useCallback(async () => {
     const canvas = canvasRef.current;
     if (!canvas) {
-      setOcrStatus("The page is still loading.");
+      toast.error("The page is still loading.");
       return;
     }
     const onAiVision = onAiVisionRef.current;
@@ -405,20 +414,21 @@ function PdfViewerInner({
       });
       const trimmed = (markdown ?? "").trim();
       if (!trimmed) {
-        setOcrStatus("The AI returned no text for this page.");
+        setOcrStatus(null);
+        toast.error("The AI returned no text for this page.");
       } else {
-        setOcrStatus(
-          `${trimmed.length.toLocaleString()} characters extracted and added to the editor.`,
-        );
+        setOcrStatus(null);
+        toast.success(`${trimmed.length.toLocaleString()} characters extracted and added to the editor.`);
         setOcrOpen(false);
       }
     } catch (err) {
-      setOcrStatus(err instanceof Error ? err.message : String(err));
+      setOcrStatus(null);
+      toast.error(err instanceof Error ? err.message : String(err));
     } finally {
       extractingRef.current = false;
       setExtracting(false);
     }
-  }, []);
+  }, [toast]);
 
   const handleOcrToggle = useCallback(() => {
     setOcrOpen((open) => !open);
@@ -463,14 +473,6 @@ function PdfViewerInner({
     [onAskAi],
   );
 
-  useEffect(() => {
-    onReadyRef.current = onReady;
-  }, [onReady]);
-
-  useEffect(() => {
-    onPageSnapshotRef.current = onPageSnapshot;
-  }, [onPageSnapshot]);
-
   /** Hands a PNG of the whole current page to the host, which decides between
    *  OCR (recognized page text seeded into the chat) and AI vision (the page
    *  image itself) from its top setting. Shared by the click bubble and the
@@ -481,7 +483,7 @@ function PdfViewerInner({
   }, [onAskAi]);
 
   /** Right-clicking the page with no text selection asks the AI about the
-   *  whole page instead of opening the native menu ΓÇö the same as the click
+   *  whole page instead of opening the native menu — the same as the click
    *  bubble, minus the extra step. A text selection is left alone so the
    *  native copy menu still works (same rule as the Markdown/EPUB views). */
   const handlePageContextMenu = useCallback(
@@ -495,6 +497,14 @@ function PdfViewerInner({
     },
     [onAskAi, askAboutPage],
   );
+
+  useEffect(() => {
+    onReadyRef.current = onReady;
+  }, [onReady]);
+
+  useEffect(() => {
+    onPageSnapshotRef.current = onPageSnapshot;
+  }, [onPageSnapshot]);
 
   useEffect(() => {
     let cancelled = false;
