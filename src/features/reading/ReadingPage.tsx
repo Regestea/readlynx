@@ -10,6 +10,7 @@ import { AiChatPanel } from "../../components/aiChat/AiChatPanel";
 import type { BookSourceType } from "../../infrastructure/db/entities";
 import { TranslationSettingsPanel, TranslationToggle } from "./translation/TranslationPanel";
 import { useTranslation } from "./translation/useTranslation";
+import { ocrLanguagesLabel } from "./translation/languages";
 import {
   epubUnitKey,
   mdUnitKey,
@@ -442,14 +443,36 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
     async ({ image }: { image: string }) => {
       setChatError(null);
       if (methodFor(readyBook?.sourceType ?? "pdf", translation.pdfMethod) === "ocr") {
+        const langs = translation.settings.ocrLangs;
+        if (langs.length === 0) {
+          setChatError("No OCR language is selected. Pick the page language in the Translate panel first.");
+          return;
+        }
+        // Tesseract only works with models on disk: a missing one can never
+        // produce page text, so the chat is not opened at all ΓÇö the error
+        // points at the Download button of the language that is missing.
+        const installed = new Set(translation.installed);
+        const missing = langs.filter((lang) => !installed.has(lang));
+        if (missing.length > 0) {
+          const label = ocrLanguagesLabel(missing);
+          setChatError(
+            `The OCR model for ${label} is not downloaded yet. Open the Translate panel, ` +
+              `click ΓÇ£${label}ΓÇ¥ in OCR languages and press Download, then ask again.`,
+          );
+          return;
+        }
         askPdfRef.current = true;
         setPdfAskBusy(true);
         try {
           const result = await window.readlynx?.ocr.recognize({
             dataUrl: image,
-            langs: translation.settings.ocrLangs,
+            langs,
           });
           if (!askPdfRef.current) return;
+          if (result?.error) {
+            setChatError(result.error);
+            return;
+          }
           const text = (result?.text ?? "").trim();
           if (!text) {
             setChatError(
@@ -469,7 +492,7 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
         setPdfAskImages([image]);
       }
     },
-    [readyBook?.sourceType, translation.pdfMethod, translation.settings],
+    [readyBook?.sourceType, translation.pdfMethod, translation.settings, translation.installed],
   );
 
   const book = state.status === "ready" ? state.book : null;

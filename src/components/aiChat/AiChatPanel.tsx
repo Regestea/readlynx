@@ -50,9 +50,18 @@ export function AiChatPanel({
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [seed, setSeed] = useState<string | null>(null);
   const [input, setInput] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [replying, setReplying] = useState(false);
   const [typingLabel, setTypingLabel] = useState("Thinking…");
   const [error, setError] = useState<string | null>(null);
+  /** The host drives the busy state and the error for the whole click-to-ask
+   *  flow — the page OCR only finishes after the panel is already open — so
+   *  both are read straight from the props on every render instead of being
+   *  snapshotted when the panel opened. Otherwise the panel would sit on
+   *  “Capturing page data…” forever and never show the error the host
+   *  produced a moment later. */
+  const busy = initialBusy || replying;
+  const shownError = initialError ?? error;
+  const shownTypingLabel = initialBusy ? (initialBusyLabel ?? "Thinking…") : typingLabel;
   /** Conversation zoom in percent (applies to the message content). */
   const [zoomPct, setZoomPct] = useState(100);
   /** False until the saved zoom arrived, so the initial value is never
@@ -105,7 +114,8 @@ export function AiChatPanel({
   /** Opening the panel starts a fresh conversation seeded with the current
    *  selection (text and/or image); history lives until the modal closes.
    *  Reset during render (React's recommended pattern) whenever the panel
-   *  opens with a different seed. */
+   *  opens with a different seed. Only the panel's own state is cleared — the
+   *  host's busy flag and error live in `busy` / `shownError` above. */
   const imageKey = (contextImages[0] ?? "").slice(0, 96);
   const resetKey = open ? `open:${contextText ?? ""}|${imageKey}` : null;
   const resetKeyRef = useRef<string | null>(null);
@@ -115,9 +125,9 @@ export function AiChatPanel({
       setMessages([]);
       setSeed(contextText ?? null);
       setInput("");
-      setError(initialError);
-      setBusy(initialBusy);
-      setTypingLabel(initialBusy ? (initialBusyLabel ?? "Thinking…") : "Thinking…");
+      setError(null);
+      setReplying(false);
+      setTypingLabel("Thinking…");
     }
   }
 
@@ -166,7 +176,7 @@ export function AiChatPanel({
     const next: ChatMessage[] = [...messages, { role: "user", content: text }];
     setMessages(next);
     setInput("");
-    setBusy(true);
+    setReplying(true);
     setTypingLabel("Thinking…");
     setError(null);
     try {
@@ -181,7 +191,7 @@ export function AiChatPanel({
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
-      setBusy(false);
+      setReplying(false);
     }
   };
 
@@ -268,15 +278,15 @@ export function AiChatPanel({
           {busy && (
             <div className={styles.assistantRow}>
               <div className={styles.assistantBubble}>
-                <span className={styles.typing}>{typingLabel}</span>
+                <span className={styles.typing}>{shownTypingLabel}</span>
               </div>
             </div>
           )}
         </div>
 
-        {error && (
+        {shownError && (
           <div className={styles.error} role="alert">
-            {error}
+            {shownError}
           </div>
         )}
 
