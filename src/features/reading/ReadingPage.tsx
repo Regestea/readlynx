@@ -449,7 +449,7 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
           return;
         }
         // Tesseract only works with models on disk: a missing one can never
-        // produce page text, so the chat is not opened at all ΓÇö the error
+        // produce page text, so the chat is not opened at all — the error
         // points at the Download button of the language that is missing.
         const installed = new Set(translation.installed);
         const missing = langs.filter((lang) => !installed.has(lang));
@@ -457,7 +457,7 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
           const label = ocrLanguagesLabel(missing);
           setChatError(
             `The OCR model for ${label} is not downloaded yet. Open the Translate panel, ` +
-              `click ΓÇ£${label}ΓÇ¥ in OCR languages and press Download, then ask again.`,
+              `click “${label}” in OCR languages and press Download, then ask again.`,
           );
           return;
         }
@@ -885,7 +885,6 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
             exportFileName={book.title}
             exportTitle="Translated book"
             onCancel={translation.cancelTranslation}
-            rateLimitRetry={translation.rateLimitRetry}
           />
         )}
       </header>

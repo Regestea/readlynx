@@ -31,12 +31,6 @@ interface TranslationControlsProps {
   downloadProgress: number | null;
   onDownload: (lang: string) => void;
   onDelete: (lang: string) => void;
-  /** Run status line (and the "no AI model" warning) — hosts that surface
-   *  progress themselves (the Manage dialog) turn it off. */
-  showStatus?: boolean;
-  status?: string | null;
-  error?: string | null;
-  rateLimitRetry?: number | null;
   /** The "current page / page range…" picker only makes sense next to the
    *  single-unit Translate action, so the Manage dialog hides it. */
   showUnitPicker?: boolean;
@@ -73,10 +67,6 @@ export function TranslationControls({
   downloadProgress,
   onDownload,
   onDelete,
-  showStatus = true,
-  status = null,
-  error = null,
-  rateLimitRetry = null,
   showUnitPicker = false,
   onOpenRange,
   className = "",
@@ -304,18 +294,6 @@ export function TranslationControls({
           />
           <span>Enhance translation</span>
         </label>
-      )}
-
-      {showStatus && (status || error) && (
-        <span
-          className={
-            error ? styles.errorText : rateLimitRetry ? styles.retryWarning : styles.statusText
-          }
-          role={error ? "alert" : "status"}
-          title={error ?? status ?? ""}
-        >
-          {error ?? status}
-        </span>
       )}
 
       {isPdf && pdfMethod === "vision" && (

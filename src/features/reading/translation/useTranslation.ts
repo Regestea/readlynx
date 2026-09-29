@@ -4,6 +4,7 @@ import type { AiModel } from "../../../infrastructure/db/entities";
 import type { BookSourceType } from "../../../infrastructure/db/entities";
 import type { PdfViewerHandle } from "../../../components/pdfViewer/PdfViewer.tsx";
 import type { EpubViewerHandle } from "../../../components/epubViewer/EpubViewer.tsx";
+import { useToast } from "../../../components/ui/Toast/ToastContext";
 import {
   normalizeTranslatedMarkdown,
   replaceImageTokens,
@@ -247,6 +248,11 @@ export function useTranslation({
   const [viewMode, setViewModeState] = useState<TranslationViewMode>("original");
   const [settings, setSettings] = useState<TranslationSettings>(DEFAULT_TRANSLATION_SETTINGS);
   const [unitKey, setUnitKey] = useState<TranslationUnitKey | null>(null);
+  /** `status` carries live progress only ("Page 3 of 12…", "Recognizing
+   *  page… 42%") and is rendered by the toolbar next to the spinner. Anything
+   *  that ends a run — done, cancelled, failed — is a notification instead and
+   *  goes through `toast`, so nothing lingers in the toolbar after the fact. */
+  const toast = useToast();
 
   const [markdown, setMarkdown] = useState<string | null>(null);
   /** Which unit the currently displayed `markdown` belongs to (null while
@@ -267,8 +273,6 @@ export function useTranslation({
    *  Read once for the Manage translations dialog and then kept up to date
    *  in memory as bulk units finish, so the dialog never re-queries. */
   const [unitIndex, setUnitIndex] = useState<TranslationUnitIndex>(EMPTY_UNIT_INDEX);
-  /** Rate-limit retry attempt counter (null when not retrying). */
-  const [rateLimitRetry, setRateLimitRetry] = useState<number | null>(null);
   /** True while waiting for the EPUB viewer to finish loading so cached
    *  translation image tokens can be resolved into real image URLs. */
   const [imagesPending, setImagesPending] = useState(false);
@@ -741,7 +745,6 @@ export function useTranslation({
             const retrying = `"${label}" — ${failure}. Retrying (${attempt + 1}/${MAX_ATTEMPTS_PER_MODEL})…`;
             baseStatusRef.current = retrying;
             setStatus(retrying);
-            setRateLimitRetry(null);
           }
         }
         failures.push(`${label}: ${failure}`);
@@ -807,22 +810,24 @@ export function useTranslation({
       if (!result || !result.ok) {
         throw new Error(result?.error ?? `Could not download the ${lang} model.`);
       }
-      setStatus(`"${lang}" model installed.`);
+      setStatus(null);
+      toast.success(`"${lang}" model installed.`);
       await refreshModels();
     } catch (err) {
-      setStatus(err instanceof Error ? err.message : String(err));
+      setStatus(null);
+      toast.error(err instanceof Error ? err.message : String(err));
     } finally {
       downloadingRef.current = null;
       setDownloading(null);
       setDownloadProgress(null);
     }
-  }, [refreshModels]);
+  }, [refreshModels, toast]);
 
   const deleteModel = useCallback(async (lang: string) => {
     await window.readlynx?.ocr.deleteModel(lang);
     await refreshModels();
-    setStatus(`"${lang}" model removed.`);
-  }, [refreshModels]);
+    toast.info(`"${lang}" model removed.`);
+  }, [refreshModels, toast]);
 
   /** Live OCR progress while a page is being recognized. */
   useEffect(() => {
@@ -834,22 +839,18 @@ export function useTranslation({
     return () => unsubscribe?.();
   }, [busy, sourceType, settings.pdfMethod]);
 
-  /** Rate-limit retry indicator: shows "retrying (attempt N)" while the AI
-   *  call is being retried due to HTTP 429. */
+  /** Rate-limit retry indicator: appends "retrying (attempt N)" to the live
+   *  status line while the AI call is being retried due to HTTP 429. */
   useEffect(() => {
     if (!busy) return;
     const unsubscribe =
       window.readlynx?.ai.onRateLimitRetry(({ attempt }) => {
-        setRateLimitRetry(attempt);
         const base = baseStatusRef.current;
         if (base) {
           setStatus(`${base} (retrying – attempt ${attempt})`);
         }
       });
-    return () => {
-      unsubscribe?.();
-      setRateLimitRetry(null);
-    };
+    return () => unsubscribe?.();
   }, [busy]);
 
   /** Download progress while an OCR model is being fetched. */
@@ -1058,7 +1059,6 @@ export function useTranslation({
             ? `Translating ${unitLabel}…`
             : `Translating chunk ${index + 1} of ${chunks.length}…`;
         baseStatusRef.current = chunkStatus;
-        setRateLimitRetry(null);
         setStatus(chunkStatus);
         const chunkRaw = await chatWithFailover({
           messages: [
@@ -1075,7 +1075,6 @@ export function useTranslation({
         // and inline code are left alone by the stripper.
         const normalized = stripLeakedHtmlTags(normalizeTranslatedMarkdown(chunkRaw));
         results.push(normalized);
-        setRateLimitRetry(null);
         baseStatusRef.current = null;
       }
       // Save chapter images to the FileStore and replace [IMG-n] tokens with
@@ -1161,11 +1160,11 @@ export function useTranslation({
         .filter((page) => Number.isInteger(page) && page > 0)
         .sort((a, b) => a - b);
       if (ordered.length === 0) {
-        setError("Select at least one page to translate.");
+        toast.error("Select at least one page to translate.");
         return;
       }
       if (orderedModelCandidates().length === 0) {
-        setError("No AI model configured. Add one in Settings → AI Models.");
+        toast.error("No AI model configured. Add one in Settings → AI Models.");
         return;
       }
 
@@ -1194,11 +1193,12 @@ export function useTranslation({
               : { ...current, pages: [...current.pages, page].sort((a, b) => a - b) },
           );
         }
-        setStatus(
-          cancelRequestedRef.current
-            ? `Cancelled — ${done} of ${count} page${count === 1 ? "" : "s"} translated.`
-            : `Translated ${count} page${count === 1 ? "" : "s"}.`,
-        );
+        setStatus(null);
+        if (cancelRequestedRef.current) {
+          toast.info(`Cancelled — ${done} of ${count} page${count === 1 ? "" : "s"} translated.`);
+        } else {
+          toast.success(`Translated ${count} page${count === 1 ? "" : "s"}.`);
+        }
         setRangeProgress(null);
         // The on-screen unit may fall inside the range: re-read its rows.
         setRefreshTick((tick) => tick + 1);
@@ -1206,11 +1206,11 @@ export function useTranslation({
         // Pages finished before the failure keep their rows; the rest are
         // untouched.
         setRangeProgress(null);
+        setStatus(null);
         if (err instanceof TranslationCancelledError || isAiAbortError(err)) {
-          setStatus(`Cancelled — ${done} of ${count} page${count === 1 ? "" : "s"} translated.`);
+          toast.info(`Cancelled — ${done} of ${count} page${count === 1 ? "" : "s"} translated.`);
         } else {
-          setError(err instanceof Error ? err.message : String(err));
-          setStatus(null);
+          toast.error(err instanceof Error ? err.message : String(err));
         }
       } finally {
         busyRef.current = false;
@@ -1218,7 +1218,7 @@ export function useTranslation({
         setBusy(false);
       }
     },
-    [sourceType, translatePdfPage, orderedModelCandidates],
+    [sourceType, translatePdfPage, orderedModelCandidates, toast],
   );
 
   /** Translates a contiguous range of PDF pages (the range slider in the
@@ -1226,14 +1226,14 @@ export function useTranslation({
   const translateRange = useCallback(
     async (from: number, to: number) => {
       if (!Number.isInteger(from) || !Number.isInteger(to) || to < from) {
-        setError("Pick a valid page range (from ≤ to).");
+        toast.error("Pick a valid page range (from ≤ to).");
         return;
       }
       const pages: number[] = [];
       for (let page = from; page <= to; page += 1) pages.push(page);
       await translatePages(pages);
     },
-    [translatePages],
+    [translatePages, toast],
   );
 
   /** Re-reads which units of the book already have a translation. Cheap
@@ -1327,11 +1327,11 @@ export function useTranslation({
       if (busyRef.current) return;
       const ordered = [...new Set(chapterKeys)].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
       if (ordered.length === 0) {
-        setError("Select at least one chapter to translate.");
+        toast.error("Select at least one chapter to translate.");
         return;
       }
       if (orderedModelCandidates().length === 0) {
-        setError("No AI model configured. Add one in Settings → AI Models.");
+        toast.error("No AI model configured. Add one in Settings → AI Models.");
         return;
       }
 
@@ -1354,6 +1354,9 @@ export function useTranslation({
       setStatus(null);
       cancelRequestedRef.current = false;
       let done = 0;
+      /** A unit that could not be read stops the run without throwing, so its
+       *  outcome is reported from here instead of from the catch below. */
+      let readFailure: string | null = null;
       setRangeProgress({ done: 0, total: count });
       // One archive is opened for the whole run and closed when it ends.
       let contents: EpubContents | null = null;
@@ -1384,7 +1387,7 @@ export function useTranslation({
             setStatus(`Translating chapter ${index + 1} of ${count}…`);
             const content = await contents?.readChapter(Number(chapterKey), currentSettings.epubExtraction);
             if (!content) {
-              setError(`Chapter ${Number(chapterKey) + 1} could not be read from the EPUB.`);
+              readFailure = `Chapter ${Number(chapterKey) + 1} could not be read from the EPUB.`;
               break;
             }
             await translateChunkedUnit({
@@ -1405,11 +1408,15 @@ export function useTranslation({
               : { ...current, chapters: [...current.chapters, chapterKey] },
           );
         }
-        setStatus(
-          cancelRequestedRef.current
-            ? `Cancelled — ${done} of ${count} ${unitLabel}${count === 1 ? "" : "s"} translated.`
-            : `Translated ${count} ${unitLabel}${count === 1 ? "" : "s"}.`,
-        );
+        setStatus(null);
+        if (readFailure) toast.error(readFailure);
+        else if (cancelRequestedRef.current) {
+          toast.info(
+            `Cancelled — ${done} of ${count} ${unitLabel}${count === 1 ? "" : "s"} translated.`,
+          );
+        } else {
+          toast.success(`Translated ${count} ${unitLabel}${count === 1 ? "" : "s"}.`);
+        }
         setRangeProgress(null);
         // The on-screen unit may be among them: re-read its rows.
         setRefreshTick((tick) => tick + 1);
@@ -1417,11 +1424,13 @@ export function useTranslation({
         // Units finished before the failure keep their rows; the rest are
         // untouched.
         setRangeProgress(null);
+        setStatus(null);
         if (err instanceof TranslationCancelledError || isAiAbortError(err)) {
-          setStatus(`Cancelled — ${done} of ${count} ${unitLabel}${count === 1 ? "" : "s"} translated.`);
+          toast.info(
+            `Cancelled — ${done} of ${count} ${unitLabel}${count === 1 ? "" : "s"} translated.`,
+          );
         } else {
-          setError(err instanceof Error ? err.message : String(err));
-          setStatus(null);
+          toast.error(err instanceof Error ? err.message : String(err));
         }
       } finally {
         contents?.close();
@@ -1434,6 +1443,7 @@ export function useTranslation({
       sourceType,
       orderedModelCandidates,
       translateChunkedUnit,
+      toast,
     ],
   );
 
@@ -1475,7 +1485,7 @@ export function useTranslation({
   const translate = useCallback(async (force = false) => {
     const key = unitKeyRef.current;
     if (!key) {
-      setError("Nothing to translate yet — open the book first.");
+      toast.error("Nothing to translate yet — open the book first.");
       return;
     }
     // Prevent duplicate concurrent translates for the same unit, but allow
@@ -1485,7 +1495,7 @@ export function useTranslation({
     if (!force && hasTranslationRef.current) return;
 
     if (orderedModelCandidates().length === 0) {
-      setError("No AI model configured. Add one in Settings → AI Models.");
+      toast.error("No AI model configured. Add one in Settings → AI Models.");
       return;
     }
 
@@ -1562,7 +1572,6 @@ export function useTranslation({
         rawCachedMarkdownRef.current = null;
       }
       setStatus(null);
-      setRateLimitRetry(null);
       baseStatusRef.current = null;
       // The user asked for the translation — take them to it once it's done,
       // but only if they haven't navigated to a different unit in the meantime.
@@ -1573,12 +1582,16 @@ export function useTranslation({
       // Previous translations are kept untouched — rows are only written
       // after a successful generation.
       if (err instanceof TranslationCancelledError || isAiAbortError(err)) {
-        setStatus("Translation cancelled.");
-      } else {
-        setError(err instanceof Error ? err.message : String(err));
         setStatus(null);
+        toast.info("Translation cancelled.");
+      } else {
+        const message = err instanceof Error ? err.message : String(err);
+        // The view keeps the message next to the text it belongs to, and the
+        // toast reports it even when the original book is still on screen.
+        setError(message);
+        setStatus(null);
+        toast.error(message);
       }
-      setRateLimitRetry(null);
       baseStatusRef.current = null;
     } finally {
       // Only clear if this unit is still the one we were translating —
@@ -1596,6 +1609,7 @@ export function useTranslation({
     sourceType,
     bookId,
     orderedModelCandidates,
+    toast,
   ]);
 
   const regenerate = useCallback(() => {
@@ -1669,6 +1683,5 @@ markdown,
     cancelTranslation,
     rangeProgress,
     regenerate,
-    rateLimitRetry,
   };
 }

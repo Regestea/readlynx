@@ -72,8 +72,6 @@ interface TranslationSettingsPanelProps {
   exportTitle: string;
   /** Stops the running range translation immediately (aborts the AI request). */
   onCancel: () => void;
-  /** Rate-limit retry attempt (null when not retrying). */
-  rateLimitRetry: number | null;
 }
 
 /** Translation settings toolbar, anchored in the reading view header bar:
@@ -114,7 +112,6 @@ export function TranslationSettingsPanel({
   exportFileName,
   exportTitle,
   onCancel,
-  rateLimitRetry,
 }: TranslationSettingsPanelProps) {
   const [rangeOpen, setRangeOpen] = useState(false);
   const [manageOpen, setManageOpen] = useState(false);
@@ -144,8 +141,10 @@ export function TranslationSettingsPanel({
   const manageSettingsSummary = `${rangeMethodLabel}, target ${rangeTargetLabel}, model ${rangeModelLabel}`;
 
   /** The same settings row, mounted per host: the toolbar adds the
-   *  "current page / page range…" picker and shows the run status; the Manage
-   *  dialog drops both because it has its own scope and progress display. */
+   *  "current page / page range…" picker; the Manage dialog drops it because
+   *  it has its own scope and progress display. Run progress is shown by the
+   *  host (spinner in the toolbar, footer line in the dialog) while results
+   *  and failures arrive as toasts, so no status line is rendered here. */
   const renderControls = (host: "toolbar" | "manage") => (
     <TranslationControls
       sourceType={sourceType}
@@ -164,10 +163,6 @@ export function TranslationSettingsPanel({
       downloadProgress={downloadProgress}
       onDownload={onDownload}
       onDelete={onDelete}
-      showStatus={host === "toolbar"}
-      status={status}
-      error={error}
-      rateLimitRetry={rateLimitRetry}
       showUnitPicker={host === "toolbar"}
       onOpenRange={() => setRangeOpen(true)}
       className={host === "toolbar" ? styles.controlsToolbar : styles.controlsDialog}
