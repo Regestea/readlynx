@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { PaginationService, buildPrintCss, themeVariables } from "../../infrastructure/export/paginationService";
-import { paginateAvoidingEmptyPages } from "../../infrastructure/export/emptyPageBreaks";
+import {
+  paginateAvoidingEmptyPages,
+  type BreakReport,
+} from "../../infrastructure/export/emptyPageBreaks";
 import { DEFAULT_CHAPTER_MIN_LINES } from "../../infrastructure/export/types";
 import { scaleHtmlFontSizes } from "../../infrastructure/export/fontScale";
 import { codeThemeCss, resolveDocumentMode } from "../../infrastructure/export/exportTheme";
@@ -20,6 +23,9 @@ export interface PdfPreviewProps {
   /** How many chapter breaks the empty-page pass removed, so the dialog can
    *  say so instead of the pages silently changing shape. */
   onChapterBreaksDropped?: (count: number) => void;
+  /** Per-break verdicts of the measure pass, so the dialog can show why each
+   *  break was dropped or kept. */
+  onChapterBreaksReport?: (breaks: BreakReport[]) => void;
   className?: string;
 }
 
@@ -34,6 +40,7 @@ export function PdfPreview({
   options,
   onPageCountChange,
   onChapterBreaksDropped,
+  onChapterBreaksReport,
   className,
 }: PdfPreviewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -116,6 +123,7 @@ export function PdfPreview({
             return;
           }
           onChapterBreaksDropped?.(pass.dropped.length);
+          onChapterBreaksReport?.(pass.breaks);
           // Inline the paper/ink colours on the rendered page elements so the
           // theme always shows in the preview, independent of how Paged.js
           // re-emits the stylesheets into the document head.
@@ -149,7 +157,7 @@ export function PdfPreview({
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [bodyHtml, options, onPageCountChange, onChapterBreaksDropped]);
+  }, [bodyHtml, options, onPageCountChange, onChapterBreaksDropped, onChapterBreaksReport]);
 
   useEffect(() => {
     return () => {
