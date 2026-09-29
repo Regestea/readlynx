@@ -3,6 +3,7 @@ import { Check, Download, FileDown } from "lucide-react";
 import { EpubViewer } from "../epubViewer/EpubViewer";
 import { buildHtmlDocument } from "../../infrastructure/export/htmlDocument";
 import { countChapterBreaks, countChapterHeadings } from "../../infrastructure/export/chapterBreaks";
+import type { BreakReport } from "../../infrastructure/export/emptyPageBreaks";
 import type { PdfExportOptions } from "../../infrastructure/export/types";
 import {
   CODE_FONT_OPTIONS,
@@ -183,6 +184,20 @@ export function ExportDialog({
   const reportDroppedBreaks = useCallback((count: number) => {
     setChapterBreaksDropped((previous) => (previous === count ? previous : count));
   }, []);
+  const [chapterBreakReport, setChapterBreakReport] = useState<BreakReport[]>([]);
+  const reportBreaks = useCallback((breaks: BreakReport[]) => {
+    setChapterBreakReport((previous) =>
+      previous.length === breaks.length &&
+      previous.every(
+        (entry, i) =>
+          entry.index === breaks[i].index &&
+          entry.decision === breaks[i].decision &&
+          entry.lines === breaks[i].lines,
+      )
+        ? previous
+        : breaks,
+    );
+  }, []);
 
   useEffect(() => {
     if (!open || settings.format !== "epub" || !content.epub) return;
@@ -231,6 +246,7 @@ export function ExportDialog({
       fontFamily: settings.fontFamily,
       showPageNumbers: settings.showPageNumbers,
       chapterLevels: settings.chapterLevels,
+      chapterMinLines: settings.chapterMinLines,
       inlineImages: true,
       coverImage: resolvedCover,
       template: settings.template,
@@ -622,6 +638,24 @@ export function ExportDialog({
                       been nearly empty.
                     </span>
                   ) : null}
+                  {chapterBreakReport.length > 0 ? (
+                    <ul className={styles.breakReport} aria-label="Chapter break measurements">
+                      {chapterBreakReport.map((entry) => (
+                        <li key={entry.index}>
+                          <span className={styles.breakReportHeading}>
+                            “{entry.heading || `Break ${entry.index}`}”
+                          </span>{" "}
+                          <span className={styles.breakReportDetail}>
+                            p.{entry.openerPage} ·{" "}
+                            {entry.lines === null
+                              ? "unmeasurable"
+                              : `${entry.lines.toFixed(1)} of ${entry.threshold.toFixed(0)} lines`}{" "}
+                            → {entry.decision === "dropped" ? "dropped" : "kept"}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
                 </fieldset>
               </div>
             </>
@@ -639,6 +673,7 @@ export function ExportDialog({
               options={previewOptions}
               onPageCountChange={setPageCount}
               onChapterBreaksDropped={reportDroppedBreaks}
+              onChapterBreaksReport={reportBreaks}
               className={styles.previewBody}
             />
           )}
