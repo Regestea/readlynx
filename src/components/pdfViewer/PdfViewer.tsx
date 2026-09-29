@@ -471,6 +471,31 @@ function PdfViewerInner({
     onPageSnapshotRef.current = onPageSnapshot;
   }, [onPageSnapshot]);
 
+  /** Hands a PNG of the whole current page to the host, which decides between
+   *  OCR (recognized page text seeded into the chat) and AI vision (the page
+   *  image itself) from its top setting. Shared by the click bubble and the
+   *  right-click shortcut. */
+  const askAboutPage = useCallback(() => {
+    const image = canvasRef.current?.toDataURL("image/png") ?? null;
+    if (image) onAskAi?.({ image });
+  }, [onAskAi]);
+
+  /** Right-clicking the page with no text selection asks the AI about the
+   *  whole page instead of opening the native menu ΓÇö the same as the click
+   *  bubble, minus the extra step. A text selection is left alone so the
+   *  native copy menu still works (same rule as the Markdown/EPUB views). */
+  const handlePageContextMenu = useCallback(
+    (event: ReactMouseEvent<HTMLDivElement>) => {
+      if (!onAskAi) return;
+      const selection = window.getSelection();
+      if (selection && !selection.isCollapsed && selection.toString().trim()) return;
+      event.preventDefault();
+      setAiSelection(null);
+      askAboutPage();
+    },
+    [onAskAi, askAboutPage],
+  );
+
   useEffect(() => {
     let cancelled = false;
 
@@ -839,6 +864,7 @@ const task = pageProxy.render({ canvas, viewport, transform });
           <div
             className={`${styles.page} pdf-page`}
             style={{ "--scale-factor": String(scale) } as CSSProperties}
+            onContextMenu={handlePageContextMenu}
           >
             <canvas ref={canvasRef} className={`${styles.canvas} pdf-canvas`} onClick={handlePageClick} />
             <div className="pdf-canvas-tint" aria-hidden="true" />
@@ -866,9 +892,8 @@ const task = pageProxy.render({ canvas, viewport, transform });
           y={aiSelection.y}
           text=""
           onAsk={() => {
-            const image = canvasRef.current?.toDataURL("image/png") ?? null;
             setAiSelection(null);
-            if (image) onAskAi({ image });
+            askAboutPage();
           }}
         />
       )}
