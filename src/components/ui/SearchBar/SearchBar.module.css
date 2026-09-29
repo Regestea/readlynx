@@ -14,7 +14,8 @@
   padding: 6px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-input);
-  background: var(--color-card);
+  background: var(--color-card-solid);
+  backdrop-filter: blur(var(--blur-glass));
   box-shadow: var(--shadow-lg);
   max-height: 320px;
   overflow-y: auto;

@@ -1,4 +1,9 @@
 .header {
+  /* `backdrop-filter` already traps the search dropdown in its own stacking
+     context, so the header must be positioned + layered or page content
+     painted after it covers the suggestions panel. */
+  position: relative;
+  z-index: var(--z-header);
   display: flex;
   align-items: center;
   gap: var(--space-6);

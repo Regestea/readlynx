@@ -87,6 +87,10 @@
   --color-bg: #f7f2ea;
   --color-bg-secondary: #efe3d2;
   --color-card: rgb(255 248 240 / 72%);
+
+  /* Floating surfaces (search suggestions, popovers) sit on top of page
+     content, so they stay nearly opaque to keep their own text readable. */
+  --color-card-solid: rgb(255 250 244 / 97%);
   --color-glass: rgb(255 250 245 / 58%);
   --color-hover: rgb(255 255 255 / 18%);
   --color-border: rgb(255 255 255 / 38%);
@@ -167,6 +171,7 @@ html[data-theme="dark"] {
   --color-bg: #162033;
   --color-bg-secondary: #1f2b43;
   --color-card: rgb(26 34 53 / 72%);
+  --color-card-solid: rgb(26 34 53 / 97%);
   --color-glass: rgb(30 40 62 / 60%);
   --color-hover: rgb(255 255 255 / 10%);
   --color-border: rgb(255 255 255 / 8%);
