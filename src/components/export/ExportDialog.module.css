@@ -251,6 +251,29 @@
   font-size: var(--font-size-xs);
 }
 
+/* Per-break measurements of the empty-page pass: which heading opened which
+   page, how many lines that page holds, and whether the break was dropped. */
+.breakReport {
+  margin: 2px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 120px;
+  overflow-y: auto;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+}
+
+.breakReportHeading {
+  color: var(--color-text-secondary);
+}
+
+.breakReportDetail {
+  font-variant-numeric: tabular-nums;
+}
+
 /* ---------- Swatches ---------- */
 
 .swatchRow {
