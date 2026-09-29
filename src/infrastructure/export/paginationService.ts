@@ -34,6 +34,9 @@ export interface PaginateResult {
 export class PaginationService {
   private previewer: Previewer | null = null;
   private host: HTMLDivElement | null = null;
+  /** Style elements this service's polisher injected, so a re-pagination can
+   *  remove exactly its own and no one else's. */
+  private injectedStyles: HTMLStyleElement[] = [];
 
   /** Layout `bodyHtml` into physical pages inside `target` (or a private hidden host). */
   async paginate(
@@ -50,12 +53,29 @@ export class PaginationService {
     this.previewer = new Previewer(settings);
 
     try {
+      // Paged.js *appends* a fresh `.pagedjs_pages` to the render target on
+      // every run and never removes the previous one, so a target reused for
+      // a second pass would keep two layouts stacked in it. The empty-page
+      // pass paginates twice into the same preview container, and reading back
+      // the first (stale) container reported the un-dropped layout, so the
+      // preview kept showing every chapter break. Clear the target ourselves.
+      for (const stale of Array.from(host.querySelectorAll(".pagedjs_pages"))) {
+        stale.remove();
+      }
+      // Same reason for the stylesheets: the previous run's copies would
+      // otherwise still be in the cascade.
+      this.clearInjectedStyles();
+
       // pagedjs's polisher treats bare string entries as URLs to fetch, so CSS
       // is passed as `{ href: text }` objects.
       const stylesheets = cssTexts.map((text, index) => ({
         [`readlynx-print-${index}.css`]: text,
       }));
+      const stylesBefore = new Set(document.querySelectorAll(`style[${PAGED_STYLE_ATTR}]`));
       const flow = await this.previewer.preview(bodyHtml, stylesheets, host);
+      this.injectedStyles = Array.from(
+        document.querySelectorAll<HTMLStyleElement>(`style[${PAGED_STYLE_ATTR}]`),
+      ).filter((style) => !stylesBefore.has(style));
       const container = PaginationService.getPagesContainer(host);
       const pages = Array.from(container.querySelectorAll<HTMLElement>(".pagedjs_page"));
       return { pages, pageCount: pages.length, flow, container };
@@ -67,7 +87,10 @@ export class PaginationService {
 
   /** Largest container that holds every rendered page of `from`. */
   static getPagesContainer(from: HTMLElement): HTMLElement {
-    return (from.querySelector(".pagedjs_pages") ?? from) as HTMLElement;
+    // The *last* match is this run's layout: Paged.js appends a new
+    // `.pagedjs_pages` per run, and a target can still hold an earlier one.
+    const containers = from.querySelectorAll(".pagedjs_pages");
+    return (containers[containers.length - 1] ?? from) as HTMLElement;
   }
 
   /** Remove the hidden host, injected pagedjs styles and any previewer instance. */
@@ -84,6 +107,27 @@ export class PaginationService {
       this.host.remove();
     }
     this.host = null;
+    // `collectPagedStyles()` (used by the standalone export) reads the
+    // engine's tags out of `document.head`, so a preview that is still mounted
+    // would otherwise contribute its sheets to the exported file.
+    this.clearInjectedStyles();
+  }
+
+  /** Drop the engine's injected stylesheets, but only the ones *this* service
+   *  caused.
+   *
+   *  Paged.js's polisher writes every sheet it is given into
+   *  `document.head` and only `destroy()` takes them back out. A service that
+   *  paginates twice (the empty-page pass does) would otherwise stack a second
+   *  copy of the print sheet, and the later copy wins the cascade — so page
+   *  geometry could drift between the preview and the exported file. Scoped to
+   *  the elements this run added, so a concurrent preview's own sheets are
+   *  never yanked out from under it. */
+  private clearInjectedStyles(): void {
+    for (const style of this.injectedStyles) {
+      if (style.isConnected) style.remove();
+    }
+    this.injectedStyles = [];
   }
 
   private ensureHost(): HTMLDivElement {
