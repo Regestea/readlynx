@@ -70,6 +70,10 @@
   --z-dialog: 40;
   --z-toast: 50;
 
+  /* Notifications sit above dialogs and the chat modal: a message raised
+     while one of them is open still has to be seen. */
+  --z-notification: 60;
+
   /* ---------- Layout ---------- */
   --sidebar-width: 272px;
   --sidebar-width-collapsed: 80px;
@@ -110,6 +114,7 @@
   --color-success-soft: rgb(110 137 101 / 14%);
   --color-warning: #c18b4d;
   --color-danger: #c0563f;
+  --color-danger-soft: rgb(192 86 63 / 14%);
 
   /* Effects */
   --color-track: rgb(50 43 38 / 10%);
@@ -189,6 +194,7 @@ html[data-theme="dark"] {
   --color-success-soft: rgb(141 175 137 / 16%);
   --color-warning: #c18b4d;
   --color-danger: #d96b52;
+  --color-danger-soft: rgb(217 107 82 / 16%);
 
   /* Effects */
   --color-track: rgb(238 242 247 / 12%);
