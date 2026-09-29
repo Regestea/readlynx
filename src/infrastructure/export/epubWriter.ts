@@ -81,23 +81,78 @@ function selfCloseVoidElements(html: string): string {
   });
 }
 
-/** Splits the body HTML into chapters at top-level <h1> boundaries. */
+/** Splits the body HTML into chapters at `<h1>` boundaries.
+ *
+ *  A chapter file is a standalone XHTML document, so a chapter has to be a
+ *  *well-formed* fragment. Slicing the body string at every `<h1>` cannot
+ *  guarantee that: a book is often wrapped in one container — `renderTranslatedBook`
+ *  emits the whole book as `<div dir="rtl">…</div>` — and the slice then cuts
+ *  that container in half, giving the first chapter an unclosed `<div>` and the
+ *  last one a stray `</div>`. EPUB readers reject the result outright with
+ *  "Opening and ending tag mismatch".
+ *
+ *  So the split happens on the parsed tree instead. Every chapter re-opens a
+ *  shallow clone of the element the headings live in, which keeps the split
+ *  balanced and preserves that element's attributes (notably `dir`) on every
+ *  chapter. When the headings are not siblings, there is no safe boundary and
+ *  the body is returned whole rather than mangled.
+ */
 function splitChapters(bodyHtml: string): string[] {
-  const chunks: string[] = [];
-  const h1Re = /<h1[ >]/gi;
-  let last = 0;
-  let match: RegExpExecArray | null;
-  while ((match = h1Re.exec(bodyHtml)) !== null) {
-    chunks.push(bodyHtml.slice(last, match.index));
-    last = match.index;
-  }
-  chunks.push(bodyHtml.slice(last));
+  if (!bodyHtml.trim()) return [bodyHtml];
 
-  const preamble = chunks.shift();
-  const chapters = chunks.filter((chunk) => chunk.trim().length > 0);
-  if (preamble && preamble.trim().length > 0) chapters.unshift(preamble);
-  if (chapters.length === 0) chapters.push(bodyHtml || "");
-  return chapters;
+  let body: HTMLElement;
+  try {
+    body = new DOMParser().parseFromString(`<body>${bodyHtml}</body>`, "text/html").body;
+  } catch {
+    return [bodyHtml];
+  }
+
+  const headings = Array.from(body.querySelectorAll("h1"));
+  if (headings.length < 2) return [bodyHtml];
+
+  const container = headings[0].parentElement;
+  // Only split where the boundaries are unambiguous: every heading a direct
+  // child of the same element, and nothing else beside that element. Any other
+  // shape would either lose the neighbouring content or need a nested split.
+  if (!container || !headings.every((heading) => heading.parentElement === container)) {
+    return [bodyHtml];
+  }
+  if (container !== body && Array.from(body.children).some((child) => child !== container)) {
+    return [bodyHtml];
+  }
+
+  /** One chapter's nodes, re-wrapped in a shallow clone of `container` so the
+   *  fragment is balanced and keeps the container's attributes. */
+  const serialize = (nodes: Node[]): string => {
+    if (container === body) {
+      const holder = body.ownerDocument.createElement("div");
+      for (const node of nodes) holder.appendChild(node);
+      return holder.innerHTML;
+    }
+    const shell = container.cloneNode(false) as HTMLElement;
+    for (const node of nodes) shell.appendChild(node);
+    return shell.outerHTML;
+  };
+
+  const groups: Node[][] = [];
+  let current: Node[] = [];
+  for (const node of Array.from(container.childNodes)) {
+    const startsChapter =
+      (node as Element).nodeType === 1 && (node as Element).tagName === "H1";
+    // Whitespace between blocks is not a chapter of its own, so it stays with
+    // whichever chapter precedes it.
+    if (startsChapter && current.some((n) => (n.textContent ?? "").trim() !== "")) {
+      groups.push(current);
+      current = [];
+    }
+    current.push(node);
+  }
+  if (current.length > 0) groups.push(current);
+
+  const chapters = groups
+    .map((group) => serialize(group))
+    .filter((chapter) => chapter.trim().length > 0);
+  return chapters.length > 0 ? chapters : [bodyHtml];
 }
 
 /** Dominant text direction of an HTML fragment, for document-level `dir`. */
@@ -182,13 +237,12 @@ export function buildEpubFiles(
   const language = metadata.language?.trim() || "en";
   const uid = metadata.identifier?.trim() || `urn:uuid:${makeUuid()}`;
 
+  // Order matters: the DOM round-trip inside `splitChapters` re-serialises void
+  // elements as `<img>` again, so the XHTML fixes are applied *after* the
+  // split, per chapter. Doing it before would undo itself.
   const chapters = splitChapters(
-    normalizeNamedEntities(
-      selfCloseVoidElements(
-        highlightBodyCode(scaleHtmlFontSizes(bodyHtml, options.fontSizeScalePct)),
-      ),
-    ),
-  );
+    highlightBodyCode(scaleHtmlFontSizes(bodyHtml, options.fontSizeScalePct)),
+  ).map((chapter) => normalizeNamedEntities(selfCloseVoidElements(chapter)));
   const bookDir = chapterDirection(bodyHtml);
   const chapterTitles = chapters.map(
     (chapter, i) => extractFirstHeading(chapter) || (chapters.length > 1 ? `Chapter ${i + 1}` : title),
