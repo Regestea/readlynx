@@ -3,22 +3,22 @@ import { CHAPTER_INDEX_ATTR, stampChapterBreaks } from "./chapterBreaks";
 /**
  * Chapter breaks that would leave a page nearly empty.
  *
- * A break before a heading is right when the page it opens holds a real amount
- * of content. It is wrong when that page holds a line or two: the page opens,
- * holds almost nothing, and is abandoned by the next break. Books assembled
- * from per-page translations hit this constantly.
+ * A break before a heading is right when the page it opens holds a real
+ * amount of content. It is wrong when that page holds a line or two: the page
+ * opens, holds almost nothing, and is abandoned by the next break. Books
+ * assembled from per-page translations hit this constantly.
  *
  * Rather than guess from character counts, this measures the *actual* rendered
  * page: paginate once, look at how many lines of body text each opener page
  * really holds, drop the breaks that opened an under-filled one, and paginate
- * once more. Dropping a break only ever moves content earlier, so one measure
- * pass plus one confirm pass is enough — at most two paginations.
+ * once more to confirm. Dropping a break only ever moves content earlier, so
+ * one measure pass plus one confirm pass is enough — at most two paginations.
  */
 
 /** A page is only judged against a fraction of its capacity, so an absolute
- *  `minLines` that exceeds what the page can physically hold (small page, large
- *  font, "20+ lines") degrades to "half a page" instead of deleting every
- *  break in the document. */
+ *  `minLines` that exceeds what the page can physically hold (small page,
+ *  large font, "20+ lines") degrades to "half a page" instead of deleting
+ *  every break in the document. */
 const MAX_PAGE_FRACTION = 0.5;
 
 /** Non-leaf boxes whose own rectangle matters. Text leaves are always
@@ -72,9 +72,9 @@ function availableHeightPx(content: HTMLElement): number | null {
   return available > 0 ? available : null;
 }
 
-/** Effective threshold for an opener page: the requested `minLines`, capped at
- *  half the page capacity so the option stays meaningful across page sizes and
- *  font scales. */
+/** Effective threshold for an opener page: the requested `minLines`, capped
+ *  at half the page capacity so the option stays meaningful across page sizes
+ *  and font scales. */
 function effectiveThreshold(minLines: number, content: HTMLElement): number {
   const perLine = lineHeightPx(content);
   const available = availableHeightPx(content);
@@ -114,11 +114,12 @@ function pageFillLines(page: HTMLElement): number | null {
   return used > 0 ? used / perLine : 0;
 }
 
-/** The stamped heading that opened this page, or null when the page begins with
- *  ordinary content. Blaming a break that merely appears lower down the page
- *  would drop it for no reason, so the heading has to be the first thing on
- *  it. */
-function pageOpenerIndex(content: HTMLElement): number | null {
+/** A stamped heading plus the page it opened, if it really is the first thing
+ *  on that page. Blaming a break that merely appears lower down the page
+ *  would drop it for no reason. */
+function pageOpener(
+  content: HTMLElement,
+): { index: number; heading: string } | null {
   const opener = content.querySelector(`[${CHAPTER_INDEX_ATTR}]`);
   if (!opener) return null;
   const attr = opener.getAttribute(CHAPTER_INDEX_ATTR);
@@ -131,27 +132,61 @@ function pageOpenerIndex(content: HTMLElement): number | null {
     if ((node.textContent ?? "").trim() !== "") return null;
   }
   const index = Number(attr);
-  return Number.isInteger(index) && index >= 0 ? index : null;
+  if (!Number.isInteger(index) || index < 0) return null;
+  const heading = (opener.textContent ?? "").replace(/\s+/g, " ").trim().slice(0, 80);
+  return { index, heading };
 }
 
-/** Indices of the breaks that opened an under-filled page. */
-function underFilledBreaks(pages: HTMLElement[], minLines: number): Set<number> {
-  const offenders = new Set<number>();
+export type BreakDecision = "dropped" | "kept-roomy" | "kept-unmeasurable";
+
+/** What the measure pass saw for one chapter break, so the dialog can show
+ *  why each break was dropped or kept instead of leaving the user guessing. */
+export interface BreakReport {
+  /** Structural heading index (`data-rl-chapter`), stable across passes. */
+  index: number;
+  /** Heading text, trimmed, for mapping the report back to the document. */
+  heading: string;
+  /** 1-based page number that the break opened, in the measure pass. */
+  openerPage: number;
+  /** Lines of body text that opener page holds, or `null` when unmeasurable. */
+  lines: number | null;
+  /** Threshold applied to that page (after the capacity cap). */
+  threshold: number;
+  decision: BreakDecision;
+}
+
+/**
+ * Judges every chapter break against the rendered `pages`, in document order.
+ * Pure over the given pages: no pagination, no stamping, so it is cheap to
+ * call for reporting even when nothing will be dropped.
+ */
+export function evaluateBreaks(pages: HTMLElement[], minLines: number): BreakReport[] {
+  const reports: BreakReport[] = [];
   let measured = 0;
-  for (const page of pages) {
+  pages.forEach((page, pagePos) => {
     const content = page.querySelector<HTMLElement>(".pagedjs_page_content");
-    if (!content) continue;
-    const index = pageOpenerIndex(content);
-    if (index === null) continue;
+    if (!content) return;
+    const opener = pageOpener(content);
+    if (!opener) return;
     const lines = pageFillLines(page);
-    if (lines === null) continue;
-    measured += 1;
-    if (lines < effectiveThreshold(minLines, content)) offenders.add(index);
-  }
+    const threshold = effectiveThreshold(minLines, content);
+    if (lines !== null) measured += 1;
+    reports.push({
+      index: opener.index,
+      heading: opener.heading,
+      openerPage: pagePos + 1,
+      lines,
+      threshold,
+      decision:
+        lines === null ? "kept-unmeasurable" : lines < threshold ? "dropped" : "kept-roomy",
+    });
+  });
   // If nothing could be measured, do not conclude every page is empty: that
   // would silently delete every break in the document.
-  if (measured === 0 && pages.length > 0) return new Set();
-  return offenders;
+  if (measured === 0 && pages.length > 0) {
+    return reports.map((report) => ({ ...report, decision: "kept-unmeasurable" as const }));
+  }
+  return reports;
 }
 
 export interface ChapterPassResult<T> {
@@ -159,6 +194,8 @@ export interface ChapterPassResult<T> {
   result: T;
   /** Indices of the breaks that were removed, for reporting in the dialog. */
   dropped: number[];
+  /** Per-break verdicts of the measure pass, in document order. */
+  breaks: BreakReport[];
 }
 
 /**
@@ -179,18 +216,19 @@ export async function paginateAvoidingEmptyPages<T>(
 ): Promise<ChapterPassResult<T>> {
   const ticked = levels.filter((level) => Math.trunc(level) > 0);
   if (ticked.length === 0) {
-    return { result: await paginate(bodyHtml), dropped: [] };
+    return { result: await paginate(bodyHtml), dropped: [], breaks: [] };
   }
 
   // minLines of 0 means "keep every break": still stamp them, just do not drop
   // any. Skipping the stamp here would have silently disabled breaking instead.
   let result = await paginate(stampChapterBreaks(bodyHtml, ticked, new Set()));
-  if (!(minLines > 0)) return { result, dropped: [] };
+  if (!(minLines > 0)) return { result, dropped: [], breaks: [] };
 
-  const offenders = underFilledBreaks(pagesOf(result), minLines);
-  if (offenders.size === 0) return { result, dropped: [] };
+  const breaks = evaluateBreaks(pagesOf(result), minLines);
+  const offenders = new Set(breaks.filter((b) => b.decision === "dropped").map((b) => b.index));
+  if (offenders.size === 0) return { result, dropped: [], breaks };
 
   const dropped = [...offenders].sort((a, b) => a - b);
   result = await paginate(stampChapterBreaks(bodyHtml, ticked, offenders));
-  return { result, dropped };
+  return { result, dropped, breaks };
 }
