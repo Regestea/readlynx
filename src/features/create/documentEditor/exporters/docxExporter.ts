@@ -11,11 +11,12 @@ import {
   BorderStyle,
   Document,
   ExternalHyperlink,
+  Footer,
   HeadingLevel,
-  ImageRun,
   LevelFormat,
   LineRuleType,
   PageBreak,
+  PageNumber,
   Packer,
   Paragraph,
   ShadingType,
@@ -25,11 +26,22 @@ import {
   TextRun,
   WidthType,
 } from "docx";
+import type { ImageRun, XmlComponent } from "docx";
 import { PAGE_FORMATS, uniformMargins } from "../constants";
 import type { PageFormat } from "../constants";
-import type { ExportThemeOptions } from "../types";
 import { fontScaleFactor } from "../../../../infrastructure/export/fontScale";
-import { isRtlDominant } from "../utils/direction";
+import { justificationFor, parseWordColor, resolveDocxPalette } from "../../../../infrastructure/export/docxTheme";
+import type { DocxExportOptions } from "../../../../infrastructure/export/docxWriter";
+import {
+  decodeImage,
+  fitImage,
+  imageRun,
+  pngFromWebp,
+} from "../../../../infrastructure/export/docxImage";
+import type { DecodedImage } from "../../../../infrastructure/export/docxImage";
+import { latexToOmml } from "../../../../infrastructure/export/docxMath";
+import { resolveBlockDir } from "../../../../shared/document/direction";
+import type { TextDir } from "../../../../shared/document/direction";
 import { $isCalloutNode } from "../nodes/CalloutNode";
 import { $isCustomBlockNode } from "../nodes/CustomBlockNode";
 import { $isEquationNode } from "../nodes/EquationNode";
@@ -37,6 +49,17 @@ import { $isHtmlBlockNode } from "../nodes/HtmlBlockNode";
 import { $isImageNode } from "../nodes/ImageNode";
 import type { ImageNode } from "../nodes/ImageNode";
 import { $isPageBreakNode } from "../nodes/PageBreakNode";
+
+/**
+ * Word writer for the document editor's own node tree.
+ *
+ * The generic writer in `infrastructure/export/docxWriter.ts` covers the
+ * sources that only have HTML; this one walks Lexical directly, so it can keep
+ * what only the tree knows — the direction recorded on a block, an equation's
+ * inline/display distinction, the tone of a callout. Everything a Word file
+ * needs that is not in the tree (the math zone, the picture bytes, the code
+ * theme) comes from the shared modules, so the two writers cannot drift apart.
+ */
 
 type DocxChild = Paragraph | Table;
 
@@ -50,9 +73,10 @@ const IS_SUBSCRIPT = 32;
 const IS_SUPERSCRIPT = 64;
 const IS_HIGHLIGHT = 128;
 
-const MONO_FONT = "Consolas";
 const MAX_LIST_DEPTH = 4;
 const DEFAULT_MARGIN_MM = 12.7;
+/** Content width of the text column on A4 at the default margins, in points. */
+const CONTENT_WIDTH_PT = 450;
 
 const BLOCK_SHADING: Record<string, string> = {
   info: "EAF2FB",
@@ -64,61 +88,18 @@ const BLOCK_SHADING: Record<string, string> = {
   insight: "EDF3EC",
 };
 
+const BLOCK_BORDER: Record<string, string> = {
+  info: "2F6B57",
+  success: "5B6B50",
+  warning: "B9794C",
+  error: "CF5B47",
+  aside: "9A9A94",
+  spoiler: "9A8A5A",
+  insight: "2F6B57",
+};
+
 function twipsFromPx(px: number): number {
   return Math.round((px / 96) * 1440);
-}
-
-type ImageType = "png" | "jpg" | "gif";
-
-/** Reads the intrinsic width/height of a PNG, JPEG, or GIF from its bytes. */
-function imageAspectRatio(type: ImageType, data: Uint8Array): { width: number; height: number } | null {
-  if (type === "png") {
-    if (data.length < 24) return null;
-    const width = (data[16] << 24) | (data[17] << 16) | (data[18] << 8) | data[19];
-    const height = (data[20] << 24) | (data[21] << 16) | (data[22] << 8) | data[23];
-    return width > 0 && height > 0 ? { width, height } : null;
-  }
-  if (type === "gif") {
-    if (data.length < 10) return null;
-    const width = data[6] | (data[7] << 8);
-    const height = data[8] | (data[9] << 8);
-    return width > 0 && height > 0 ? { width, height } : null;
-  }
-  let i = 2;
-  while (i + 4 <= data.length) {
-    if (data[i] !== 0xff) {
-      i += 1;
-      continue;
-    }
-    const marker = data[i + 1];
-    const length = (data[i + 2] << 8) | data[i + 3];
-    const isSof = marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc;
-    if (isSof && length >= 7 && i + 8 < data.length) {
-      const height = (data[i + 5] << 8) | data[i + 6];
-      const width = (data[i + 7] << 8) | data[i + 8];
-      if (width > 0 && height > 0) return { width, height };
-    }
-    i += 2 + length;
-  }
-  return null;
-}
-
-function parseColor(value: string | undefined): string | undefined {
-  if (!value) return undefined;
-  const trimmed = value.trim();
-  const hex = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(trimmed);
-  if (hex) {
-    const h = hex[1].length === 3 ? hex[1].split("").map((c) => c + c).join("") : hex[1];
-    return h.toUpperCase();
-  }
-  const rgb = /^rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)$/.exec(trimmed);
-  if (rgb) {
-    return [rgb[1], rgb[2], rgb[3]]
-      .map((n) => Number(n).toString(16).padStart(2, "0"))
-      .join("")
-      .toUpperCase();
-  }
-  return undefined;
 }
 
 /** Converts a CSS font-size (px/pt/rem/em) to Word half-points.
@@ -137,6 +118,15 @@ function fontSizeHalfPoints(value: string | undefined): number | undefined {
 
 /** Global font-size multiplier applied to every run, 1 when no scaling. */
 let activeFontFactor = 1;
+
+/** Monospace family for code, from the export theme. */
+let activeCodeFont = "Consolas";
+
+/** Surface and ink of code blocks, from the chosen Highlight.js theme. */
+let activeCodeSurface = "F5F5F4";
+
+/** Side rule of the callout / custom block currently being converted. */
+let activeBlockBorder: string | undefined;
 
 interface InlineStyle {
   fontFamily?: string;
@@ -171,13 +161,13 @@ function parseInlineStyle(style: string): InlineStyle {
   return out;
 }
 
-function inlineEquationRun(equation: string): TextRun {
-  return new TextRun({
-    text: equation,
-    italics: true,
-    font: MONO_FONT,
-    size: Math.round(20 * activeFontFactor),
-  });
+/**
+ * An equation as Word content: a real math zone, or the LaTeX source when a
+ * zone cannot be built from it. An equation is not a monospace italic string —
+ * Word would show `\frac{a}{b}` where the reader expects a stacked fraction.
+ */
+function equationRun(equation: string, display: boolean): XmlComponent {
+  return latexToOmml(equation, display) ?? new TextRun({ text: equation, italics: true, font: activeCodeFont });
 }
 
 function runFromTextNode(node: TextNode, rtl?: boolean): TextRun {
@@ -195,7 +185,7 @@ function runFromTextNode(node: TextNode, rtl?: boolean): TextRun {
     superScript: Boolean(format & IS_SUPERSCRIPT),
     subScript: Boolean(format & IS_SUBSCRIPT),
     highlight: format & IS_HIGHLIGHT ? "yellow" : undefined,
-    font: isCode ? MONO_FONT : fontFamily && !generic.includes(fontFamily) ? fontFamily : undefined,
+    font: isCode ? activeCodeFont : fontFamily && !generic.includes(fontFamily) ? fontFamily : undefined,
     // Runs of an RTL block are marked `w:rtl` so trailing neutral
     // characters (a final period, for example) resolve as RTL and stay on
     // the same line instead of wrapping to the next one.
@@ -204,76 +194,121 @@ function runFromTextNode(node: TextNode, rtl?: boolean): TextRun {
       const halfPoints = fontSizeHalfPoints(style.fontSize);
       return halfPoints !== undefined ? Math.round(halfPoints * activeFontFactor) : undefined;
     })(),
-    color: parseColor(style.color),
+    color: parseWordColor(style.color),
     shading: style.backgroundColor
       ? {
           type: ShadingType.CLEAR,
-          fill: parseColor(style.backgroundColor),
+          fill: parseWordColor(style.backgroundColor),
           color: "auto",
         }
       : undefined,
   });
 }
 
-function buildRuns(node: LexicalNode, rtl?: boolean): (TextRun | ExternalHyperlink)[] {
+type InlineContent = TextRun | ExternalHyperlink | ImageRun | XmlComponent;
+
+function buildRuns(node: LexicalNode, rtl?: boolean, state?: WalkState): InlineContent[] {
   if ($isTextNode(node)) return [runFromTextNode(node, rtl)];
   if ($isLinkNode(node)) {
     return [
       new ExternalHyperlink({
         link: node.getURL(),
-        children: node.getChildren().flatMap((child) => buildRuns(child, rtl)) as TextRun[],
+        children: node.getChildren().flatMap((child) => buildRuns(child, rtl, state)) as TextRun[],
       }),
     ];
   }
-  if ($isEquationNode(node) && node.isInline()) {
-    return [inlineEquationRun(node.getEquation())];
+  if ($isEquationNode(node)) {
+    // A display equation normally sits at the top level, where `nodeToDocx`
+    // gives it its own centred paragraph. One that ended up inside a paragraph
+    // still belongs in the flow, so it is emitted here rather than dropped.
+    return [equationRun(node.getEquation(), !node.isInline())];
   }
-  if ($isElementNode(node)) return node.getChildren().flatMap((child) => buildRuns(child, rtl));
+  // An image the author placed inside a paragraph is content, not decoration:
+  // dropping it here is how it used to disappear from the file.
+  if ($isImageNode(node) && state) {
+    const picture = pictureRun(node, state);
+    return picture ? [picture] : [];
+  }
+  if ($isElementNode(node)) {
+    return node.getChildren().flatMap((child) => buildRuns(child, rtl, state));
+  }
   return [];
 }
 
 type DocxAlignment = (typeof AlignmentType)[keyof typeof AlignmentType];
 type DocxHeadingLevel = (typeof HeadingLevel)[keyof typeof HeadingLevel];
 
-/**
- * True when a block should render RTL: explicit `rtl` direction, or (for
- * documents saved before directions were recorded) dominant RTL content.
- */
-function isRtlBlock(node: ElementNode): boolean {
-  const dir = node.getDirection();
-  return dir === "rtl" || (dir === null && isRtlDominant(node.getTextContent()));
+/** The direction a node should be laid out in, resolved the same way the
+ *  generic writer resolves it: what the node recorded, then its own text, then
+ *  the direction it sits in. The last step is what a table cell needs — a cell
+ *  holding a single number has no language of its own, and belongs to the
+ *  table it is in. */
+function blockDir(node: ElementNode, inherited: TextDir = undefined): TextDir {
+  const recorded = node.getDirection();
+  return resolveBlockDir(
+    recorded === "rtl" || recorded === "ltr" ? recorded : undefined,
+    node.getTextContent(),
+    inherited,
+  );
 }
 
-function alignmentFromNode(node: ElementNode): DocxAlignment | undefined {
-  switch (node.getFormat()) {
-    case 1:
-      return AlignmentType.LEFT;
-    case 2:
-      return AlignmentType.CENTER;
-    case 3:
-      return AlignmentType.RIGHT;
-    case 4:
-      return AlignmentType.JUSTIFIED;
-    default:
-      return isRtlBlock(node) ? AlignmentType.RIGHT : undefined;
-  }
+/** The direction properties a paragraph needs. Word keeps them in two places —
+ *  the paragraph (`w:bidi`) and the runs (`w:rtl`) — and setting only the first
+ *  is what leaves Persian text laid out left-to-right. */
+function directionOf(dir: TextDir): { bidirectional: boolean } {
+  return { bidirectional: dir === "rtl" };
 }
 
-function codeParagraphs(node: LexicalNode): Paragraph[] {
+function alignmentFromNode(node: ElementNode, dir: TextDir = blockDir(node)): DocxAlignment | undefined {
+  const visual = (() => {
+    switch (node.getFormat()) {
+      case 1:
+        return AlignmentType.LEFT;
+      case 2:
+        return AlignmentType.CENTER;
+      case 3:
+        return AlignmentType.RIGHT;
+      case 4:
+        return AlignmentType.JUSTIFIED;
+      default:
+        return dir === "rtl" ? AlignmentType.RIGHT : dir === "ltr" ? AlignmentType.LEFT : undefined;
+    }
+  })();
+  // Encoded for Word (see `justificationFor`): an RTL paragraph must not carry
+  // a literal `right`, which Word would mirror to the left.
+  return justificationFor(visual, dir === "rtl");
+}
+
+function codeParagraphs(node: LexicalNode, dir: TextDir): Paragraph[] {
+  const rtl = dir === "rtl";
+  const size = Math.round(20 * activeFontFactor);
   return node
     .getTextContent()
     .split("\n")
     .map(
       (line) =>
         new Paragraph({
-          children: [new TextRun({ text: line || " ", font: MONO_FONT, size: Math.round(20 * activeFontFactor) })],
-          shading: { type: ShadingType.CLEAR, fill: "F5F5F4", color: "auto" },
+          children: [
+            new TextRun({
+              text: line || " ",
+              font: activeCodeFont,
+              size,
+              ...(rtl ? { rightToLeft: true } : {}),
+            }),
+          ],
+          ...directionOf(dir),
+          shading: { type: ShadingType.CLEAR, fill: activeCodeSurface, color: "auto" },
           spacing: { after: 0 },
         }),
     );
 }
 
-function listParagraphs(node: LexicalNode, depth: number): DocxChild[] {
+function listParagraphs(
+  node: LexicalNode,
+  depth: number,
+  state: WalkState,
+  inherited: TextDir,
+): DocxChild[] {
   if (!$isListNode(node)) return [];
   const isCheck = node.getListType() === "check";
   const isNumbered = node.getListType() === "number";
@@ -281,29 +316,44 @@ function listParagraphs(node: LexicalNode, depth: number): DocxChild[] {
   const out: DocxChild[] = [];
   for (const item of node.getChildren()) {
     if (!$isListItemNode(item)) continue;
-    const runs: (TextRun | ExternalHyperlink)[] = [];
+    const dir = $isElementNode(item) ? blockDir(item, inherited) : inherited;
+    const rtl = dir === "rtl";
+    const runs: InlineContent[] = [];
     if (isCheck) {
-      runs.push(new TextRun({ text: item.getChecked() ? "\u2611 " : "\u2610 " }));
+      runs.push(new TextRun({ text: item.getChecked() ? "☑ " : "☐ ", ...(rtl ? { rightToLeft: true } : {}) }));
     }
     for (const child of item.getChildren()) {
       if ($isListNode(child)) continue;
-      runs.push(...buildRuns(child, isRtlBlock(item)));
+      runs.push(...buildRuns(child, rtl, state));
     }
     out.push(
       new Paragraph({
         children: runs,
         numbering: isCheck ? undefined : { reference, level: Math.min(depth, MAX_LIST_DEPTH) },
-        bidirectional: isRtlBlock(item),
+        ...directionOf(dir),
+        alignment: $isElementNode(item) ? alignmentFromNode(item, dir) : undefined,
       }),
     );
     for (const child of item.getChildren()) {
-      if ($isListNode(child)) out.push(...listParagraphs(child, depth + 1));
+      if ($isListNode(child)) out.push(...listParagraphs(child, depth + 1, state, dir));
     }
   }
   return out;
 }
 
-function tableChildren(node: ElementNode): Table {
+/**
+ * A table. As in the generic writer, the direction is the whole job: the
+ * columns have an order of their own (`w:bidiVisual` moves the first one to the
+ * right for a right-to-left table) and every cell's paragraphs carry the
+ * `w:bidi` / `w:rtl` pair, so a Persian header and a cell holding nothing but a
+ * number both land the way the editor shows them.
+ */
+function tableChildren(
+  node: ElementNode,
+  state: WalkState,
+  inherited: TextDir,
+): Table {
+  const tableDir = blockDir(node, inherited);
   const rows = node
     .getChildren()
     .filter($isTableRowNode)
@@ -313,37 +363,92 @@ function tableChildren(node: ElementNode): Table {
           children: row
             .getChildren()
             .filter($isTableCellNode)
-            .map(
-              (cell) =>
-                new TableCell({
-                  children: cell.getChildren().flatMap((child) => nodeToDocx(child)) as Paragraph[],
-                }),
-            ),
+            .map((cell) => {
+              const content = cell
+                .getChildren()
+                .flatMap((child) => nodeToDocx(child, state, tableDir)) as Paragraph[];
+              return new TableCell({
+                children:
+                  content.length > 0 ? content : [new Paragraph({ children: [] })],
+              });
+            }),
         }),
     );
   return new Table({
     width: { size: 100, type: WidthType.PERCENTAGE },
+    ...(tableDir === "rtl" ? { visuallyRightToLeft: true } : {}),
     rows,
   });
 }
 
-function imageParagraph(node: ImageNode): Paragraph[] {
-  const src = node.getSrc();
-  const match = /^data:image\/(png|jpe?g|gif);base64,(.+)$/.exec(src);
-  if (!match) return [];
-  const type = match[1] === "jpeg" || match[1] === "jpg" ? "jpg" : (match[1] as "png" | "gif");
-  const binary = atob(match[2]);
-  const data = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i += 1) data[i] = binary.charCodeAt(i);
-  const image = new ImageRun({
-    type,
-    data,
-    transformation: { width: 240, height: Math.round(240 * 0.75) },
-  });
-  return [new Paragraph({ children: [image] })];
+/** The bytes behind an image source, preferring a WebP conversion made before
+ *  the walk. */
+function decodedImage(src: string, replacements: ReadonlyMap<string, string>): DecodedImage | null {
+  return decodeImage(replacements.get(src) ?? src);
 }
 
-function nodeToDocx(node: LexicalNode): DocxChild[] {
+/** A picture, or `null` when Word cannot be given the bytes behind it. */
+function pictureRun(node: ImageNode, state: WalkState): ImageRun | null {
+  const decoded = decodedImage(node.getSrc(), state.replacements);
+  if (!decoded) return null;
+  return imageRun(decoded, {
+    maxWidthPt: CONTENT_WIDTH_PT,
+    alt: node.getAltText() || undefined,
+  });
+}
+
+function imageParagraph(node: ImageNode, state: WalkState, dir: TextDir): Paragraph[] {
+  const picture = pictureRun(node, state);
+  if (!picture) return [];
+  return [
+    new Paragraph({
+      ...directionOf(dir),
+      // An image has no text side of its own; in a right-to-left block it
+      // follows the block, encoded for Word (a literal `right` would mirror).
+      alignment: justificationFor(
+        dir === "rtl" ? AlignmentType.RIGHT : AlignmentType.CENTER,
+        dir === "rtl",
+      ),
+      children: [picture],
+    }),
+  ];
+}
+
+/** Headings of a ticked level start a new page, except the first one — the
+ *  same rule the PDF paginator applies, so both formats break identically. */
+class ChapterBreaks {
+  private readonly tags: Set<string>;
+  private readonly seen = new Set<string>();
+
+  constructor(levels: readonly number[] | undefined) {
+    this.tags = new Set(
+      (levels ?? [])
+        .map((level) => Math.min(6, Math.max(0, Math.trunc(level))))
+        .filter((level) => level > 0)
+        .map((level) => `h${level}`),
+    );
+  }
+
+  startsNewPage(tag: string): boolean {
+    if (!this.tags.has(tag)) return false;
+    if (this.seen.has(tag)) return true;
+    this.seen.add(tag);
+    return false;
+  }
+}
+
+/** What the tree walk needs beyond the node itself. */
+interface WalkState {
+  chapters: ChapterBreaks;
+  /** WebP sources already re-encoded as PNG, keyed by the original source. */
+  replacements: ReadonlyMap<string, string>;
+}
+
+
+/** Maps one node to docx content. `inherited` is the direction of the nearest
+ *  ancestor that declared one, so a cell of numbers or a caption still lands
+ *  where the page it sits on puts it. */
+function nodeToDocx(node: LexicalNode, state: WalkState, inherited: TextDir): DocxChild[] {
   if ($isHeadingNode(node)) {
     const level = node.getTag() as "h1" | "h2" | "h3" | "h4" | "h5" | "h6";
     const heading: Record<string, DocxHeadingLevel> = {
@@ -354,27 +459,35 @@ function nodeToDocx(node: LexicalNode): DocxChild[] {
       h5: HeadingLevel.HEADING_5,
       h6: HeadingLevel.HEADING_6,
     };
+    const dir = blockDir(node, inherited);
     return [
       new Paragraph({
         heading: heading[level],
-        children: buildRuns(node, isRtlBlock(node)),
-        alignment: alignmentFromNode(node),
-        bidirectional: isRtlBlock(node),
+        children: buildRuns(node, dir === "rtl", state),
+        alignment: alignmentFromNode(node, dir),
+        ...directionOf(dir),
+        ...(state.chapters.startsNewPage(level) ? { pageBreakBefore: true } : {}),
+        keepNext: true,
       }),
     ];
   }
   if ($isQuoteNode(node)) {
+    const dir = blockDir(node, inherited);
     return [
       new Paragraph({
-        children: buildRuns(node, isRtlBlock(node)),
+        children: buildRuns(node, dir === "rtl", state),
         indent: { left: 720 },
-        alignment: alignmentFromNode(node),
-        bidirectional: isRtlBlock(node),
+        alignment: alignmentFromNode(node, dir),
+        ...directionOf(dir),
       }),
     ];
   }
-  if ($isCodeNode(node)) return codeParagraphs(node);
-  if ($isListNode(node)) return listParagraphs(node, 0);
+  if ($isCodeNode(node)) {
+    return codeParagraphs(node, $isElementNode(node) ? blockDir(node, inherited) : inherited);
+  }
+  if ($isListNode(node)) {
+    return listParagraphs(node, 0, state, $isElementNode(node) ? blockDir(node, inherited) : inherited);
+  }
   if ($isHorizontalRuleNode(node)) {
     return [
       new Paragraph({
@@ -388,28 +501,39 @@ function nodeToDocx(node: LexicalNode): DocxChild[] {
   if ($isPageBreakNode(node)) {
     return [new Paragraph({ children: [new PageBreak()] })];
   }
-  if ($isImageNode(node)) return imageParagraph(node);
-  if ($isTableNode(node)) return [tableChildren(node)];
+  if ($isImageNode(node)) {
+    return imageParagraph(node, state, $isElementNode(node) ? blockDir(node, inherited) : inherited);
+  }
+  if ($isTableNode(node)) return [tableChildren(node, state, inherited)];
   if ($isCalloutNode(node) || $isCustomBlockNode(node)) {
     const tone = $isCalloutNode(node) ? node.getTone() : node.getKind();
-    return [
-      new Paragraph({
-        children: buildRuns(node, isRtlBlock(node)),
-        shading: {
-          type: ShadingType.CLEAR,
-          fill: BLOCK_SHADING[tone] ?? "F5F5F4",
-          color: "auto",
-        },
-        indent: { left: 240, right: 240 },
-        alignment: alignmentFromNode(node),
-        bidirectional: isRtlBlock(node),
-      }),
-    ];
+    const dir = blockDir(node, inherited);
+    const previous = activeBlockBorder;
+    activeBlockBorder = BLOCK_BORDER[tone] ?? "2F6B57";
+    try {
+      return [
+        new Paragraph({
+          children: buildRuns(node, dir === "rtl", state),
+          shading: {
+            type: ShadingType.CLEAR,
+            fill: BLOCK_SHADING[tone] ?? "F5F5F4",
+            color: "auto",
+          },
+          ...(previous ? {} : { border: { left: { style: BorderStyle.SINGLE, size: 12, color: activeBlockBorder, space: 8 } } }),
+          indent: { left: 240, right: 240 },
+          alignment: alignmentFromNode(node, dir),
+          ...directionOf(dir),
+        }),
+      ];
+    } finally {
+      activeBlockBorder = previous;
+    }
   }
+  // An equation takes no direction: Word lays a math zone out by its own rules.
   if ($isEquationNode(node)) {
     return [
       new Paragraph({
-        children: [new TextRun({ text: node.getEquation(), italics: true, font: MONO_FONT })],
+        children: [equationRun(node.getEquation(), true)],
         alignment: AlignmentType.CENTER,
       }),
     ];
@@ -419,11 +543,12 @@ function nodeToDocx(node: LexicalNode): DocxChild[] {
     return text ? [new Paragraph({ children: [new TextRun({ text })] })] : [];
   }
   if ($isElementNode(node)) {
+    const dir = blockDir(node, inherited);
     return [
       new Paragraph({
-        children: buildRuns(node, isRtlBlock(node)),
-        alignment: alignmentFromNode(node),
-        bidirectional: isRtlBlock(node),
+        children: buildRuns(node, dir === "rtl", state),
+        alignment: alignmentFromNode(node, dir),
+        ...directionOf(dir),
       }),
     ];
   }
@@ -436,7 +561,7 @@ const NUMBERING_CONFIG = [
     levels: Array.from({ length: MAX_LIST_DEPTH + 1 }, (_, level) => ({
       level,
       format: LevelFormat.BULLET,
-      text: "\u2022",
+      text: "•",
       alignment: AlignmentType.LEFT,
       style: {
         paragraph: { indent: { left: 720 + level * 360, hanging: 360 } },
@@ -457,28 +582,73 @@ const NUMBERING_CONFIG = [
   },
 ] as const;
 
-const GENERIC_FAMILIES = new Set(["sans-serif", "serif", "monospace", "cursive", "fantasy"]);
+/** A full-bleed cover page, scaled to the page so nothing is cropped. */
+function coverParagraph(cover: DecodedImage, format: PageFormat): Paragraph | null {
+  const { width, height } = PAGE_FORMATS[format];
+  const pageWidthPt = twipsFromPx(width) / 20;
+  const pageHeightPt = twipsFromPx(height) / 20;
+  const size = fitImage(cover, { maxWidthPt: pageWidthPt, maxHeightPt: pageHeightPt });
+  const picture = imageRun(cover, { maxWidthPt: size.width, maxHeightPt: size.height });
+  if (!picture) return null;
+  return new Paragraph({
+    alignment: AlignmentType.CENTER,
+    spacing: { after: 0 },
+    children: [picture],
+  });
+}
 
-/** First family name from a CSS font-family list, or the fallback. */
-function concreteFont(value: string | undefined, fallback: string): string {
-  const first = value
-    ?.split(",")[0]
-    ?.trim()
-    .replace(/^["']|["']$/g, "");
-  return first && !GENERIC_FAMILIES.has(first.toLowerCase()) ? first : fallback;
+/**
+ * Word cannot embed WebP, and it is the format a screenshot or a scan arrives
+ * in, so those pictures are re-encoded before the synchronous walk that reads
+ * the editor state.
+ */
+async function convertWebpImages(editor: LexicalEditor): Promise<Map<string, string>> {
+  const sources = editor.getEditorState().read(() => {
+    const found = new Set<string>();
+    const walk = (nodes: readonly LexicalNode[]) => {
+      for (const node of nodes) {
+        if ($isImageNode(node)) found.add(node.getSrc());
+        if ($isElementNode(node)) walk(node.getChildren());
+      }
+    };
+    walk($getRoot().getChildren());
+    return [...found];
+  });
+  const webp = sources.filter((src) => src.startsWith("data:image/webp"));
+  const converted = new Map<string, string>();
+  await Promise.all(
+    webp.map(async (src) => {
+      const png = await pngFromWebp(src);
+      if (png) converted.set(src, png);
+    }),
+  );
+  return converted;
 }
 
 export async function exportDocx(
   editor: LexicalEditor,
   format: PageFormat,
-  options: ExportThemeOptions = {},
+  options: DocxExportOptions = {},
   coverImage?: string,
 ): Promise<Blob> {
   activeFontFactor = fontScaleFactor(options.fontSizeScalePct);
+  activeBlockBorder = undefined;
+  const palette = resolveDocxPalette(options);
+  activeCodeFont = palette.codeFont;
+  activeCodeSurface = palette.codeSurface;
+
+  const replacements = await convertWebpImages(editor);
 
   const contentChildren = editor.getEditorState().read(() => {
+    const state: WalkState = {
+      chapters: new ChapterBreaks(options.chapterLevels),
+      replacements,
+    };
     const root = $getRoot();
-    return root.getChildren().flatMap((node) => nodeToDocx(node));
+    // A document written right-to-left has no direction of its own at the
+    // root, so the root's own text decides what its unjudgeable blocks inherit.
+    const documentDir = $isElementNode(root) ? blockDir(root) : undefined;
+    return root.getChildren().flatMap((node) => nodeToDocx(node, state, documentDir));
   });
 
   const { width, height } = PAGE_FORMATS[format];
@@ -486,62 +656,40 @@ export async function exportDocx(
   const toTwips = (mm: number) => Math.round((mm / 25.4) * 1440);
 
   const coverChildren: DocxChild[] = [];
-  if (coverImage) {
-    const match = /^data:image\/(png|jpe?g|gif);base64,(.+)$/.exec(coverImage);
-    if (match) {
-      const type = match[1] === "jpeg" || match[1] === "jpg" ? "jpg" : (match[1] as ImageType);
-      const binary = atob(match[2]);
-      const data = new Uint8Array(binary.length);
-      for (let i = 0; i < binary.length; i += 1) data[i] = binary.charCodeAt(i);
-      const pageWidthPt = twipsFromPx(width) / 20;
-      const pageHeightPt = twipsFromPx(height) / 20;
-      const aspect = imageAspectRatio(type, data);
-      let imgWidthPt = pageWidthPt;
-      let imgHeightPt = pageHeightPt;
-      if (aspect) {
-        const scale = Math.min(pageWidthPt / aspect.width, pageHeightPt / aspect.height);
-        imgWidthPt = aspect.width * scale;
-        imgHeightPt = aspect.height * scale;
-      }
-      coverChildren.push(
-        new Paragraph({
-          alignment: AlignmentType.CENTER,
-          children: [
-            new ImageRun({
-              type,
-              data,
-              transformation: {
-                width: Math.round(imgWidthPt),
-                height: Math.round(imgHeightPt),
-              },
-            }),
-          ],
-          spacing: { after: 0 },
-        }),
-      );
-    }
-  }
+  const decodedCover = coverImage
+    ? decodeImage(replacements.get(coverImage) ?? coverImage)
+    : null;
+  const cover = decodedCover ? coverParagraph(decodedCover, format) : null;
+  if (cover) coverChildren.push(cover);
 
   const defaultRun: {
     font: string;
     size?: number;
     color?: string;
   } = {
-    font: concreteFont(options.fontFamily, "Calibri"),
+    font: palette.bodyFont,
     // The editor's default body size is 14px; export it as 14pt so text
     // without an explicit size matches what the editor shows.
     size: Math.round(28 * activeFontFactor),
+    ...(palette.textColor ? { color: palette.textColor } : {}),
   };
-  if (options.textColor) {
-    const color = parseColor(options.textColor);
-    if (color) defaultRun.color = color;
-  }
 
   const pageSize = { width: twipsFromPx(width), height: twipsFromPx(height) };
+  const footer = options.showPageNumbers
+    ? new Footer({
+        children: [
+          new Paragraph({
+            alignment: AlignmentType.CENTER,
+            children: [new TextRun({ children: [PageNumber.CURRENT] })],
+          }),
+        ],
+      })
+    : undefined;
+
   const document = new Document({
     numbering: { config: NUMBERING_CONFIG },
     ...(options.backgroundColor
-      ? { background: { color: parseColor(options.backgroundColor) ?? "FFFFFF" } }
+      ? { background: { color: parseWordColor(options.backgroundColor) ?? "FFFFFF" } }
       : {}),
     styles: {
       default: {
@@ -579,6 +727,7 @@ export async function exportDocx(
             },
           },
         },
+        ...(footer ? { footers: { default: footer } } : {}),
         children: contentChildren,
       },
     ],

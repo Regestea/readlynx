@@ -20,21 +20,22 @@ export interface ExportSettings {
   marginRightMm: number;
   marginBottomMm: number;
   marginLeftMm: number;
-  /** PDF-only: physical page size. */
+  /** PDF/DOCX-only: physical page size. */
   pageFormat: PageFormat;
-  /** PDF-only: run a centred page number in the footer. */
+  /** PDF/DOCX-only: run a centred page number in the footer. */
   showPageNumbers: boolean;
-  /** PDF-only: heading levels (1-5) whose headings start a new page; empty =
-   *  no breaks. */
+  /** PDF/DOCX-only: heading levels (1-5) whose headings start a new page;
+   *  empty = no breaks. */
   chapterLevels: number[];
   /** PDF-only: drop a break whose page would hold fewer lines than this;
-   *  0 keeps every break. */
+   *  0 keeps every break. Measured on the rendered page, so it needs the
+   *  paginator a Word file does not have. */
   chapterMinLines: number;
-  /** PDF/EPUB-only: document look (none / modern light / modern dark). */
+  /** PDF/EPUB/DOCX-only: document look (none / modern light / modern dark). */
   template: "none" | "light" | "dark";
-  /** PDF/EPUB-only: code block highlight theme. */
+  /** PDF/EPUB/DOCX-only: code block highlight theme. */
   codeTheme: "auto" | "light" | "dark" | "monokai" | "night-owl" | "vs" | "nord";
-  /** PDF/EPUB-only: monospace font for code blocks ("" = default). */
+  /** PDF/EPUB/DOCX-only: monospace font for code blocks ("" = default). */
   codeFontFamily: string;
 }
 
@@ -110,7 +111,15 @@ export const EXPORT_FORMAT_OPTIONS: ExportFormatOption[] = [
   },
 ];
 
-/** Which per-format option groups apply to a format. */
-export function usesPagedLook(format: ExportFormat): boolean {
-  return format === "pdf" || format === "epub";
+/** Formats whose look the writer can reproduce: the template palette and the
+ *  code-block theme. HTML is a plain dump, so it offers neither. */
+export function usesThemedLook(format: ExportFormat): boolean {
+  return format === "pdf" || format === "epub" || format === "docx";
+}
+
+/** Formats laid out on real pages, so their page size, page numbers and
+ *  chapter breaks can be set. HTML is one continuous scroll, EPUB paginates on
+ *  the reader's screen. */
+export function usesPageLayout(format: ExportFormat): boolean {
+  return format === "pdf" || format === "docx";
 }

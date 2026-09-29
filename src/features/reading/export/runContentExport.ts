@@ -50,6 +50,15 @@ function themeFor(settings: ExportSettings) {
   };
 }
 
+/** The DOCX options an `ExportSettings` describes. */
+function docxOptions(settings: ExportSettings) {
+  return {
+    ...themeFor(settings),
+    showPageNumbers: settings.showPageNumbers,
+    chapterLevels: settings.chapterLevels,
+  };
+}
+
 /** The PDF page geometry a `ExportSettings` describes. */
 function pdfOptions(settings: ExportSettings) {
   return {
@@ -96,7 +105,7 @@ export async function runContentExport(
   if (settings.format === "docx") {
     downloadBlobFile(
       `${fileBase}.docx`,
-      await buildDocxFromHtml(bodyHtml, settings.pageFormat, themeFor(settings)),
+      await buildDocxFromHtml(bodyHtml, settings.pageFormat, docxOptions(settings)),
     );
     return;
   }

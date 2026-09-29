@@ -18,7 +18,7 @@ import {
   MIN_FONT_SCALE_PCT,
 } from "../../infrastructure/export/fontScale";
 import { clampInches, INCH_MAX, INCH_MIN, toInches, toMm } from "./marginUnits";
-import { DEFAULT_EXPORT_SETTINGS, EXPORT_FORMAT_OPTIONS, usesPagedLook } from "./types.tsx";
+import { DEFAULT_EXPORT_SETTINGS, EXPORT_FORMAT_OPTIONS, usesThemedLook, usesPageLayout } from "./types.tsx";
 import type { ExportContent, ExportSettings } from "./types.tsx";
 import {
   CHAPTER_LEVEL_OPTIONS,
@@ -272,7 +272,8 @@ export function ExportDialog({
   };
 
   const formatLabel = formats.find((format) => format.value === settings.format)?.label ?? "PDF";
-  const pagedLook = usesPagedLook(settings.format);
+  const themedLook = usesThemedLook(settings.format);
+  const pageLayout = usesPageLayout(settings.format);
 
   return (
     <Modal
@@ -318,7 +319,7 @@ export function ExportDialog({
             </div>
           </div>
 
-          {pagedLook && (
+          {themedLook && (
             <div className={styles.section}>
               <span className={styles.sectionLabel}>Template</span>
               <div className={styles.templates}>
@@ -346,7 +347,7 @@ export function ExportDialog({
             </div>
           )}
 
-          {pagedLook && (
+          {themedLook && (
             <div className={styles.section}>
               <span className={styles.sectionLabel}>Code blocks</span>
               <label className={styles.codeField}>
@@ -525,7 +526,7 @@ export function ExportDialog({
             </div>
           )}
 
-          {settings.format === "pdf" && (
+          {pageLayout && (
             <>
               <div className={styles.section}>
                 <span className={styles.sectionLabel}>Page size</span>
@@ -608,54 +609,60 @@ export function ExportDialog({
                       inserted.
                     </span>
                   ) : null}
-                  <label className={styles.codeField}>
-                    <span className={styles.codeFieldLabel}>Avoid empty pages</span>
-                    <select
-                      className={styles.control}
-                      value={String(settings.chapterMinLines)}
-                      title="Drop a chapter break when the page it opens would be nearly empty"
-                      aria-label="Minimum lines for a page to keep its chapter break"
-                      onChange={(event) =>
-                        patch({ chapterMinLines: Number(event.target.value) || 0 })
-                      }
-                    >
-                      {CHAPTER_MIN_LINES_OPTIONS.map(({ value, label }) => (
-                        <option key={value} value={value}>
-                          {label}
-                        </option>
-                      ))}
-                    </select>
-                    <span className={styles.sectionHint}>
-                      A heading that opens a page holding only a line or two makes for a very empty
-                      page. This drops that break and lets the text flow on, measured on the real
-                      page so it follows the page size and font size.
-                    </span>
-                  </label>
-                  {chapterBreaksDropped > 0 ? (
-                    <span className={styles.checkboxNote}>
-                      {chapterBreaksDropped} of {totalChapterBreaks} chapter break
-                      {chapterBreaksDropped === 1 ? "" : "s"} dropped because the page would have
-                      been nearly empty.
-                    </span>
-                  ) : null}
-                  {chapterBreakReport.length > 0 ? (
-                    <ul className={styles.breakReport} aria-label="Chapter break measurements">
-                      {chapterBreakReport.map((entry) => (
-                        <li key={entry.index}>
-                          <span className={styles.breakReportHeading}>
-                            “{entry.heading || `Break ${entry.index}`}”
-                          </span>{" "}
-                          <span className={styles.breakReportDetail}>
-                            p.{entry.openerPage} ·{" "}
-                            {entry.lines === null
-                              ? "unmeasurable"
-                              : `${entry.lines.toFixed(1)} of ${entry.threshold.toFixed(0)} lines`}{" "}
-                            → {entry.decision === "dropped" ? "dropped" : "kept"}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : null}
+                  {/* The empty-page pass measures the laid-out page, so it only
+                      applies to the paginated PDF. */}
+                  {settings.format === "pdf" && (
+                    <>
+                      <label className={styles.codeField}>
+                        <span className={styles.codeFieldLabel}>Avoid empty pages</span>
+                        <select
+                          className={styles.control}
+                          value={String(settings.chapterMinLines)}
+                          title="Drop a chapter break when the page it opens would be nearly empty"
+                          aria-label="Minimum lines for a page to keep its chapter break"
+                          onChange={(event) =>
+                            patch({ chapterMinLines: Number(event.target.value) || 0 })
+                          }
+                        >
+                          {CHAPTER_MIN_LINES_OPTIONS.map(({ value, label }) => (
+                            <option key={value} value={value}>
+                              {label}
+                            </option>
+                          ))}
+                        </select>
+                        <span className={styles.sectionHint}>
+                          A heading that opens a page holding only a line or two makes for a very
+                          empty page. This drops that break and lets the text flow on, measured on
+                          the real page so it follows the page size and font size.
+                        </span>
+                      </label>
+                      {chapterBreaksDropped > 0 ? (
+                        <span className={styles.checkboxNote}>
+                          {chapterBreaksDropped} of {totalChapterBreaks} chapter break
+                          {chapterBreaksDropped === 1 ? "" : "s"} dropped because the page would have
+                          been nearly empty.
+                        </span>
+                      ) : null}
+                      {chapterBreakReport.length > 0 ? (
+                        <ul className={styles.breakReport} aria-label="Chapter break measurements">
+                          {chapterBreakReport.map((entry) => (
+                            <li key={entry.index}>
+                              <span className={styles.breakReportHeading}>
+                                “{entry.heading || `Break ${entry.index}`}”
+                              </span>{" "}
+                              <span className={styles.breakReportDetail}>
+                                p.{entry.openerPage} ·{" "}
+                                {entry.lines === null
+                                  ? "unmeasurable"
+                                  : `${entry.lines.toFixed(1)} of ${entry.threshold.toFixed(0)} lines`}{" "}
+                                → {entry.decision === "dropped" ? "dropped" : "kept"}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : null}
+                    </>
+                  )}
                 </fieldset>
               </div>
             </>

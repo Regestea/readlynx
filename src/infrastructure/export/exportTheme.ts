@@ -148,12 +148,27 @@ export function resolveDocumentMode(
   return backgroundColor && isDarkColor(backgroundColor) ? "dark" : "light";
 }
 
-/** Resolve the "auto" code theme against the document mode. */
+/** Every concrete code theme, so an unknown id can fall back instead of
+ *  resolving to nothing. */
+const CODE_THEME_IDS: ReadonlySet<string> = new Set([
+  "light",
+  "dark",
+  "monokai",
+  "night-owl",
+  "vs",
+  "nord",
+]);
+
+/** Resolve the "auto" code theme against the document mode. An id the palettes
+ *  do not know falls back to the document's own light/dark default, so a saved
+ *  document carrying a retired theme still exports. */
 export function resolveCodeTheme(
   id: ExportCodeThemeId | undefined,
   mode: ThemeMode,
 ): Exclude<ExportCodeThemeId, "auto"> {
-  if (id && id !== "auto") return id;
+  if (id && id !== "auto" && CODE_THEME_IDS.has(id)) {
+    return id as Exclude<ExportCodeThemeId, "auto">;
+  }
   return mode === "dark" ? "dark" : "light";
 }
 

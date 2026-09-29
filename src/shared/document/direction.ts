@@ -5,9 +5,13 @@
  * rather than per letter so a long Latin token can't drown out several short
  * Persian words. Digits, spaces and punctuation are neutral and don't vote.
  *
- * Pure text analysis — no DOM, no editor — so the reader, the exporters and
- * the editor's markdown import all share one implementation.
+ * Pure text analysis — no DOM, no editor — so the reader, the exporters and the
+ * editor's markdown import all share one implementation.
  */
+
+/** A resolved text direction. `undefined` means "no opinion", so the page
+ *  default applies. */
+export type TextDir = "rtl" | "ltr" | undefined;
 
 export function isRtlCodePoint(cp: number): boolean {
   return (
@@ -48,6 +52,34 @@ export function classifyWord(word: string): "rtl" | "ltr" | undefined {
  */
 export function isRtlDominant(text: string): boolean {
   return getTextDir(text) === "rtl";
+}
+
+/** The `dir` an element carries, or `undefined` when it carries none (or
+ *  carries the `auto` default, which is an instruction to guess, not a
+ *  decision). */
+export function elementDir(el: { getAttribute(name: string): string | null }): TextDir {
+  const value = el.getAttribute("dir");
+  return value === "rtl" || value === "ltr" ? value : undefined;
+}
+
+/**
+ * The direction a block should be laid out in, given the nearest `dir` above
+ * it.
+ *
+ * Explicit markup wins, then the block's own text, then what it inherits. The
+ * order matters in both directions: the markdown pipeline stamps `dir` on every
+ * block, so honouring it keeps the export identical to the page the author
+ * previewed, and text next so a block with no markup still follows its own
+ * language. Inheritance is the last resort, for the blocks neither can judge —
+ * a table of nothing but digits, a cell holding a single number — which is
+ * exactly where a page written right-to-left has to place them.
+ */
+export function resolveBlockDir(
+  own: TextDir,
+  text: string,
+  inherited: TextDir,
+): TextDir {
+  return own ?? getTextDir(text) ?? inherited;
 }
 
 /**

@@ -788,6 +788,20 @@ const task = pageProxy.render({ canvas, viewport, transform });
           <ZoomIn size={16} strokeWidth={2} aria-hidden="true" />
         </button>
         <span className={styles.divider} aria-hidden="true" />
+        <span className={styles.themeWrap} ref={themeWrapRef}>
+          <button
+            type="button"
+            className={`${styles.toolButton} ${themeOpen ? styles.toolButtonActive : ""}`}
+            onClick={() => setThemeOpen((open) => !open)}
+            aria-label="Reading theme"
+            title="Reading theme"
+            aria-haspopup="true"
+            aria-expanded={themeOpen}
+          >
+            <Palette size={16} strokeWidth={2} aria-hidden="true" />
+          </button>
+          <PdfThemeSettings open={themeOpen} onClose={() => setThemeOpen(false)} />
+        </span>
         <button
           type="button"
           className={`${styles.toolButton} ${styles.toolbarEnd} ${isFullscreen ? styles.toolButtonActive : ""}`}
@@ -839,21 +853,6 @@ const task = pageProxy.render({ canvas, viewport, transform });
             onClose={() => setOcrOpen(false)}
           />
         )}
-        <span className={styles.divider} aria-hidden="true" />
-        <span className={styles.themeWrap} ref={themeWrapRef}>
-          <button
-            type="button"
-            className={`${styles.toolButton} ${themeOpen ? styles.toolButtonActive : ""}`}
-            onClick={() => setThemeOpen((open) => !open)}
-            aria-label="Reading theme"
-            title="Reading theme"
-            aria-haspopup="true"
-            aria-expanded={themeOpen}
-          >
-            <Palette size={16} strokeWidth={2} aria-hidden="true" />
-          </button>
-          <PdfThemeSettings open={themeOpen} onClose={() => setThemeOpen(false)} />
-        </span>
       </div>
       )}
 

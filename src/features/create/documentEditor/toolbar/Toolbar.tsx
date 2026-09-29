@@ -400,7 +400,19 @@ export function Toolbar({
   });
 
   const onExportDocx = async (settings: ExportSettings, resolvedCover?: string) => {
-    downloadBlob("document.docx", await exportDocx(editor, pageFormat, themeFor(settings), resolvedCover));
+    downloadBlob(
+      "document.docx",
+      await exportDocx(
+        editor,
+        settings.pageFormat,
+        {
+          ...themeFor(settings),
+          showPageNumbers: settings.showPageNumbers,
+          chapterLevels: settings.chapterLevels,
+        },
+        resolvedCover,
+      ),
+    );
   };
 
   const onExportHtml = (settings: ExportSettings, resolvedCover?: string) => {

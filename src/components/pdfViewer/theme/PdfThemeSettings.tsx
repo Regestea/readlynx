@@ -19,7 +19,10 @@ export function PdfThemeSettings({ open, onClose }: PdfThemeSettingsProps) {
       onClose={onClose}
       title="Reading background"
       hint="Easy-on-the-eyes backgrounds — the document only changes on screen, never in the file."
-      align="right"
+      // The trigger sits in the toolbar's left group, so the panel opens
+      // towards the middle of the window. Hanging it off the button's right
+      // edge would push a third of it past the left of the screen.
+      align="left"
       className="pdf-toolbar-popover"
       sections={[
         {
