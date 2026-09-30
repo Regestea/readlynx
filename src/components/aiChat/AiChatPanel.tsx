@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { Loader2, Send, Sparkles, X, ZoomIn, ZoomOut } from "lucide-react";
 import { Markdown } from "../markdown/Markdown";
-import { useDefaultAiModel } from "../../infrastructure/ai/useDefaultAiModel";
+import { Select } from "../ui/Select/Select";
+import { useAiModelList } from "../../infrastructure/ai/useAiModelList";
+import type { AiModel } from "../../infrastructure/db/entities/AiModel";
 import { resolveProviderBaseUrl } from "../../infrastructure/ai/modelResolver";
 import styles from "./AiChatPanel.module.css";
 
@@ -90,26 +92,23 @@ export function AiChatPanel({
     if (!zoomLoadedRef.current) return;
     void window.readlynx?.db.updateAppSettings({ chatZoom: zoomPct }).catch(() => {});
   }, [zoomPct]);
-  const modelRef = useRef<{ url: string; apiKey: string; modelName: string } | null>(null);
+  const modelRef = useRef<AiModel | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  /** Loads the default AI model once (same pick as the translation panel). */
-  const { model: defaultModel, error: defaultModelError } = useDefaultAiModel();
-  const modelError = !defaultModel
-    ? defaultModelError
-    : !defaultModel.APIKey || !defaultModel.ModelName
-      ? "No AI model configured. Add one in Settings → AI Models."
+  /** Every saved model, so the header can offer a picker. The app default is
+   *  the initial pick; the choice is per conversation and never persisted. */
+  const { models, defaultModel, error: modelsError } = useAiModelList();
+  const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
+  const activeModel = models.find((entry) => entry.Id === selectedModelId) ?? defaultModel;
+  const modelError = !activeModel
+    ? modelsError
+    : !activeModel.APIKey || !activeModel.ModelName
+      ? "This AI model is missing an API key or model name. Fix it in Settings → AI Models."
       : null;
   useEffect(() => {
-    if (defaultModel?.APIKey && defaultModel.ModelName) {
-      modelRef.current = {
-        url: resolveProviderBaseUrl(defaultModel),
-        apiKey: defaultModel.APIKey,
-        modelName: defaultModel.ModelName,
-      };
-    }
-  }, [defaultModel]);
+    modelRef.current = activeModel?.APIKey && activeModel.ModelName ? activeModel : null;
+  }, [activeModel]);
 
   /** Opening the panel starts a fresh conversation seeded with the current
    *  selection (text and/or image); history lives until the modal closes.
@@ -159,6 +158,12 @@ export function AiChatPanel({
       setError(modelError ?? "No AI model configured.");
       return;
     }
+    const apiKey = model.APIKey;
+    const modelName = model.ModelName;
+    if (!apiKey || !modelName) {
+      setError(modelError ?? "No AI model configured.");
+      return;
+    }
     const apiMessages: { role: "system" | "user" | "assistant"; content: string }[] = [
       { role: "system", content: SYSTEM_PROMPT },
     ];
@@ -183,7 +188,11 @@ export function AiChatPanel({
       const ai = window.readlynx?.ai;
       if (!ai) throw new Error("The AI bridge is not available.");
       const response = await ai.chat({
-        input: model,
+        input: {
+          url: resolveProviderBaseUrl(model),
+          apiKey,
+          modelName,
+        },
         messages: apiMessages,
         images: isFirstQuestion && contextImages.length > 0 ? contextImages : undefined,
       });
@@ -210,6 +219,21 @@ export function AiChatPanel({
             <Sparkles size={16} strokeWidth={2} aria-hidden="true" />
             AI Assistant
           </span>
+          {models.length > 0 && (
+            <span className={styles.modelPicker}>
+              <Select
+                compact
+                value={activeModel?.Id ?? ""}
+                onChange={(event) => setSelectedModelId(event.target.value)}
+                options={models.map((entry) => ({
+                  value: entry.Id,
+                  label: entry.DisplayName ?? entry.ModelName ?? entry.Provider,
+                }))}
+                aria-label="Model for this conversation"
+                title="Model used for this conversation"
+              />
+            </span>
+          )}
           <span className={styles.zoomControls}>
             <button
               type="button"

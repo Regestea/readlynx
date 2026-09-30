@@ -43,6 +43,13 @@
   color: var(--color-icon);
 }
 
+.modelPicker {
+  display: inline-flex;
+  align-items: center;
+  max-width: 200px;
+  margin-left: var(--space-3);
+}
+
 .zoomControls {
   display: inline-flex;
   align-items: center;
