@@ -357,10 +357,16 @@ async function extractVisualBoxes(
 /**
  * Detects numbered sections of a born-digital page (Word-like PDFs).
  * Returns regions in reading order (top→bottom, left→right) with 1-based ids.
+ *
+ * `clip` is the scan region in viewport pixels: text is trimmed to it (so a
+ * running head above it simply disappears) while a figure is kept only when
+ * wholly inside — a half-cut diagram is a worse crop than none. Boxes come back
+ * in the clip's own pixel space, so they map 1:1 onto the cropped image.
  */
 export async function extractPdfRegions(
   page: PDFPageProxy,
   viewport: PageViewport,
+  clip?: PdfRegionBox,
 ): Promise<PdfRegion[]> {
   const pageW = viewport.width;
   const pageH = viewport.height;
@@ -368,15 +374,35 @@ export async function extractPdfRegions(
   const docMedianH = median(lines.map((l) => l.h));
   const unlabeled: Array<{ label: PdfRegionLabel; bbox: PdfRegionBox }> = [];
 
+  /** Text: intersected, so a block only partly above the cut-off keeps the part
+   *  below it instead of vanishing whole. */
+  const trimToClip = (box: PdfRegionBox): PdfRegionBox | null => {
+    if (!clip) return box;
+    const x = Math.max(box.x, clip.x);
+    const y = Math.max(box.y, clip.y);
+    const w = Math.min(box.x + box.w, clip.x + clip.w) - x;
+    const h = Math.min(box.y + box.h, clip.y + clip.h) - y;
+    if (w <= 1 || h <= 1) return null;
+    return { x, y, w, h };
+  };
+  /** Figures: all-or-nothing, so a crop never shows a sliced diagram. */
+  const insideClip = (box: PdfRegionBox): boolean =>
+    !clip ||
+    (box.x >= clip.x &&
+      box.y >= clip.y &&
+      box.x + box.w <= clip.x + clip.w &&
+      box.y + box.h <= clip.y + clip.h);
+
   for (const block of clusterTextBlocks(lines, pageW, pageH)) {
     if (isPageNumberArtifact(block, pageH)) continue;
-    if (block.box.w <= 2 || block.box.h <= 2) continue;
+    const box = trimToClip(block.box);
+    if (!box || box.w <= 2 || box.h <= 2) continue;
     const singleLine = block.lineCount === 1;
     const tall = median(block.lineHeights) > docMedianH * 1.25;
     const shortText = block.text.trim().length <= 120;
     unlabeled.push({
       label: singleLine && tall && shortText ? "heading" : "text",
-      bbox: block.box,
+      bbox: box,
     });
   }
   // Visual detection runs after text: vector candidates are filtered against
@@ -387,6 +413,7 @@ export async function extractPdfRegions(
     () => [] as PdfRegionBox[],
   );
   for (const box of figures) {
+    if (!insideClip(box)) continue;
     unlabeled.push({ label: "figure", bbox: box });
   }
   if (unlabeled.length === 0) return [];
@@ -400,7 +427,20 @@ export async function extractPdfRegions(
     if (a.bbox.y !== b.bbox.y) return a.bbox.y - b.bbox.y;
     return a.bbox.x - b.bbox.x;
   });
-  return unlabeled.map((region, index) => ({ ...region, id: index + 1 }));
+  // Shift into the cropped image's pixel space last, so every comparison above
+  // stayed in whole-page coordinates.
+  return unlabeled.map((region, index) => ({
+    ...region,
+    id: index + 1,
+    bbox: clip
+      ? {
+          x: region.bbox.x - clip.x,
+          y: region.bbox.y - clip.y,
+          w: region.bbox.w,
+          h: region.bbox.h,
+        }
+      : region.bbox,
+  }));
 }
 
 /**

@@ -1,7 +1,9 @@
 import type { BookSourceType } from "../../../infrastructure/db/entities/types.ts";
 import type { TranslationMethod } from "../../../infrastructure/db/entities/Translation.ts";
+import type { PdfScanRegion } from "./pdfScan.ts";
 
 export type { TranslationMethod } from "../../../infrastructure/db/entities/Translation.ts";
+export type { PdfScanRegion } from "./pdfScan.ts";
 
 export type { BookSourceType };
 
@@ -44,6 +46,10 @@ export interface TranslationSettings {
    *  and splice them into the translation as images (with the section
    *  prompts). Off = plain page-image translation, no figure handling. */
   pdfAutoFigures: boolean;
+  /** PDF only: page area that is scanned (OCR) or sent to AI vision, as page
+   *  fractions. Cuts off the running head, footer and page numbers that repeat
+   *  on every page; null = the whole page. */
+  pdfScanRegion: PdfScanRegion | null;
 }
 
 export const DEFAULT_TRANSLATION_SETTINGS: TranslationSettings = {
@@ -54,6 +60,7 @@ export const DEFAULT_TRANSLATION_SETTINGS: TranslationSettings = {
   pdfMethod: "ocr",
   epubExtraction: "markdown",
   pdfAutoFigures: true,
+  pdfScanRegion: null,
 };
 
 /** Identifies the unit of content currently on screen: `pdf:<page>`,

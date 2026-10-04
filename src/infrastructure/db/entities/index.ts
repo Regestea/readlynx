@@ -5,6 +5,7 @@ export * from "./BookDocument.ts";
 export * from "./BookSource.ts";
 export * from "./CustomInstruction.ts";
 export * from "./DocumentSettings.ts";
+export * from "./PdfScanRegion.ts";
 export * from "./ReadingState.ts";
 export * from "./ReaderSettings.ts";
 export * from "./ReaderDefaults.ts";

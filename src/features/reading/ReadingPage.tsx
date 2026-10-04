@@ -19,6 +19,7 @@ import {
   unitToChapter,
   unitToPage,
 } from "./translation/types";
+import type { PdfScanRegion } from "./translation/types";
 import { useCloseFlush } from "../../shared/closeFlush";
 import {
   loadScrollRatio,
@@ -595,6 +596,19 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
     saveMdOriginalScroll,
   ]);
 
+  /** The overlay lives on the page, so the original view has to be on screen
+   *  first. The trim gesture belongs to the viewer (it owns the canvas); only
+   *  the value is kept here and persisted with the rest of the settings. */
+  const openScanRegion = useCallback(() => {
+    if (showTranslation) toggleViewMode();
+    pdfRef.current?.startScanRegionSelection();
+  }, [showTranslation, toggleViewMode]);
+
+  const handleScanRegionChange = useCallback(
+    (region: PdfScanRegion | null) => translation.updateSettings({ pdfScanRegion: region }),
+    [translation],
+  );
+
   /** Restores the translation scroll once its content for the current unit is
    *  ready. Once per unit per view-session, so later re-renders (zoom,
    *  images) never snap the user back. The marker is cleared when leaving
@@ -884,6 +898,7 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
             onLoadTranslatedUnits={(titles) => translation.getAllTranslatedUnits(titles)}
             exportFileName={book.title}
             exportTitle="Translated book"
+            onOpenScanRegion={book.sourceType === "pdf" ? openScanRegion : undefined}
             onCancel={translation.cancelTranslation}
           />
         )}
@@ -916,6 +931,8 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
                   onReady={persistTotals}
                   onPageChange={handlePageChange}
                   onAskAi={handleAskPdfRegion}
+                  scanRegion={translation.settings.pdfScanRegion}
+                  onScanRegionChange={handleScanRegionChange}
                 />
               ) : state.book.sourceType === "epub" ? (
                 <EpubViewer

@@ -34,6 +34,7 @@ import {
   replaceRegionTokens,
 } from "./pdfRegions.ts";
 import type { PdfRegionSnapshot } from "./pdfRegions.ts";
+import { normalizeScanRegion } from "./pdfScan.ts";
 import {
   DEFAULT_TRANSLATION_SETTINGS,
   MARKDOWN_CHAPTER_KEY,
@@ -385,6 +386,7 @@ export function useTranslation({
             pdfMethod: state.pdfMethod === "vision" ? "vision" : "ocr",
             epubExtraction: state.epubExtraction === "html" ? "html" : "markdown",
             pdfAutoFigures: (state.pdfAutoFigures ?? 1) !== 0,
+            pdfScanRegion: normalizeScanRegion(state.pdfScanRegion),
           });
         }
         if (modelRows.length === 0) {
@@ -914,7 +916,7 @@ export function useTranslation({
       };
       const systemPrompt = buildTranslationSystemPrompt(promptContext);
 
-      const image = await pdfRef.current?.getPageImage(page);
+      const image = await pdfRef.current?.getPageImage(page, currentSettings.pdfScanRegion);
       if (!image) {
         throw new Error(`The image of page ${page} is not available yet.`);
       }
@@ -961,11 +963,13 @@ export function useTranslation({
         // the image as red numbered boxes; the model answers with [REGION-n]
         // ids (never coordinates) and crops are cut from the clean render.
         // Falls back to the plain single-image request when the toggle is
-        // off or detection yields no sections / no visual sections.
+        // off or detection yields no sections / no visual sections. Both
+        // renders get the scan region, so headers never reach the model —
+        // not even as their own section.
         const autoFigures = currentSettings.pdfAutoFigures;
         const snapshot = autoFigures
           ? await (pdfRef.current?.getRegionPageImage
-              ? pdfRef.current.getRegionPageImage(page)
+              ? pdfRef.current.getRegionPageImage(page, currentSettings.pdfScanRegion)
               : Promise.resolve(null)
             ).catch(() => null)
           : null;

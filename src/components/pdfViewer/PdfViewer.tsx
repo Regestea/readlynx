@@ -1,15 +1,30 @@
 import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import type { CSSProperties, MouseEvent as ReactMouseEvent, Ref } from "react";
-import { ChevronLeft, ChevronRight, FileWarning, Loader2, Maximize2, Minimize2, Palette, ScanText, ZoomIn, ZoomOut } from "lucide-react";
+import { ChevronLeft, ChevronRight, Crop, FileWarning, Loader2, Maximize2, Minimize2, Palette, ScanText, ZoomIn, ZoomOut } from "lucide-react";
 import * as pdfjsLib from "pdfjs-dist";
 import { AnnotationLayer, TextLayer } from "pdfjs-dist";
-import type { PDFDocumentLoadingTask, PDFDocumentProxy, PDFPageProxy, RenderTask } from "pdfjs-dist";
+import type {
+  PDFDocumentLoadingTask,
+  PDFDocumentProxy,
+  PDFPageProxy,
+  PageViewport,
+  RenderTask,
+} from "pdfjs-dist";
 import type { PDFLinkService } from "pdfjs-dist/types/web/pdf_link_service";
 import { OcrPanel } from "./OcrPanel";
+import { PdfScanRegionOverlay } from "./PdfScanRegionOverlay";
 import { AiSelectionBubble } from "../AiSelectionBubble/AiSelectionBubble";
 import { useToast } from "../ui/Toast/ToastContext";
 import { annotateRegions, extractPdfRegions } from "../../features/reading/translation/pdfRegions";
 import type { PdfRegionSnapshot } from "../../features/reading/translation/pdfRegions";
+import {
+  isWholePageScanRegion,
+  scanRegionBox,
+  scanRegionTransform,
+  scanViewportScale,
+} from "../../features/reading/translation/pdfScan";
+import type { PdfScanRegion } from "../../features/reading/translation/pdfScan";
+import type { PdfRegionBox } from "../../features/reading/translation/pdfRegions";
 import { usePdfTheme } from "./theme/PdfThemeContext";
 import { applyPdfTheme } from "./theme/PdfThemeManager";
 import { PdfThemeProvider } from "./theme/PdfThemeProvider";
@@ -31,17 +46,22 @@ const ZOOM_MAX = 3;
 export interface PdfViewerHandle {
   /** PNG data URL of the currently rendered page, or null while unavailable. */
   getCurrentPageImage(): string | null;
-  /** PNG data URL of an arbitrary page rendered offscreen at a fixed
-   *  resolution, or null when the document or page is unavailable. */
-  getPageImage(page: number): Promise<string | null>;
+  /** PNG data URL of a page rendered offscreen at the scan resolution, cut to
+   *  `region` when given. Null when the document or page is unavailable. */
+  getPageImage(page: number, region?: PdfScanRegion | null): Promise<string | null>;
   /** Clean + AI-annotated (red numbered section boxes) renders of a page
-   *  with the locally detected sections. Null when unavailable; regions may
-   *  be empty when detection fails — callers must fall back to `getPageImage`. */
-  getRegionPageImage(page: number): Promise<PdfRegionSnapshot | null>;
+   *  with the locally detected sections. Null when unavailable; regions may be
+   *  empty when detection fails — callers fall back to `getPageImage`. */
+  getRegionPageImage(
+    page: number,
+    region?: PdfScanRegion | null,
+  ): Promise<PdfRegionSnapshot | null>;
   /** Jumps to a page (clamped to the document bounds). */
   goToPage(page: number): void;
   /** Total page count of the loaded document (0 before it loads). */
   getPageCount(): number;
+  /** Opens the scan-region trim overlay. No-op without `onScanRegionChange`. */
+  startScanRegionSelection(): void;
 }
 
 interface PdfViewerProps {
@@ -79,6 +99,13 @@ interface PdfViewerProps {
    *  clicking the bubble hands a PNG of the current page to the host, which
    *  decides between OCR and AI vision. */
   onAskAi?: (payload: { image: string }) => void;
+  /** Page area that is scanned (OCR) or sent to AI vision, as page fractions;
+   *  null = the whole page. Applies to every capture this viewer hands out. */
+  scanRegion?: PdfScanRegion | null;
+  /** Stores a trimmed scan region (null = the whole page) and closes the
+   *  overlay. Passing it also enables the viewer's "Scan region" button; the
+   *  value itself stays owned by the host, which persists it. */
+  onScanRegionChange?: (region: PdfScanRegion | null) => void;
   /** Book id whose `ReaderSettings` row ("pdf" viewer) holds the reading
    *  theme. Omit in previews to keep the global localStorage theme. */
   themeBookId?: string;
@@ -110,6 +137,8 @@ function PdfViewerInner({
   onOcrText,
   onAiVision,
   onAskAi,
+  scanRegion = null,
+  onScanRegionChange,
   initialPage,
   ref,
 }: PdfViewerProps & { ref?: Ref<PdfViewerHandle> }) {
@@ -146,6 +175,8 @@ function PdfViewerInner({
   const [extracting, setExtracting] = useState(false);
   const [ocrStatus, setOcrStatus] = useState<string | null>(null);
   const [aiSelection, setAiSelection] = useState<{ x: number; y: number } | null>(null);
+  /** True while the scan-region trim overlay is open. */
+  const [regionEditing, setRegionEditing] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [spacerHeight, setSpacerHeight] = useState(0);
   const [themeOpen, setThemeOpen] = useState(false);
@@ -157,6 +188,67 @@ function PdfViewerInner({
   const textLayerTaskRef = useRef<TextLayer | null>(null);
   const annotationLayerTaskRef = useRef<AnnotationLayer | null>(null);
   const themeWrapRef = useRef<HTMLSpanElement>(null);
+  /** Latest scan region and change handler, read through refs because the
+   *  imperative handle is built once and an async render must not work from
+   *  the values it started with. */
+  const scanRegionRef = useRef<PdfScanRegion | null>(scanRegion);
+  const onScanRegionChangeRef = useRef(onScanRegionChange);
+
+  useEffect(() => {
+    scanRegionRef.current = scanRegion;
+  }, [scanRegion]);
+
+  useEffect(() => {
+    onScanRegionChangeRef.current = onScanRegionChange;
+  }, [onScanRegionChange]);
+
+  /** Renders a page offscreen at the scan resolution, cut to the scan region.
+   *  The single entry point behind every capture, so OCR and AI vision see the
+   *  same pixels whatever the reader has zoomed to; the region is rendered
+   *  rather than cropped afterwards, so the excluded margins are never painted. */
+  const renderScanPage = useCallback(
+    async (
+      page: number,
+      regionOverride: PdfScanRegion | null | undefined,
+    ): Promise<{
+      canvas: HTMLCanvasElement;
+      viewport: PageViewport;
+      pageProxy: PDFPageProxy;
+      box: PdfRegionBox;
+    } | null> => {
+      const pdf = docRef.current;
+      if (!pdf) return null;
+      try {
+        const pageProxy = await pdf.getPage(page);
+        const viewport = pageProxy.getViewport({ scale: scanViewportScale() });
+        // An explicit null is a real instruction to scan the whole page, so
+        // the fallback must only apply to `undefined`.
+        const region = regionOverride === undefined ? scanRegionRef.current : regionOverride;
+        const box = scanRegionBox(region, viewport.width, viewport.height);
+        const canvas = document.createElement("canvas");
+        canvas.width = box.w;
+        canvas.height = box.h;
+        if (!canvas.getContext("2d")) return null;
+        await pageProxy.render({
+          canvas,
+          viewport,
+          transform: scanRegionTransform(box),
+        }).promise;
+        return { canvas, viewport, pageProxy, box };
+      } catch {
+        return null;
+      }
+    },
+    [],
+  );
+
+  /** The current page at the scan resolution — the shared step for the OCR
+   *  panel and click-to-ask. Goes offscreen so neither depends on the current
+   *  zoom or the display's pixel ratio. */
+  const capturePageForScan = useCallback(async () => {
+    const rendered = await renderScanPage(pageNumber, scanRegionRef.current);
+    return rendered ? rendered.canvas.toDataURL("image/png") : null;
+  }, [renderScanPage, pageNumber]);
 
   const showOcr = ocrEnabled || Boolean(onOcrText) || Boolean(onAiVision);
   const { state: pdfTheme } = usePdfTheme();
@@ -187,61 +279,45 @@ function PdfViewerInner({
 
   useImperativeHandle(ref, () => ({
     getCurrentPageImage: () => canvasRef.current?.toDataURL("image/png") ?? null,
-    getPageImage: async (page: number) => {
-      const pdf = docRef.current;
-      if (!pdf) return null;
-      try {
-        const pageProxy = await pdf.getPage(page);
-        const base = pageProxy.getViewport({ scale: 1 });
-        // Fixed quality target (≈ the cover snapshot resolution), so range
-        // translation reads well even when the on-screen page is tiny.
-        const snapshotScale = 1240 / base.width;
-        const viewport = pageProxy.getViewport({ scale: snapshotScale });
-        const snap = document.createElement("canvas");
-        snap.width = Math.floor(viewport.width);
-        snap.height = Math.floor(viewport.height);
-        const snapCtx = snap.getContext("2d");
-        if (!snapCtx) return null;
-        await pageProxy.render({ canvas: snap, viewport }).promise;
-        return snap.toDataURL("image/png");
-      } catch {
-        return null;
-      }
+    getPageImage: async (page: number, region?: PdfScanRegion | null) => {
+      const rendered = await renderScanPage(page, region);
+      return rendered ? rendered.canvas.toDataURL("image/png") : null;
     },
-    getRegionPageImage: async (page: number) => {
-      const pdf = docRef.current;
-      if (!pdf) return null;
-      try {
-        const pageProxy = await pdf.getPage(page);
-        const base = pageProxy.getViewport({ scale: 1 });
-        const snapshotScale = 1240 / base.width;
-        const viewport = pageProxy.getViewport({ scale: snapshotScale });
-        const snap = document.createElement("canvas");
-        snap.width = Math.floor(viewport.width);
-        snap.height = Math.floor(viewport.height);
-        const snapCtx = snap.getContext("2d");
-        if (!snapCtx) return null;
-        await pageProxy.render({ canvas: snap, viewport }).promise;
-        // Section boxes are detected locally (pdf.js text + image operators)
-        // — the model only returns integer ids, never coordinates.
-        const regions = await extractPdfRegions(pageProxy, viewport).catch(() => []);
-        const annotated = annotateRegions(snap, regions);
-        return {
-          clean: snap.toDataURL("image/png"),
-          annotated: annotated.toDataURL("image/png"),
-          regions,
-          width: snap.width,
-          height: snap.height,
-        };
-      } catch {
-        return null;
-      }
+    getRegionPageImage: async (page: number, region?: PdfScanRegion | null) => {
+      const rendered = await renderScanPage(page, region);
+      if (!rendered) return null;
+      const { canvas, viewport, pageProxy, box } = rendered;
+      // Detected locally (pdf.js text + image operators) — the model only
+      // returns ids, never coordinates. Clipped to the region so excluded
+      // margins never become sections, and shifted into the cropped image.
+      const regions = await extractPdfRegions(pageProxy, viewport, box).catch(() => []);
+      const annotated = annotateRegions(canvas, regions);
+      return {
+        clean: canvas.toDataURL("image/png"),
+        annotated: annotated.toDataURL("image/png"),
+        regions,
+        width: canvas.width,
+        height: canvas.height,
+      };
     },
     getPageCount: () => numPages,
     goToPage: (page: number) => {
       const pdf = docRef.current;
       if (!pdf) return;
+      setRegionEditing(false);
       setPageNumber(Math.min(Math.max(1, page), pdf.numPages));
+    },
+    startScanRegionSelection: () => {
+      if (!onScanRegionChangeRef.current) return;
+      const canvas = canvasRef.current;
+      if (!canvas || canvas.width <= 0 || canvas.height <= 0) {
+        // Nothing to trim on yet (page still painting); clearing the region
+        // back to the whole page is always valid.
+        onScanRegionChangeRef.current(null);
+        return;
+      }
+      setAiSelection(null);
+      setRegionEditing(true);
     },
   }));
 
@@ -368,7 +444,8 @@ function PdfViewerInner({
     setExtracting(true);
     setOcrStatus("Preparing page…");
     try {
-      const dataUrl = canvas.toDataURL("image/png");
+      const dataUrl = await capturePageForScan();
+      if (!dataUrl) throw new Error("The page is still loading.");
       const result = await window.readlynx?.ocr.recognize({ dataUrl, langs: selectedLangs });
       if (!result) throw new Error("OCR is unavailable.");
       if (result.error) throw new Error(result.error);
@@ -389,7 +466,7 @@ function PdfViewerInner({
       extractingRef.current = false;
       setExtracting(false);
     }
-  }, [selectedLangs, toast]);
+  }, [selectedLangs, toast, capturePageForScan]);
 
   /** AI vision extraction: hands the rendered page to the host's AI call
    *  and reports the outcome. The host inserts the returned Markdown into
@@ -407,7 +484,8 @@ function PdfViewerInner({
     setExtracting(true);
     setOcrStatus("Sending the page to AI vision…");
     try {
-      const dataUrl = canvas.toDataURL("image/png");
+      const dataUrl = await capturePageForScan();
+      if (!dataUrl) throw new Error("The page is still loading.");
       const markdown = await onAiVision({
         image: dataUrl,
         instruction: visionInstructionRef.current,
@@ -428,7 +506,7 @@ function PdfViewerInner({
       extractingRef.current = false;
       setExtracting(false);
     }
-  }, [toast]);
+  }, [toast, capturePageForScan]);
 
   const handleOcrToggle = useCallback(() => {
     setOcrOpen((open) => !open);
@@ -453,12 +531,13 @@ function PdfViewerInner({
   };
 
   /** Click-to-ask: floats the "Ask AI" bubble at the cursor. The bubble's
-   *  click hands a PNG of the whole current page to the host, which picks
+   *  click hands a PNG of the current page to the host, which picks
    *  OCR or AI vision from its top setting. */
   const handlePageClick = useCallback(
     (event: ReactMouseEvent<HTMLCanvasElement>) => {
       const canvas = canvasRef.current;
       if (!canvas || !onAskAi) return;
+      if (regionEditing) return;
       const rect = canvas.getBoundingClientRect();
       const relX = event.clientX - rect.left;
       const relY = event.clientY - rect.top;
@@ -470,32 +549,38 @@ function PdfViewerInner({
       const y = Math.max(8, Math.min(relY + rect.top - 52, window.innerHeight - bubbleWidth));
       setAiSelection({ x, y });
     },
-    [onAskAi],
+    [onAskAi, regionEditing],
   );
 
-  /** Hands a PNG of the whole current page to the host, which decides between
-   *  OCR (recognized page text seeded into the chat) and AI vision (the page
-   *  image itself) from its top setting. Shared by the click bubble and the
-   *  right-click shortcut. */
+  /** Hands a PNG of the current page to the host, which decides between OCR
+   *  (recognized text seeded into the chat) and AI vision (the page image) from
+   *  its top setting. Shared by the click bubble and the right-click shortcut.
+   *  Rendered at the scan resolution and cut to the scan region, so what the
+   *  user asks about is what the translation pipeline would have read. */
   const askAboutPage = useCallback(() => {
-    const image = canvasRef.current?.toDataURL("image/png") ?? null;
-    if (image) onAskAi?.({ image });
-  }, [onAskAi]);
+    void capturePageForScan()
+      .then((image) => {
+        if (image) onAskAi?.({ image });
+      })
+      .catch(() => {
+        // The page could not be re-rendered; the chat panel stays closed.
+      });
+  }, [onAskAi, capturePageForScan]);
 
   /** Right-clicking the page with no text selection asks the AI about the
-   *  whole page instead of opening the native menu — the same as the click
+   *  page instead of opening the native menu — the same as the click
    *  bubble, minus the extra step. A text selection is left alone so the
    *  native copy menu still works (same rule as the Markdown/EPUB views). */
   const handlePageContextMenu = useCallback(
     (event: ReactMouseEvent<HTMLDivElement>) => {
-      if (!onAskAi) return;
+      if (!onAskAi || regionEditing) return;
       const selection = window.getSelection();
       if (selection && !selection.isCollapsed && selection.toString().trim()) return;
       event.preventDefault();
       setAiSelection(null);
       askAboutPage();
     },
-    [onAskAi, askAboutPage],
+    [onAskAi, askAboutPage, regionEditing],
   );
 
   useEffect(() => {
@@ -519,6 +604,7 @@ function PdfViewerInner({
         setRendering(true);
         snapshottedRef.current = false;
         readyRef.current = false;
+        setRegionEditing(false);
 
         const data = await window.readlynx?.readFileBytes(filePath);
         if (!data) {
@@ -708,6 +794,9 @@ const task = pageProxy.render({ canvas, viewport, transform });
 
   const goTo = (page: number) => {
     if (!doc) return;
+    // The overlay is anchored to the pixels of the page it was drawn on, so a
+    // turn would leave it hovering over unrelated content.
+    if (page !== pageNumber) setRegionEditing(false);
     setPageNumber(Math.min(Math.max(1, page), numPages));
   };
 
@@ -816,6 +905,26 @@ const task = pageProxy.render({ canvas, viewport, transform });
             <Maximize2 size={16} strokeWidth={2} aria-hidden="true" />
           )}
         </button>
+        {onScanRegionChange && (
+          <>
+            <span className={styles.divider} aria-hidden="true" />
+            <button
+              type="button"
+              className={`${styles.toolButton} ${regionEditing || !isWholePageScanRegion(scanRegion) ? styles.toolButtonActive : ""}`}
+              onClick={() => setRegionEditing((open) => !open)}
+              disabled={!doc}
+              aria-label="Scan region"
+              title={
+                isWholePageScanRegion(scanRegion)
+                  ? "Choose the part of the page that is scanned (OCR) or sent to AI vision"
+                  : "A scan region is set — click to change it"
+              }
+              aria-pressed={regionEditing}
+            >
+              <Crop size={16} strokeWidth={2} aria-hidden="true" />
+            </button>
+          </>
+        )}
         {showOcr && (
           <>
             <span className={styles.divider} aria-hidden="true" />
@@ -879,6 +988,30 @@ const task = pageProxy.render({ canvas, viewport, transform });
             <div className="pdf-canvas-tint" aria-hidden="true" />
             <div ref={textLayerRef} className="pdf-text-layer textLayer" />
             <div ref={annotationLayerRef} className="pdf-annotation-layer annotationLayer" />
+            {/* Reminder of what is scanned, so a region set once is not
+                forgotten a hundred pages later. */}
+            {!regionEditing && !isWholePageScanRegion(scanRegion) && (
+              <div
+                className={styles.regionHint}
+                aria-hidden="true"
+                style={{
+                  left: `${(scanRegion?.x ?? 0) * 100}%`,
+                  top: `${(scanRegion?.y ?? 0) * 100}%`,
+                  width: `${(scanRegion?.w ?? 1) * 100}%`,
+                  height: `${(scanRegion?.h ?? 1) * 100}%`,
+                }}
+              />
+            )}
+            {regionEditing && onScanRegionChange && (
+              <PdfScanRegionOverlay
+                region={scanRegion}
+                onCommit={(next) => {
+                  onScanRegionChange(next);
+                  setRegionEditing(false);
+                }}
+                onClose={() => setRegionEditing(false)}
+              />
+            )}
             {rendering && (
               <div className={styles.renderingOverlay} aria-hidden="true">
                 <Loader2 className={styles.spinner} size={20} strokeWidth={2} />
@@ -895,7 +1028,7 @@ const task = pageProxy.render({ canvas, viewport, transform });
       {isFullscreen && (
         <div className={styles.fullscreenSpacer} style={{ height: spacerHeight }} aria-hidden="true" />
       )}
-      {aiSelection && onAskAi && (
+      {aiSelection && onAskAi && !regionEditing && (
         <AiSelectionBubble
           x={aiSelection.x}
           y={aiSelection.y}

@@ -98,6 +98,10 @@
   white-space: nowrap;
 }
 
+.scanRegionTrigger {
+  color: var(--color-text-secondary);
+}
+
 /* Opens from the trigger's left edge and grows rightwards, matching the LTR
  * reading order of the control row it belongs to. */
 .modelPanel {

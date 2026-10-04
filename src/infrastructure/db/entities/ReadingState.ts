@@ -1,3 +1,7 @@
+import type { PdfScanRegion } from "./PdfScanRegion.ts";
+
+export type { PdfScanRegion } from "./PdfScanRegion.ts";
+
 /** Row of the `ReadingState` table (one per book). Besides the reading
  *  position it stores the per-book translation settings: OCR languages
  *  (`ocrLangs` is a JSON array of tesseract codes), the AI target language
@@ -28,6 +32,10 @@ export interface ReadingStateEntity {
    *  splice them into the translation, 0 = plain page-image translation).
    *  Irrelevant for EPUB books. */
   pdfAutoFigures: number;
+  /** PDF-only: page area that is scanned (OCR) or sent to AI vision, as page
+   *  fractions (null = the whole page). Cuts off running heads, footers and
+   *  page numbers that repeat on every page. */
+  pdfScanRegion: PdfScanRegion | null;
   /** Ordered AI model ids used for translation, in failover order (the next
    *  one takes over when the previous fails; empty = app default). The
    *  legacy single-choice `modelId` column still exists for old readers. */

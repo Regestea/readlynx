@@ -1,0 +1,143 @@
+.overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+}
+
+/* Inert: the frame is only ever trimmed from its handles. */
+.surface {
+  position: absolute;
+  inset: 0;
+  touch-action: none;
+}
+
+/* Dims everything outside the frame via an oversized spread shadow, keeping the
+   kept area at full brightness. The scrim is deliberately a fixed dark colour,
+   not a theme token — PDF pages are near-white, so excluding their margins needs
+   a dark overlay whatever the app's theme is. */
+.cutout {
+  position: absolute;
+  cursor: move;
+  box-shadow: 0 0 0 9999px rgb(15 23 42 / 55%);
+  border: 2px solid var(--color-primary);
+  background: transparent;
+}
+
+/* Solid, not the translucent card: 14px targets that must not blend into
+   whatever the page happens to be. */
+.handle {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--color-primary);
+  border-radius: 4px;
+  background: var(--color-card-solid);
+}
+
+.handleNw {
+  top: -7px;
+  left: -7px;
+  cursor: nwse-resize;
+}
+
+.handleN {
+  top: -7px;
+  left: calc(50% - 7px);
+  cursor: ns-resize;
+}
+
+.handleNe {
+  top: -7px;
+  right: -7px;
+  cursor: nesw-resize;
+}
+
+.handleE {
+  top: calc(50% - 7px);
+  right: -7px;
+  cursor: ew-resize;
+}
+
+.handleSe {
+  bottom: -7px;
+  right: -7px;
+  cursor: nwse-resize;
+}
+
+.handleS {
+  bottom: -7px;
+  left: calc(50% - 7px);
+  cursor: ns-resize;
+}
+
+.handleSw {
+  bottom: -7px;
+  left: -7px;
+  cursor: nesw-resize;
+}
+
+.handleW {
+  top: calc(50% - 7px);
+  left: -7px;
+  cursor: ew-resize;
+}
+
+/* Above the cut-out (z-index auto) so its full-page spread shadow can never
+   cover a control. The selectors are two classes deep on purpose: `Button`
+   applies its variant class before this one, and equal-specificity rules
+   would then depend on stylesheet order. */
+
+/* Two classes deep on purpose: `Button` puts its variant class first, so at
+   equal specificity these overrides would depend on stylesheet order. */
+.actions {
+  position: absolute;
+  top: var(--space-3);
+  right: var(--space-3);
+  z-index: 2;
+  display: flex;
+  gap: 6px;
+}
+
+.actions .action {
+  width: 34px;
+  height: 34px;
+}
+
+.actions .actionPrimary {
+  color: var(--color-on-primary);
+  background: var(--color-primary);
+  border-color: transparent;
+}
+
+.actions .actionPrimary:hover {
+  color: var(--color-on-primary);
+  background: var(--color-primary);
+  filter: brightness(1.08);
+}
+
+.actions .actionPrimary:disabled {
+  color: var(--color-icon);
+  background: var(--color-glass);
+  border-color: var(--color-border);
+  filter: none;
+}
+
+/* Themed surface, not a fixed dark pill — `--color-card` is dark navy in the
+   dark theme, so it gave dark text on a dark box. The solid variant is also
+   near-opaque, keeping the line readable over whatever page is behind it. */
+.hint {
+  position: absolute;
+  bottom: var(--space-3);
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: calc(100% - var(--space-6));
+  padding: 6px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  font-size: var(--font-size-xs);
+  text-align: center;
+  color: var(--color-text-secondary);
+  background: var(--color-card-solid);
+  box-shadow: var(--shadow-md);
+  pointer-events: none;
+}

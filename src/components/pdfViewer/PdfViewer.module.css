@@ -131,9 +131,14 @@
   background: var(--color-border);
 }
 
+/* `min-height: 0` lets this shrink to the space the viewer actually has; a
+   flex item defaults to `auto`, which a tall page would push out of the viewer
+   instead of scrolling. Never give it a viewport height: `.viewer` clips with
+   `overflow: hidden`, so the page bottom and this padding would be cut off and
+   unreachable — visibly different at every zoom level. */
 .scroll {
   flex: 1;
-  min-height: 100dvh !important;
+  min-height: 0;
   overflow: auto;
   display: flex;
   align-items: flex-start;
@@ -159,6 +164,15 @@
 .themeWrap {
   position: relative;
   display: inline-flex;
+}
+
+.regionHint {
+  position: absolute;
+  z-index: 3;
+  border: 1px dashed var(--color-primary);
+  border-radius: 2px;
+  pointer-events: none;
+  opacity: 0.55;
 }
 
 .renderingOverlay {

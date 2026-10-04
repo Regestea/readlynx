@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ChevronDown, X } from "lucide-react";
+import { ChevronDown, Crop, X } from "lucide-react";
 import type { AiModel } from "../../../infrastructure/db/entities/AiModel.ts";
 import type { BookSourceType } from "../../../infrastructure/db/entities/types.ts";
 import { Button } from "../../../components/ui/Button/Button";
@@ -7,6 +7,7 @@ import { Select } from "../../../components/ui/Select/Select";
 import { CustomInstructionSelect } from "../../../components/customInstruction/CustomInstructionSelect";
 import { OcrPanel } from "../../../components/pdfViewer/OcrPanel";
 import { NO_LANGUAGE, TRANSLATION_LANGUAGES, ocrLanguagesLabel } from "./languages.ts";
+import { scanRegionLabel } from "./pdfScan.ts";
 import type { TranslationMethod, TranslationSettings } from "./types.ts";
 import styles from "./TranslationControls.module.css";
 
@@ -35,6 +36,9 @@ interface TranslationControlsProps {
    *  single-unit Translate action, so the Manage dialog hides it. */
   showUnitPicker?: boolean;
   onOpenRange?: () => void;
+  /** PDF only: opens the trim overlay on the page. Omitted when no PDF viewer is
+   *  on screen. */
+  onOpenScanRegion?: () => void;
   /** Extra class on the container so each host can lay the row out. */
   className?: string;
 }
@@ -69,6 +73,7 @@ export function TranslationControls({
   onDelete,
   showUnitPicker = false,
   onOpenRange,
+  onOpenScanRegion,
   className = "",
 }: TranslationControlsProps) {
   const [ocrOpen, setOcrOpen] = useState(false);
@@ -254,6 +259,19 @@ export function TranslationControls({
             />
           )}
         </div>
+      )}
+
+      {isPdf && onOpenScanRegion && (
+        <button
+          type="button"
+          className={`${styles.ocrTrigger} ${styles.scanRegionTrigger}`}
+          onClick={onOpenScanRegion}
+          aria-label="Scan region"
+          title="Only the area you keep on the page is scanned with OCR or sent to AI vision — useful for cutting off the repeating header and page numbers"
+        >
+          <Crop size={14} strokeWidth={1.8} aria-hidden="true" />
+          <span className={styles.ocrSummary}>{scanRegionLabel(settings.pdfScanRegion)}</span>
+        </button>
       )}
 
       <Select

@@ -68,6 +68,8 @@ interface TranslationSettingsPanelProps {
   ) => Promise<import("../export/translatedBookContent.tsx").TranslatedUnit[]>;
   /** Base file name for the export (the book title). */
   exportFileName: string;
+  /** PDF only: opens the trim overlay on the page. */
+  onOpenScanRegion?: () => void;
   /** Noun shown in the export dialog, e.g. "Translated book". */
   exportTitle: string;
   /** Stops the running range translation immediately (aborts the AI request). */
@@ -111,6 +113,7 @@ export function TranslationSettingsPanel({
   onLoadTranslatedUnits,
   exportFileName,
   exportTitle,
+  onOpenScanRegion,
   onCancel,
 }: TranslationSettingsPanelProps) {
   const [rangeOpen, setRangeOpen] = useState(false);
@@ -165,6 +168,7 @@ export function TranslationSettingsPanel({
       onDelete={onDelete}
       showUnitPicker={host === "toolbar"}
       onOpenRange={() => setRangeOpen(true)}
+      onOpenScanRegion={onOpenScanRegion}
       className={host === "toolbar" ? styles.controlsToolbar : styles.controlsDialog}
     />
   );

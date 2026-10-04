@@ -1,5 +1,6 @@
 import type Database from "better-sqlite3";
-import type { ReadingStateEntity } from "../entities/index.ts";
+import type { PdfScanRegion, ReadingStateEntity } from "../entities/index.ts";
+import { normalizeScanRegion } from "../entities/PdfScanRegion.ts";
 import type { ReadingDayBucket, ReadingProgressRow, ReadingWeekSummary } from "../entities/types.ts";
 import type { TranslationMethod } from "../entities/Translation.ts";
 
@@ -71,6 +72,9 @@ export interface ReadingStateInput {
   epubExtraction?: "markdown" | "html";
   /** PDF AI-vision figure handling; EPUB books ignore it. */
   pdfAutoFigures?: boolean;
+  /** PDF-only: page area that is scanned (OCR) or sent to AI vision, as page
+   *  fractions; null / omitted leaves the stored region untouched. */
+  pdfScanRegion?: PdfScanRegion | null;
   /** Ordered AI model ids for translation, in failover order (empty = app
    *  default). */
   modelIds?: string[];
@@ -107,6 +111,29 @@ function parseModelIds(value: string | null | undefined): string[] {
   return [];
 }
 
+/** Anything unreadable (hand-edited column, truncated write) degrades to "the
+ *  whole page" instead of failing the whole reading-state read. */
+function parseScanRegion(value: string | null | undefined): PdfScanRegion | null {
+  if (!value) return null;
+  try {
+    const parsed: unknown = JSON.parse(value);
+    if (!parsed || typeof parsed !== "object") return null;
+    const { x, y, w, h } = parsed as Record<string, unknown>;
+    if (![x, y, w, h].every((entry) => typeof entry === "number" && Number.isFinite(entry))) {
+      return null;
+    }
+    return normalizeScanRegion({ x: x as number, y: y as number, w: w as number, h: h as number });
+  } catch {
+    return null;
+  }
+}
+
+/** Column payload for a scan region: JSON when there is one, the empty string
+ *  (= whole page) when there is not. */
+function serializeScanRegion(region: PdfScanRegion | null): string {
+  return region ? JSON.stringify(region) : "";
+}
+
 /** Row store for the `ReadingState` table (one per book). */
 export class ReadingStateRepository {
   private readonly db: Database.Database;
@@ -119,13 +146,19 @@ export class ReadingStateRepository {
     const row = this.db
       .prepare("SELECT * FROM ReadingState WHERE bookId = ?")
       .get(bookId) as
-      | (Omit<ReadingStateEntity, "ocrLangs" | "modelIds"> & {
+      | (Omit<ReadingStateEntity, "ocrLangs" | "modelIds" | "pdfScanRegion"> & {
           ocrLangs: string;
           modelIds: string;
+          pdfScanRegion: string;
         })
       | undefined;
     if (!row) return undefined;
-    return { ...row, ocrLangs: parseOcrLangs(row.ocrLangs), modelIds: parseModelIds(row.modelIds) };
+    return {
+      ...row,
+      ocrLangs: parseOcrLangs(row.ocrLangs),
+      modelIds: parseModelIds(row.modelIds),
+      pdfScanRegion: parseScanRegion(row.pdfScanRegion),
+    };
   }
 
   /** Inserts a row (with defaults) or updates only the provided columns,
@@ -136,24 +169,25 @@ export class ReadingStateRepository {
   upsert(bookId: string, state: ReadingStateInput): void {
     this.db
       .prepare(
-        `INSERT INTO ReadingState (
+`INSERT INTO ReadingState (
            bookId, currentPage, currentChapter, ocrLangs, sourceLang,
-           targetLang, modelId, customPromptId, pdfMethod, epubExtraction, pdfAutoFigures, modelIds, totalPages, totalChapters,
+           targetLang, modelId, customPromptId, pdfMethod, epubExtraction, pdfAutoFigures, pdfScanRegion, modelIds, totalPages, totalChapters,
            progressPercent, maxProgress, updatedAt
          ) VALUES (
-           @bookId,
-           COALESCE(@currentPage, 1),
-           COALESCE(@currentChapter, ''),
-           COALESCE(@ocrLangs, '["eng"]'),
-           COALESCE(@sourceLang, ''),
-           COALESCE(@targetLang, 'English'),
-           COALESCE(@modelId, ''),
-           COALESCE(@customPromptId, ''),
-           COALESCE(@pdfMethod, 'ocr'),
-           COALESCE(@epubExtraction, 'markdown'),
-           COALESCE(@pdfAutoFigures, 1),
-           COALESCE(@modelIds, '[]'),
-           COALESCE(@totalPages, 0),
+            @bookId,
+            COALESCE(@currentPage, 1),
+            COALESCE(@currentChapter, ''),
+            COALESCE(@ocrLangs, '["eng"]'),
+            COALESCE(@sourceLang, ''),
+            COALESCE(@targetLang, 'English'),
+            COALESCE(@modelId, ''),
+            COALESCE(@customPromptId, ''),
+            COALESCE(@pdfMethod, 'ocr'),
+            COALESCE(@epubExtraction, 'markdown'),
+            COALESCE(@pdfAutoFigures, 1),
+            COALESCE(@pdfScanRegion, ''),
+            COALESCE(@modelIds, '[]'),
+            COALESCE(@totalPages, 0),
            COALESCE(@totalChapters, 0),
            COALESCE(@progressPercent, 0),
            CASE WHEN COALESCE(@totalPages, 0) > 0
@@ -173,6 +207,7 @@ export class ReadingStateRepository {
            pdfMethod      = COALESCE(@pdfMethod,      ReadingState.pdfMethod),
            epubExtraction = COALESCE(@epubExtraction, ReadingState.epubExtraction),
            pdfAutoFigures = COALESCE(@pdfAutoFigures, ReadingState.pdfAutoFigures),
+            pdfScanRegion  = COALESCE(@pdfScanRegion,  ReadingState.pdfScanRegion),
            modelIds       = COALESCE(@modelIds,       ReadingState.modelIds),
            totalPages     = COALESCE(@totalPages,     ReadingState.totalPages),
            totalChapters  = COALESCE(@totalChapters,  ReadingState.totalChapters),
@@ -197,6 +232,13 @@ export class ReadingStateRepository {
         pdfMethod: state.pdfMethod ?? null,
         epubExtraction: state.epubExtraction ?? null,
         pdfAutoFigures: state.pdfAutoFigures !== undefined ? (state.pdfAutoFigures ? 1 : 0) : null,
+        // `undefined` = not part of this write (keep the stored region); an
+        // explicit null = the whole page, stored as a rect that normalizes
+        // back to null on read.
+        pdfScanRegion:
+          state.pdfScanRegion === undefined
+            ? null
+            : serializeScanRegion(normalizeScanRegion(state.pdfScanRegion)),
         modelIds: state.modelIds !== undefined ? JSON.stringify(state.modelIds) : null,
         totalPages: state.totalPages ?? null,
         totalChapters: state.totalChapters ?? null,
