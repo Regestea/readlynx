@@ -80,11 +80,18 @@ export function EpubDefaultsCard() {
         />
       </div>
 
-      <Checkbox
-        checked={defaults.hardOverrideText}
-        onChange={(hardOverrideText) => defaults.setValues({ hardOverrideText })}
-        label="Force the text color onto every element (hard override)"
-      />
+      <div className={styles.toggles}>
+        <Checkbox
+          checked={defaults.softBookColors}
+          onChange={(softBookColors) => defaults.setValues({ softBookColors })}
+          label="Replace harsh book colors with soft reading inks"
+        />
+        <Checkbox
+          checked={defaults.hardOverrideText}
+          onChange={(hardOverrideText) => defaults.setValues({ hardOverrideText })}
+          label="Force the text color onto every element (hard override)"
+        />
+      </div>
 
       <div className={styles.footer}>
         <Button variant="ghost" onClick={defaults.reset}>

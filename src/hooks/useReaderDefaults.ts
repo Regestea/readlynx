@@ -14,6 +14,8 @@ export interface ReaderDefaults {
   customBg: string | null;
   customText: string | null;
   hardOverrideText: boolean;
+  /** EPUB-only soft colors (replace loud author colours with the reading inks). */
+  softBookColors: boolean;
   pdfBackground: string | null;
   codeTheme: MarkdownBlockTheme | null;
   diagramTheme: MarkdownBlockTheme | null;
@@ -27,6 +29,7 @@ const DEFAULTS: ReaderDefaults = {
   customBg: null,
   customText: null,
   hardOverrideText: false,
+  softBookColors: true,
   pdfBackground: null,
   codeTheme: null,
   diagramTheme: null,
@@ -41,6 +44,7 @@ function same(a: ReaderDefaults, b: ReaderDefaults): boolean {
     a.customBg === b.customBg &&
     a.customText === b.customText &&
     a.hardOverrideText === b.hardOverrideText &&
+    a.softBookColors === b.softBookColors &&
     a.pdfBackground === b.pdfBackground &&
     a.codeTheme === b.codeTheme &&
     a.diagramTheme === b.diagramTheme &&
@@ -73,6 +77,7 @@ export function useReaderDefaults(viewer: ReaderViewer) {
             customBg: row.customBg ?? null,
             customText: row.customText ?? null,
             hardOverrideText: Number(row.textHardOverride ?? 0) === 1,
+            softBookColors: Number(row.softBookColors ?? 1) === 1,
             pdfBackground: row.pdfBackground ?? null,
             codeTheme: normalizeBlockTheme(row.codeTheme),
             diagramTheme: normalizeBlockTheme(row.diagramTheme),
@@ -123,6 +128,7 @@ export function useReaderDefaults(viewer: ReaderViewer) {
         customBg: values.customBg,
         customText: values.customText,
         textHardOverride: values.hardOverrideText ? 1 : 0,
+        softBookColors: values.softBookColors ? 1 : 0,
         pdfBackground: values.pdfBackground,
         codeTheme: values.codeTheme,
         diagramTheme: values.diagramTheme,
@@ -145,3 +151,7 @@ export function useReaderDefaults(viewer: ReaderViewer) {
     [values, loaded, patch, reset],
   );
 }
+
+
+
+

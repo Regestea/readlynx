@@ -62,6 +62,7 @@ export async function resetReaderColorsToTheme(): Promise<ReaderViewer[]> {
       zoomPct: row.zoomPct,
       fontFamily: row.fontFamily,
       textHardOverride: row.textHardOverride,
+      softBookColors: row.softBookColors,
       codeTheme: row.codeTheme,
       diagramTheme: row.diagramTheme,
       customBg: null,

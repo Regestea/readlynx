@@ -15,6 +15,9 @@ export interface ReaderSettings {
   /** EPUB-only hard text-color override (true = force the text color onto
    *  every element with `!important`). */
   hardOverrideText: boolean;
+  /** EPUB-only soft colors (true = replace author colors that are louder than
+   *  the app's reading inks with those inks). On by default, app-wide. */
+  softBookColors: boolean;
   /** Markdown-only code-block syntax theme (null = follow the app theme). */
   codeTheme: MarkdownBlockTheme | null;
   /** Markdown-only Mermaid diagram theme (null = follow the app theme). */
@@ -33,6 +36,7 @@ const DEFAULT_SETTINGS: ReaderSettings = {
   customBg: null,
   customText: null,
   hardOverrideText: false,
+  softBookColors: true,
   codeTheme: null,
   diagramTheme: null,
   codeBackground: null,
@@ -61,6 +65,7 @@ export function useReaderSettings(bookId: string | undefined, viewer: ReaderView
   const [hardOverrideText, setHardOverrideText] = useState<boolean>(
     DEFAULT_SETTINGS.hardOverrideText,
   );
+  const [softBookColors, setSoftBookColors] = useState<boolean>(DEFAULT_SETTINGS.softBookColors);
   const [codeTheme, setCodeTheme] = useState<MarkdownBlockTheme | null>(null);
   const [diagramTheme, setDiagramTheme] = useState<MarkdownBlockTheme | null>(null);
   const [codeBackground, setCodeBackground] = useState<string | null>(null);
@@ -89,6 +94,7 @@ export function useReaderSettings(bookId: string | undefined, viewer: ReaderView
           customBg: source.customBg ?? null,
           customText: source.customText ?? null,
           hardOverrideText: Number(source.textHardOverride ?? 0) === 1,
+          softBookColors: Number(source.softBookColors ?? 1) === 1,
           codeTheme: normalizeBlockTheme(source.codeTheme),
           diagramTheme: normalizeBlockTheme(source.diagramTheme),
           codeBackground: source.codeBackground ?? null,
@@ -100,6 +106,7 @@ export function useReaderSettings(bookId: string | undefined, viewer: ReaderView
         setCustomBg(next.customBg);
         setCustomText(next.customText);
         setHardOverrideText(next.hardOverrideText);
+        setSoftBookColors(next.softBookColors);
         setCodeTheme(next.codeTheme);
         setDiagramTheme(next.diagramTheme);
         setCodeBackground(next.codeBackground);
@@ -130,6 +137,7 @@ export function useReaderSettings(bookId: string | undefined, viewer: ReaderView
       customBg === snapshot.customBg &&
       customText === snapshot.customText &&
       hardOverrideText === snapshot.hardOverrideText &&
+      softBookColors === snapshot.softBookColors &&
       codeTheme === snapshot.codeTheme &&
       diagramTheme === snapshot.diagramTheme &&
       codeBackground === snapshot.codeBackground &&
@@ -143,6 +151,7 @@ export function useReaderSettings(bookId: string | undefined, viewer: ReaderView
       customBg,
       customText,
       hardOverrideText,
+      softBookColors,
       codeTheme,
       diagramTheme,
       codeBackground,
@@ -154,6 +163,7 @@ export function useReaderSettings(bookId: string | undefined, viewer: ReaderView
       customBg,
       customText,
       textHardOverride: hardOverrideText ? 1 : 0,
+      softBookColors: softBookColors ? 1 : 0,
       codeTheme,
       diagramTheme,
       codeBackground,
@@ -168,6 +178,7 @@ export function useReaderSettings(bookId: string | undefined, viewer: ReaderView
     customBg,
     customText,
     hardOverrideText,
+    softBookColors,
     codeTheme,
     diagramTheme,
     codeBackground,
@@ -186,6 +197,8 @@ export function useReaderSettings(bookId: string | undefined, viewer: ReaderView
       setCustomText,
       hardOverrideText,
       setHardOverrideText,
+      softBookColors,
+      setSoftBookColors,
       codeTheme,
       setCodeTheme,
       diagramTheme,
@@ -201,6 +214,7 @@ export function useReaderSettings(bookId: string | undefined, viewer: ReaderView
       customBg,
       customText,
       hardOverrideText,
+      softBookColors,
       codeTheme,
       diagramTheme,
       codeBackground,
@@ -208,3 +222,8 @@ export function useReaderSettings(bookId: string | undefined, viewer: ReaderView
     ],
   );
 }
+
+
+
+
+

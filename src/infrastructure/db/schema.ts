@@ -79,6 +79,7 @@ CREATE TABLE IF NOT EXISTS ReaderSettings (
   customBg          TEXT,
   customText        TEXT,
   textHardOverride  INTEGER NOT NULL DEFAULT 0,
+  softBookColors    INTEGER NOT NULL DEFAULT 1,
   pdfBackground     TEXT,
   codeTheme         TEXT,
   diagramTheme      TEXT,
@@ -98,6 +99,7 @@ CREATE TABLE IF NOT EXISTS ReaderDefaults (
   customBg          TEXT,
   customText        TEXT,
   textHardOverride  INTEGER NOT NULL DEFAULT 0,
+  softBookColors    INTEGER NOT NULL DEFAULT 1,
   pdfBackground     TEXT,
   codeTheme         TEXT,
   diagramTheme      TEXT,
@@ -218,6 +220,7 @@ export function applySchema(db: Database.Database): void {
     ensureReaderDefaultsTable(db);
     ensureReaderSettingsBlockColumns(db);
     ensureReaderDefaultsBlockColumns(db);
+    ensureReaderSoftBookColorsColumn(db);
     ensureBookPinColumns(db);
   });
 }
@@ -698,6 +701,7 @@ function ensureReaderDefaultsTable(db: Database.Database): void {
       customBg          TEXT,
       customText        TEXT,
       textHardOverride  INTEGER NOT NULL DEFAULT 0,
+      softBookColors    INTEGER NOT NULL DEFAULT 1,
       pdfBackground     TEXT,
       codeTheme         TEXT,
       diagramTheme      TEXT,
@@ -736,6 +740,19 @@ function ensureReaderDefaultsBlockColumns(db: Database.Database): void {
   })();
 }
 
+/** Databases created before the EPUB soft-colors option existed lack
+ *  `softBookColors` on both reader stores. Adds it defaulting to on (1), which
+ *  is the app-wide default: every existing book gets the soft reading inks, and
+ *  a reader who prefers the publisher's palette switches it off per book or in
+ *  Settings → EPUB defaults. */
+function ensureReaderSoftBookColorsColumn(db: Database.Database): void {
+  for (const table of ["ReaderSettings", "ReaderDefaults"]) {
+    const columns = db.pragma(`table_info(${table})`) as Array<{ name: string }>;
+    if (columns.some((entry) => entry.name === "softBookColors")) continue;
+    db.exec(`ALTER TABLE ${table} ADD COLUMN softBookColors INTEGER NOT NULL DEFAULT 1`);
+  }
+}
+
 /** Databases created before book pinning lack `isPinned` / `pinnedAt` on
  *  `Books`. Adds them with defaults (unpinned); existing rows keep their
  *  shelf order. */
@@ -747,3 +764,5 @@ function ensureBookPinColumns(db: Database.Database): void {
     if (!has("pinnedAt")) db.exec("ALTER TABLE Books ADD COLUMN pinnedAt TEXT");
   })();
 }
+
+

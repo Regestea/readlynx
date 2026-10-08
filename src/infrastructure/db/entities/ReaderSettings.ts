@@ -30,6 +30,10 @@ export interface ReaderSettingsEntity {
   /** EPUB-only hard text-color override (1 = force `customText`/theme text
    *  color onto every element with `!important`, 0 = normal themed rules). */
   textHardOverride: number;
+  /** EPUB-only soft-colors mode (1 = swap author colours that are louder than
+   *  the app's reading inks for those inks — the app-wide default; 0 = keep
+   *  the publisher's palette as published). */
+  softBookColors: number;
   /** PDF viewer background ("" / null = app default paper). */
   pdfBackground: string | null;
   /** Markdown-only code-block syntax theme ("light"/"dark", null = follow). */

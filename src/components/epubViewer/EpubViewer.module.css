@@ -154,7 +154,13 @@
   align-items: center;
 }
 
-.hardOverride {
+.colorToggles {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.colorToggle {
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -164,11 +170,11 @@
   user-select: none;
 }
 
-.hardOverride:hover {
+.colorToggle:hover {
   color: var(--color-text);
 }
 
-.hardOverrideCheckbox {
+.colorToggleCheckbox {
   width: 14px;
   height: 14px;
   margin: 0;

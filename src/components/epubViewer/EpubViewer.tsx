@@ -19,6 +19,8 @@ import dockerfile from "highlight.js/lib/languages/dockerfile";
 import http from "highlight.js/lib/languages/http";
 import scala from "highlight.js/lib/languages/scala";
 import styles from "./EpubViewer.module.css";
+import { harmonizeBookColors, type BookColorOptions } from "./bookColors";
+import { isLightColorValue } from "./colorMath";
 
 const FONT_STEP = 10;
 const FONT_MIN = 60;
@@ -208,19 +210,6 @@ function mergeLinewiseCodeBlocks(doc: Document): void {
       element.parentNode?.removeChild(element);
     }
   });
-}
-
-/** Determines whether a hex background is light (readable with a dark-code
- *  palette) or dark (readable with a light-code palette). */
-function backgroundIsLight(background: string): boolean {
-  const hex = background.trim().replace(/^#/, "");
-  const full = hex.length === 3 ? hex.replace(/./g, (c) => c + c) : hex;
-  if (!/^[0-9a-f]{6}$/i.test(full)) return true;
-  const n = parseInt(full, 16);
-  const r = (n >> 16) & 255;
-  const g = (n >> 8) & 255;
-  const b = n & 255;
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b > 140;
 }
 
 const HLJS_TOKENS: Record<string, [string, string]> = {
@@ -505,6 +494,8 @@ export function EpubViewer({
     setCodeBackground,
     hardOverrideText,
     setHardOverrideText,
+    softBookColors,
+    setSoftBookColors,
   } = useReaderSettings(settingsBookId, "epub");
   const [book, setBook] = useState<Book | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -533,6 +524,11 @@ export function EpubViewer({
   const renditionRef = useRef<Rendition | null>(null);
   const fontCssRef = useRef("");
   const skinCssRef = useRef("");
+  /** Live colour-repair options for the rendered chapters, refreshed by the
+   *  skin effect below and consumed by the per-content hook. */
+  const bookColorRef = useRef<BookColorOptions | null>(null);
+  /** Pending coalesced repair frame, 0 when none is scheduled. */
+  const harmonizeFrameRef = useRef(0);
   const onReadyRef = useRef(onReady);
   const onPageCountChangeRef = useRef(onPageCountChange);
   const onExtractPageRef = useRef(onExtractPage);
@@ -899,6 +895,37 @@ export function EpubViewer({
     });
   }, []);
 
+  /** Repairs the book's own colours for the current page: a white callout on
+   *  a black page becomes a dark panel, a pale footnote is walked dark enough
+   *  to read, and everything that already reads is left exactly as published.
+   *  Runs for every newly rendered section and again whenever the reader's
+   *  colours change (the skin effect re-applies the same options). */
+  const harmonizeBook = useCallback((content: Contents) => {
+    const options = bookColorRef.current;
+    const doc = content?.document;
+    if (!options || !doc?.body) return;
+    harmonizeBookColors(doc, options);
+  }, []);
+
+  /** Measuring a chapter costs more than repainting it, so a burst of changes
+   *  (dragging a colour picker) is coalesced into a single repair per frame. */
+  const scheduleHarmonize = useCallback(() => {
+    if (harmonizeFrameRef.current) return;
+    harmonizeFrameRef.current = requestAnimationFrame(() => {
+      harmonizeFrameRef.current = 0;
+      const rendition = renditionRef.current;
+      if (!rendition) return;
+      (rendition.getContents() as unknown as Contents[]).forEach(harmonizeBook);
+    });
+  }, [harmonizeBook]);
+
+  useEffect(
+    () => () => {
+      if (harmonizeFrameRef.current) cancelAnimationFrame(harmonizeFrameRef.current);
+    },
+    [],
+  );
+
   /** Applies the chosen zoom by injecting a CSS `zoom` rule on the content
    *  root. Unlike a `body` font-size override, this also enlarges text whose
    *  size is hard-coded in the book (px headings, etc.) — everything scales
@@ -991,6 +1018,9 @@ export function EpubViewer({
         rendition.hooks.content.register(injectFontStyle);
         rendition.hooks.content.register(highlightCodeBlocks);
         rendition.hooks.content.register(enhanceImages);
+        // Last, so it judges the finished chapter: our own code colours and
+        // image wrappers are in place and the book is not restyled afterwards.
+        rendition.hooks.content.register(harmonizeBook);
         await rendition.display();
         // Resume reading where the user left off: jump to the saved chapter
         // (spine index). The relocated handler fires and reports the restored
@@ -1112,7 +1142,7 @@ export function EpubViewer({
       bookRef.current?.destroy();
       bookRef.current = null;
     };
-  }, [filePath, srcData, injectFontStyle, highlightCodeBlocks, enhanceImages, initialChapter]);
+  }, [filePath, srcData, injectFontStyle, highlightCodeBlocks, enhanceImages, harmonizeBook, initialChapter]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -1131,10 +1161,11 @@ export function EpubViewer({
   }, [book]);
 
   /** Matches the EPUB page (background + text) to the app theme, unless the
-   *  user picked custom colors which then take precedence. The text color is
-   *  forced onto every element (so the book's own heading/`<strong>` colors
-   *  cannot clash with the theme) while code blocks keep their syntax colors;
-   *  with the hard text-color override on, the code follows the override too. */
+   * user picked custom colors which then take precedence. Only the page
+   * itself is repainted: the book keeps its own colours and `harmonizeBook`
+   * rewrites just the ones that cannot be read on this page. The hard override
+   * flattens the book's text colour instead — code blocks are the exception
+   * there as well, and only their surfaces are repaired. */
   useEffect(() => {
     const rendition = renditionRef.current;
     if (!rendition) return;
@@ -1149,27 +1180,21 @@ export function EpubViewer({
     const codeSurface =
       codeBackground ?? `color-mix(in srgb, ${background} 92%, ${text})`;
     const codeSurfaceIsDark = codeBackground
-      ? !backgroundIsLight(codeBackground)
-      : !backgroundIsLight(background);
+      ? !isLightColorValue(codeBackground)
+      : !isLightColorValue(background);
     // epubjs `themes.override(name, value)` sets an *inline style* on the body
     // element using `name` as a CSS property, so selector-based rules are
-    // silently dropped. Inject a real stylesheet instead so links and the
-    // book's decorative boxes follow the reader's palette.
+    // silently dropped. Inject a real stylesheet instead so the page really
+    // follows the reader's palette.
     skinCssRef.current = [
-      `html, body { background-color: ${background} !important; color: ${text} !important; }`,
-      `p { background-color: ${background} !important; }`,
-      `a { color: ${text} !important; }`,
-      // Books color their own headings, `<strong>` lead-ins, captions, table
-      // labels… on top of the body color, which clashes with the reader theme.
-      // Force the chosen text color on every element; the code-token rules
-      // below are more specific and keep the syntax palette.
-      `* { color: ${text} !important; }`,
-      `.box1, .box2, .box3, .box4 { background-color: ${background} !important; }`,
-      `.box1 *, .box2 *, .box3 *, .box4 * { color: ${text} !important; }`,
-      // Code blocks: the book brings its own background (usually white),
-      // which clashes with the theme — pin every `<pre>`/`<code>` shell to the
-      // reader's page background so only the highlighted block keeps a tint.
-      `pre, pre code, code { background-color: ${background} !important; }`,
+      // The reader owns the page: its colours, and no book-level backdrop image
+      // (which would sit under text we already re-coloured, and would hide the
+      // page from the colour repair pass below).
+      `html, body { background-color: ${background} !important; background-image: none !important; color: ${text} !important; }`,
+      // Inline `<code>` chips get the code surface (the book would give them
+      // its own light box); inside a `<pre>` the hljs rules below restore the
+      // transparent block background.
+      `pre, pre code, code { background-color: ${codeSurface} !important; }`,
       // The zoom effect scales the whole document (`transform: scale`); capping
       // images at 100% of their (scaled) container keeps them exactly in
       // range at any zoom level while the surrounding text still zooms.
@@ -1177,18 +1202,24 @@ export function EpubViewer({
       highlightCssFor(text, codeSurface, codeSurfaceIsDark),
       // Hard override: force the text color onto every element, no matter
       // what the book styles. `* !important` beats any non-important book
-      // rule (including inline `style=` colors); the higher-specificity
-      // code-token rule below also beats our own `!important` highlight
-      // colors so code follows the override too. Kept last so it wins.
-      ...(hardOverrideText
-        ? [
-            `* { color: ${text} !important; }`,
-            `pre.source-code code.hljs, pre.source-code code.hljs * { color: ${text} !important; }`,
-          ]
-        : []),
+      // rule (including inline `style=` colors). Code blocks are the one thing
+      // it may not touch: the token rules above are more specific than `*` and
+      // both carry `!important`, so the syntax palette survives — a forced
+      // body color never bleeds into the highlighting.
+      ...(hardOverrideText ? [`* { color: ${text} !important; }`] : []),
     ].join("\n");
-    (rendition.getContents() as unknown as Contents[]).forEach((content) => injectFontStyle(content));
-  }, [theme, book, customBg, customText, hardOverrideText, codeBackground, backgroundColorOverride, textColorOverride, injectFontStyle]);
+    bookColorRef.current = {
+      page: background,
+      text,
+      adaptText: !hardOverrideText,
+      adaptSurfaces: true,
+      adaptBorders: true,
+      adaptSvgText: !hardOverrideText,
+      softColors: softBookColors,
+    };
+    (rendition.getContents() as unknown as Contents[]).forEach(injectFontStyle);
+    scheduleHarmonize();
+  }, [theme, book, customBg, customText, hardOverrideText, softBookColors, codeBackground, backgroundColorOverride, textColorOverride, injectFontStyle, scheduleHarmonize]);
 
   /** Closes the color picker on outside click or Escape. */
   useEffect(() => {
@@ -1215,6 +1246,7 @@ export function EpubViewer({
     setCustomText(null);
     setCodeBackground(null);
     setHardOverrideText(false);
+    setSoftBookColors(false);
     setColorOpen(false);
   };
 
@@ -1374,16 +1406,34 @@ export function EpubViewer({
                 value: customText ?? textColor,
                 onChange: setCustomText,
                 footer: (
-                  <label className={styles.hardOverride} title="Force this color onto every text element">
-                    <input
-                      type="checkbox"
-                      className={styles.hardOverrideCheckbox}
-                      checked={hardOverrideText}
-                      onChange={(event) => setHardOverrideText(event.target.checked)}
-                      aria-label="hard override"
-                    />
-                    <span>hard override</span>
-                  </label>
+                  <div className={styles.colorToggles}>
+                    <label
+                      className={styles.colorToggle}
+                      title="Swap book colors that are louder than the soft reading inks for those inks"
+                    >
+                      <input
+                        type="checkbox"
+                        className={styles.colorToggleCheckbox}
+                        checked={softBookColors}
+                        onChange={(event) => setSoftBookColors(event.target.checked)}
+                        aria-label="soft colors"
+                      />
+                      <span>soft colors</span>
+                    </label>
+                    <label
+                      className={styles.colorToggle}
+                      title="Force this color onto every text element — code blocks keep their syntax colors"
+                    >
+                      <input
+                        type="checkbox"
+                        className={styles.colorToggleCheckbox}
+                        checked={hardOverrideText}
+                        onChange={(event) => setHardOverrideText(event.target.checked)}
+                        aria-label="hard override"
+                      />
+                      <span>hard override</span>
+                    </label>
+                  </div>
                 ),
               },
               {

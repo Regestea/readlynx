@@ -1,5 +1,6 @@
 import type Database from "better-sqlite3";
 import type { ReaderDefaultsEntity, ReaderViewer } from "../entities/index.ts";
+import { toFlag } from "./ReaderSettingsRepository.ts";
 import type { ReaderSettingsInput } from "./ReaderSettingsRepository.ts";
 
 /** Row store for the `ReaderDefaults` table (one per viewer). Holds the
@@ -30,7 +31,7 @@ export class ReaderDefaultsRepository {
       .prepare(
         `INSERT INTO ReaderDefaults (
            viewer, zoomPct, fontFamily, customBg, customText,
-           textHardOverride, pdfBackground,
+           textHardOverride, softBookColors, pdfBackground,
            codeTheme, diagramTheme, codeBackground, diagramBackground,
            updatedAt
          ) VALUES (
@@ -39,6 +40,7 @@ export class ReaderDefaultsRepository {
            COALESCE(@fontFamily, ''),
            @customBg, @customText,
            COALESCE(@textHardOverride, 0),
+           COALESCE(@softBookColors, 1),
            @pdfBackground,
            @codeTheme, @diagramTheme, @codeBackground, @diagramBackground,
            datetime('now')
@@ -49,6 +51,7 @@ export class ReaderDefaultsRepository {
            customBg          = @customBg,
            customText        = @customText,
            textHardOverride  = COALESCE(@textHardOverride, ReaderDefaults.textHardOverride, 0),
+           softBookColors    = COALESCE(@softBookColors,   ReaderDefaults.softBookColors, 0),
            pdfBackground     = @pdfBackground,
            codeTheme         = @codeTheme,
            diagramTheme      = @diagramTheme,
@@ -62,12 +65,8 @@ export class ReaderDefaultsRepository {
         fontFamily: settings.fontFamily ?? null,
         customBg: settings.customBg ?? null,
         customText: settings.customText ?? null,
-        textHardOverride:
-          settings.textHardOverride == null
-            ? null
-            : typeof settings.textHardOverride === "boolean"
-              ? (settings.textHardOverride ? 1 : 0)
-              : settings.textHardOverride,
+        textHardOverride: toFlag(settings.textHardOverride),
+        softBookColors: toFlag(settings.softBookColors),
         pdfBackground: settings.pdfBackground ?? null,
         codeTheme: settings.codeTheme ?? null,
         diagramTheme: settings.diagramTheme ?? null,
@@ -76,3 +75,5 @@ export class ReaderDefaultsRepository {
       });
   }
 }
+
+

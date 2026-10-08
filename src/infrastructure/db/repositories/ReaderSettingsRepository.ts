@@ -13,6 +13,10 @@ export interface ReaderSettingsInput {
   /** EPUB-only hard text-color override (1/true = force onto every element
    *  with `!important`, 0/false = normal themed rules). Omitted = keep. */
   textHardOverride?: number | boolean | null;
+  /** EPUB-only soft-colors mode (1/true = swap loud author colours for the
+   *  app's reading inks, 0/false = keep the publisher's palette). Omitted =
+   *  keep. */
+  softBookColors?: number | boolean | null;
   /** PDF viewer background (null = app default paper). */
   pdfBackground?: string | null;
   /** Markdown-only code-block syntax theme ("light"/"dark", null = follow). */
@@ -23,6 +27,13 @@ export interface ReaderSettingsInput {
   codeBackground?: string | null;
   /** Markdown-only diagram background (null = follow the theme card). */
   diagramBackground?: string | null;
+}
+
+/** Boolean toggle → SQLite flag; `null`/omitted keeps the stored value.
+ *  Shared with the defaults store so both flag columns behave identically. */
+export function toFlag(value: number | boolean | null | undefined): number | null {
+  if (value == null) return null;
+  return typeof value === "boolean" ? (value ? 1 : 0) : value;
 }
 
 /** Row store for the `ReaderSettings` table (one per book + viewer). */
@@ -48,7 +59,7 @@ export class ReaderSettingsRepository {
       .prepare(
         `INSERT INTO ReaderSettings (
            bookId, viewer, zoomPct, fontFamily, customBg, customText,
-           textHardOverride, pdfBackground,
+           textHardOverride, softBookColors, pdfBackground,
            codeTheme, diagramTheme, codeBackground, diagramBackground,
            updatedAt
          ) VALUES (
@@ -57,6 +68,7 @@ export class ReaderSettingsRepository {
            COALESCE(@fontFamily, ''),
            @customBg, @customText,
            COALESCE(@textHardOverride, 0),
+           COALESCE(@softBookColors, 1),
            @pdfBackground,
            @codeTheme, @diagramTheme, @codeBackground, @diagramBackground,
            datetime('now')
@@ -67,6 +79,7 @@ export class ReaderSettingsRepository {
            customBg          = @customBg,
            customText        = @customText,
            textHardOverride  = COALESCE(@textHardOverride, ReaderSettings.textHardOverride, 0),
+           softBookColors    = COALESCE(@softBookColors,   ReaderSettings.softBookColors, 0),
            pdfBackground     = @pdfBackground,
            codeTheme         = @codeTheme,
            diagramTheme      = @diagramTheme,
@@ -81,12 +94,8 @@ export class ReaderSettingsRepository {
         fontFamily: settings.fontFamily ?? null,
         customBg: settings.customBg ?? null,
         customText: settings.customText ?? null,
-        textHardOverride:
-          settings.textHardOverride == null
-            ? null
-            : typeof settings.textHardOverride === "boolean"
-              ? (settings.textHardOverride ? 1 : 0)
-              : settings.textHardOverride,
+        textHardOverride: toFlag(settings.textHardOverride),
+        softBookColors: toFlag(settings.softBookColors),
         pdfBackground: settings.pdfBackground ?? null,
         codeTheme: settings.codeTheme ?? null,
         diagramTheme: settings.diagramTheme ?? null,
@@ -95,3 +104,4 @@ export class ReaderSettingsRepository {
       });
   }
 }
+
