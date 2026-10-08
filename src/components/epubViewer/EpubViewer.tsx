@@ -117,33 +117,53 @@ function isCodePre(pre: Element): boolean {
  *  are merged back into a real `<pre>` first. */
 const LINEWISE_CLASS = /^(?:code|c)[-_]?(\d+)?$/i;
 
+/** The same trick without levels: other books mark every listing line with a
+ *  flat class and indent it with literal (often `&nbsp;`) spaces in the line
+ *  text (`p.source-code`, `p.programlisting`). */
+const FLAT_CODE_CLASS = /^(?:source[-_]?code|sourcecode|program[-_]?listing)$/i;
+
 /** Indentation level a line-wise code paragraph declares, or null when the
  *  element is not such a line (prose that merely carries a `code` class, or a
- *  paragraph mixing markup with code). */
+ *  paragraph mixing markup with code). Flat-class lines report `0`: they carry
+ *  their indentation in the text itself. */
 function linewiseIndent(element: Element): number | null {
   if (element.tagName !== "P") return null;
   let level: number | null = null;
+  let numbered = false;
+  let flat = false;
   for (const token of element.classList) {
-    const match = LINEWISE_CLASS.exec(token.trim());
-    if (!match) continue;
-    const value = match[1] ? Number(match[1]) : 0;
-    level = level === null ? value : Math.min(level, value);
+    const name = token.trim();
+    const match = LINEWISE_CLASS.exec(name);
+    if (match) {
+      const value = match[1] ? Number(match[1]) : 0;
+      level = level === null ? value : Math.min(level, value);
+      if (match[1]) numbered = true;
+      continue;
+    }
+    if (FLAT_CODE_CLASS.test(name)) flat = true;
   }
-  if (level === null) return null;
+  if (level === null && !flat) return null;
   const nodes = Array.from(element.childNodes).filter(
     (node) => node.nodeType !== 3 || (node.textContent ?? "").trim() !== "",
   );
   if (nodes.length !== 1) return null;
   const only = nodes[0];
-  if (only.nodeType !== 1 || (only as Element).tagName !== "CODE") return null;
-  return level;
+  if (only.nodeType === 1) {
+    // Only a `<code>` child marks a code line; any other markup means the
+    // paragraph is prose that merely carries a code-ish class.
+    if ((only as Element).tagName !== "CODE") return null;
+    return level ?? (flat ? 0 : null);
+  }
+  // A bare text line counts when the class says it is code (flat name or an
+  // explicit level); a plain `p.code` paragraph is prose and stays prose.
+  return flat || numbered ? (level ?? 0) : null;
 }
 
 /** Rewrites every run of line-wise code paragraphs into a single
  *  `<pre class="source-code">` so the highlighter can colour it. Indentation
  *  comes from the class level when the levels differ, otherwise the line text
- *  is kept verbatim (books that indent with real spaces). Runs of a single
- *  paragraph are left alone — that is just inline code. */
+ *  is kept verbatim (books that indent with real or non-breaking spaces).
+ *  Runs of a single paragraph are left alone — that is just inline code. */
 function mergeLinewiseCodeBlocks(doc: Document): void {
   const consumed = new Set<Element>();
   doc.querySelectorAll("p").forEach((paragraph) => {
@@ -165,7 +185,11 @@ function mergeLinewiseCodeBlocks(doc: Document): void {
     const base = Math.min(...levels);
     const indentFromClasses = base !== Math.max(...levels);
     const lines = group.map((element, index) => {
-      const text = (element.textContent ?? "").replace(/\s+$/, "");
+      // `&nbsp;` indentation is non-breaking: turned back into real spaces so
+      // the block reads as indented code (the highlighter tokenises on them).
+      const text = (element.textContent ?? "")
+        .replace(/\u00a0/g, " ")
+        .replace(/\s+$/, "");
       const level = levels[index] ?? 0;
       if (!indentFromClasses) return text;
       return "    ".repeat(Math.max(0, level - base)) + text.replace(/^[ \t]+/, "");
