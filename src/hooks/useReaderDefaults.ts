@@ -4,6 +4,7 @@ import type {
   ReaderViewer,
 } from "../infrastructure/db/entities/ReaderSettings.ts";
 import { normalizeBlockTheme } from "../infrastructure/db/entities/ReaderSettings.ts";
+import { subscribeReaderColorsReset } from "./readerDefaultsColors.ts";
 
 /** Global fallback for one viewer, edited in Settings. Books without a
  *  per-book `ReaderSettings` row start from these values. */
@@ -95,6 +96,19 @@ export function useReaderDefaults(viewer: ReaderViewer) {
       cancelled = true;
     };
   }, [viewer]);
+
+  /** A theme switch clears this viewer's colors in the DB behind our back
+   *  (see `readerDefaultsColors`). Adopt the cleared state — the snapshot is
+   *  updated too, so the persist effect below sees no edit and writes nothing. */
+  useEffect(
+    () =>
+      subscribeReaderColorsReset((viewers) => {
+        if (!viewers.includes(viewer)) return;
+        snapshotRef.current = DEFAULTS;
+        setValues(DEFAULTS);
+      }),
+    [viewer],
+  );
 
   /** Persists only real user edits: the initial load (global defaults applied
    *  as the starting state) never creates a row by itself. */

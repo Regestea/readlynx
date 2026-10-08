@@ -2,7 +2,7 @@ import { createContext, isValidElement, useCallback, useContext, useEffect, useM
 import type { CSSProperties, ReactNode, Ref } from "react";
 import ReactMarkdown from "react-markdown";
 import type { Components } from "react-markdown";
-import { Braces, Maximize2, Minus, Minimize2, Palette, Plus } from "lucide-react";
+import { Maximize2, Minus, Minimize2, Palette, Plus } from "lucide-react";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
@@ -91,39 +91,6 @@ function createBlockComponents(appearance: BlockAppearance): Pick<Components, "c
       return <>{children}</>;
     },
   };
-}
-
-/** Compact background row: custom color input + per-field Follow button. */
-function BlockBackgroundRow({
-  label,
-  value,
-  onChange,
-}: {
-  label: string;
-  value: string | null;
-  onChange: (next: string | null) => void;
-}) {
-  return (
-    <div className={styles.blockGroup}>
-      <span className={styles.blockLabel}>{label}</span>
-      <div className={styles.blockColorRow}>
-        <input
-          type="color"
-          className={styles.blockColorInput}
-          value={value ?? "#ffffff"}
-          onChange={(event) => onChange(event.target.value)}
-          aria-label={`Custom ${label.toLowerCase()}`}
-          title={`Custom ${label.toLowerCase()}`}
-        />
-        <span className={styles.blockColorValue}>{value ?? "Follow theme"}</span>
-        {value !== null && (
-          <button type="button" className={styles.blockFollow} onClick={() => onChange(null)}>
-            Follow
-          </button>
-        )}
-      </div>
-    </div>
-  );
 }
 
 const ZOOM_STEP = 10;
@@ -522,13 +489,11 @@ export function Markdown({
     [imageZoomPct, setImageZoomPct],
   );
   const [colorOpen, setColorOpen] = useState(false);
-  const [blocksOpen, setBlocksOpen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [spacerHeight, setSpacerHeight] = useState(0);
   const [aiSelection, setAiSelection] = useState<{ x: number; y: number; text: string } | null>(null);
   const hostRef = useRef<HTMLDivElement>(null);
   const colorsWrapRef = useRef<HTMLDivElement>(null);
-  const blocksWrapRef = useRef<HTMLDivElement>(null);
 
   /** Shows the floating "Ask AI" bubble next to the end of a text selection
    *  inside this document — only after the mouse button is released, never
@@ -645,36 +610,12 @@ export function Markdown({
     };
   }, [colorOpen]);
 
-  /** Closes the code/diagram appearance panel on outside click or Escape. */
-  useEffect(() => {
-    if (!blocksOpen) return;
-    const onDown = (event: MouseEvent) => {
-      const wrap = blocksWrapRef.current;
-      if (wrap && !wrap.contains(event.target as Node)) {
-        setBlocksOpen(false);
-      }
-    };
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setBlocksOpen(false);
-    };
-    document.addEventListener("mousedown", onDown);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDown);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [blocksOpen]);
-
   const handleResetSettings = () => {
     setCustomBg(null);
     setCustomText(null);
-    setColorOpen(false);
-  };
-
-  const handleResetBlocks = () => {
     setCodeBackground(null);
     setDiagramBackground(null);
-    setBlocksOpen(false);
+    setColorOpen(false);
   };
 
   const changeZoom = useCallback((delta: number) => {
@@ -828,49 +769,24 @@ export function Markdown({
                     value: textColor,
                     onChange: setCustomText,
                   },
+                  {
+                    id: "code-background",
+                    label: "Code block background",
+                    value: codeBackground ?? "",
+                    onChange: (color) => setCodeBackground(color === "" ? null : color),
+                    noneLabel: "Auto (follow theme)",
+                  },
+                  {
+                    id: "diagram-background",
+                    label: "Diagram background",
+                    value: diagramBackground ?? "",
+                    onChange: (color) => setDiagramBackground(color === "" ? null : color),
+                    noneLabel: "Auto (follow theme)",
+                  },
                 ]}
                 resetLabel="Reset to theme"
                 onReset={handleResetSettings}
               />
-            </div>
-            <div className={styles.controlsWrap} ref={blocksWrapRef}>
-              <button
-                type="button"
-                className={`${styles.toolButton} ${blocksOpen ? styles.toolButtonActive : ""}`}
-                onClick={() => setBlocksOpen((open) => !open)}
-                aria-label="Code and diagram appearance"
-                title="Code and diagram appearance"
-                aria-haspopup="true"
-                aria-expanded={blocksOpen}
-              >
-                <Braces size={16} strokeWidth={2} aria-hidden="true" />
-              </button>
-              {blocksOpen && (
-                <div
-                  className={styles.blocksPanel}
-                  role="dialog"
-                  aria-label="Code and diagram appearance"
-                >
-                  <span className={styles.blocksTitle}>Code & diagrams</span>
-                  <BlockBackgroundRow
-                    label="Code background"
-                    value={codeBackground}
-                    onChange={setCodeBackground}
-                  />
-                  <BlockBackgroundRow
-                    label="Diagram background"
-                    value={diagramBackground}
-                    onChange={setDiagramBackground}
-                  />
-                  <button
-                    type="button"
-                    className={styles.blocksReset}
-                    onClick={handleResetBlocks}
-                  >
-                    Reset to theme
-                  </button>
-                </div>
-              )}
             </div>
             <span className={styles.divider} aria-hidden="true" />
             <button

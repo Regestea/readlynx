@@ -5,6 +5,10 @@ export interface ThemeContextValue {
   theme: Theme;
   setTheme: (theme: Theme) => void;
   toggleTheme: () => void;
+  /** Counts user-initiated theme switches. The theme value also changes once
+   *  at startup when the saved theme is hydrated from the DB — that never
+   *  counts, so listeners can tell a real switch from the initial load. */
+  themeChangeCount: number;
 }
 
 export function getSystemTheme(): Theme {

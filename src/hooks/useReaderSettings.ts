@@ -19,7 +19,8 @@ export interface ReaderSettings {
   codeTheme: MarkdownBlockTheme | null;
   /** Markdown-only Mermaid diagram theme (null = follow the app theme). */
   diagramTheme: MarkdownBlockTheme | null;
-  /** Markdown-only code-block background (null = follow the theme card). */
+  /** Code-block background for both viewers (null = follow the theme: the
+   *  Markdown viewer's code card, the EPUB reader's tinted page background). */
   codeBackground: string | null;
   /** Markdown-only diagram background (null = follow the theme card). */
   diagramBackground: string | null;

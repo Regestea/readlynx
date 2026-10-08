@@ -47,6 +47,9 @@ const EPUB_IMAGE_CSS = [
   ".rlx-img-full { position: absolute; top: 8px; right: 8px; z-index: 5; width: 30px; height: 30px; padding: 0; border-radius: 999px; background: rgba(18, 18, 22, 0.85); border: 1px solid rgba(255, 255, 255, 0.22); box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35); color: #fff; font: 600 14px/1 system-ui, sans-serif; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; opacity: 0; transform: translateY(-4px); transition: opacity 0.15s ease, transform 0.15s ease; pointer-events: none; line-height: 1; }",
   ".rlx-img-wrap:hover .rlx-img-full, .rlx-img-wrap:focus-within .rlx-img-full { opacity: 0.55; transform: none; pointer-events: auto; }",
   ".rlx-img-wrap .rlx-img-full:hover { opacity: 1; }",
+  // `!important` so the reader-wide `* { color: … !important }` rule cannot
+  // repaint the white glyph on the dark circle.
+  ".rlx-img-wrap .rlx-img-full { color: #fff !important; }",
 ].join("\n");
 
 hljs.registerLanguage("powershell", powershell);
@@ -97,12 +100,99 @@ function detectCodeLanguage(pre: HTMLPreElement): string {
   return "";
 }
 
+/** Marks a `<pre>` as program code: it holds a `<code>` child, or carries a
+ *  code-ish class (`source-code`, `code-area`, `programlisting`, …). Bare
+ *  `<pre>` used for verse/ASCII art is left to the book's own styling. */
+function isCodePre(pre: Element): boolean {
+  if (pre.querySelector(":scope > code")) return true;
+  for (const token of pre.classList) {
+    if (/code|listing|program|source|sample|snippet|console|shell|terminal/i.test(token)) return true;
+  }
+  return false;
+}
+
+/** Books that typeset code line by line tag each line with a class whose
+ *  numeric suffix is that line's indentation level (`p.code`, `p.code1` …
+ *  `p.code4`). Highlight.js needs one continuous block, so such sibling runs
+ *  are merged back into a real `<pre>` first. */
+const LINEWISE_CLASS = /^(?:code|c)[-_]?(\d+)?$/i;
+
+/** Indentation level a line-wise code paragraph declares, or null when the
+ *  element is not such a line (prose that merely carries a `code` class, or a
+ *  paragraph mixing markup with code). */
+function linewiseIndent(element: Element): number | null {
+  if (element.tagName !== "P") return null;
+  let level: number | null = null;
+  for (const token of element.classList) {
+    const match = LINEWISE_CLASS.exec(token.trim());
+    if (!match) continue;
+    const value = match[1] ? Number(match[1]) : 0;
+    level = level === null ? value : Math.min(level, value);
+  }
+  if (level === null) return null;
+  const nodes = Array.from(element.childNodes).filter(
+    (node) => node.nodeType !== 3 || (node.textContent ?? "").trim() !== "",
+  );
+  if (nodes.length !== 1) return null;
+  const only = nodes[0];
+  if (only.nodeType !== 1 || (only as Element).tagName !== "CODE") return null;
+  return level;
+}
+
+/** Rewrites every run of line-wise code paragraphs into a single
+ *  `<pre class="source-code">` so the highlighter can colour it. Indentation
+ *  comes from the class level when the levels differ, otherwise the line text
+ *  is kept verbatim (books that indent with real spaces). Runs of a single
+ *  paragraph are left alone — that is just inline code. */
+function mergeLinewiseCodeBlocks(doc: Document): void {
+  const consumed = new Set<Element>();
+  doc.querySelectorAll("p").forEach((paragraph) => {
+    if (consumed.has(paragraph) || linewiseIndent(paragraph) === null) return;
+    const group: Element[] = [];
+    let node: Element | null = paragraph;
+    while (node && linewiseIndent(node) !== null) {
+      group.unshift(node);
+      node = node.previousElementSibling;
+    }
+    node = paragraph.nextElementSibling;
+    while (node && linewiseIndent(node) !== null) {
+      group.push(node);
+      node = node.nextElementSibling;
+    }
+    if (group.length < 2) return;
+
+    const levels = group.map((element) => linewiseIndent(element) ?? 0);
+    const base = Math.min(...levels);
+    const indentFromClasses = base !== Math.max(...levels);
+    const lines = group.map((element, index) => {
+      const text = (element.textContent ?? "").replace(/\s+$/, "");
+      const level = levels[index] ?? 0;
+      if (!indentFromClasses) return text;
+      return "    ".repeat(Math.max(0, level - base)) + text.replace(/^[ \t]+/, "");
+    });
+
+    const code = doc.createElement("code");
+    code.textContent = lines.join("\n");
+    const pre = doc.createElement("pre");
+    pre.className = "source-code";
+    pre.appendChild(code);
+    const parent = group[0]?.parentNode;
+    if (!parent) return;
+    parent.insertBefore(pre, group[0]);
+    for (const element of group) {
+      consumed.add(element);
+      element.parentNode?.removeChild(element);
+    }
+  });
+}
+
 /** Determines whether a hex background is light (readable with a dark-code
  *  palette) or dark (readable with a light-code palette). */
 function backgroundIsLight(background: string): boolean {
-  const match = /^#?([0-9a-f]{6})$/i.exec(background.trim());
-  if (!match) return true;
-  const n = parseInt(match[1], 16);
+  const hex = background.trim().replace(/^#/, "");
+  const full = hex.length === 3 ? hex.replace(/./g, (c) => c + c) : hex;
+  if (!/^[0-9a-f]{6}$/i.test(full)) return true;
+  const n = parseInt(full, 16);
   const r = (n >> 16) & 255;
   const g = (n >> 8) & 255;
   const b = n & 255;
@@ -143,19 +233,32 @@ const HLJS_TOKENS: Record<string, [string, string]> = {
   "hljs-deletion": ["#b31d28", "#e06c75"],
 };
 
-/** Highlight.js token colours for `pre.source-code`, chosen to fit the
- *  reader's page background (light or dark palette). */
-function highlightCssFor(background: string): string {
-  const dark = !backgroundIsLight(background);
+/** Highlight.js colours for `pre.source-code`, all derived from the reader's
+ *  own colors so the code follows the palette the user picked:
+ *  - plain code text uses the text color exactly;
+ *  - token colors start from a GitHub/One-Dark style palette and are blended
+ *    toward the text color (comments more than the rest), so changing the text
+ *    color shifts the whole block with it while the tokens stay tellable apart;
+ *  - `surface` is the code-block background (chosen, or a barely-tinted shade
+ *    of the page background) and its lightness picks the token palette. */
+function highlightCssFor(text: string, surface: string, surfaceIsDark: boolean): string {
+  const blend = (color: string, keepPercent: number) =>
+    `color-mix(in srgb, ${color} ${keepPercent}%, ${text})`;
+  const muted = (color: string) => `color-mix(in srgb, ${color} 60%, ${text})`;
+  const border = `color-mix(in srgb, ${surface} 80%, ${text})`;
   const rows = Object.entries(HLJS_TOKENS)
     .map(([token, [light, darkColor]]) => {
-      const color = dark ? darkColor : light;
-      const extra = token === "hljs-comment" || token === "hljs-quote" ? "font-style: italic;" : "";
+      const base = surfaceIsDark ? darkColor : light;
+      const isComment = token === "hljs-comment" || token === "hljs-quote";
+      const color = isComment ? muted(base) : blend(base, 76);
+      const extra = isComment ? "font-style: italic;" : "";
       return `pre.source-code .${token} { color: ${color} !important; ${extra} }`;
     })
     .join("\n");
   return [
     `pre.source-code, pre.source-code code { font-family: Consolas, Menlo, Monaco, "Cascadia Mono", "Courier New", monospace !important; }`,
+    `pre.source-code { background-color: ${surface} !important; color: ${text} !important; border: 1px solid ${border}; border-radius: 8px; padding: 0.75em 0.9em; overflow-x: auto; }`,
+    `pre.source-code code, pre.source-code code.hljs { background-color: transparent !important; color: ${text} !important; }`,
     `pre.source-code code.hljs { display: block; white-space: pre-wrap; }`,
     rows,
   ].join("\n");
@@ -374,6 +477,8 @@ export function EpubViewer({
     setCustomBg,
     customText,
     setCustomText,
+    codeBackground,
+    setCodeBackground,
     hardOverrideText,
     setHardOverrideText,
   } = useReaderSettings(settingsBookId, "epub");
@@ -731,14 +836,17 @@ export function EpubViewer({
     [placeImageButton],
   );
 
-  /** Replaces every `<pre class="source-code">` in a section with a
+  /** Colourises every code block in a section: line-wise `p.code1`… runs are
+   *  first merged into a real `<pre>`, then each `<pre>` is replaced with a
    *  Highlight.js-highlighted `<code class="hljs">`, unwrapping the book's
    *  `koboSpan`/`strong` wrappers (their text content is the real code). */
   const highlightCodeBlocks = useCallback((content: Contents) => {
     const doc = content.document;
-    doc.querySelectorAll("pre.source-code").forEach((element) => {
+    mergeLinewiseCodeBlocks(doc);
+    doc.querySelectorAll("pre").forEach((element) => {
       const pre = element as HTMLPreElement;
       if (pre.dataset.readlynxHl === "1") return;
+      if (!isCodePre(pre) && !detectCodeLanguage(pre)) return;
       const text = (pre.textContent ?? "").replace(/^\r?\n/, "").replace(/\s+$/, "");
       if (!text.trim()) return;
       let value: string | null = null;
@@ -755,6 +863,10 @@ export function EpubViewer({
         // leave `value` as null → block stays untouched
       }
       if (!value) return;
+      // Normalise the class so our token colours (scoped to
+      // `pre.source-code`) apply even to books whose blocks are named
+      // `code-area`, `programlisting`, …
+      pre.classList.add("source-code");
       const code = doc.createElement("code");
       code.className = detected ? `language-${detected} hljs` : "hljs";
       code.innerHTML = value;
@@ -822,7 +934,14 @@ export function EpubViewer({
           return;
         }
 
-        await nextBook.locations.generate(1000);
+        // Locations only power the page counter and the progress percentage,
+        // and a broken spine entry rejects inside epubjs's own queue — which
+        // leaves the awaited promise unsettled forever. Cap it: on failure the
+        // book still opens, just without page locations.
+        await Promise.race([
+          nextBook.locations.generate(1000).catch(() => null),
+          new Promise<void>((resolve) => setTimeout(resolve, 8000)),
+        ]);
         if (cancelled) {
           nextBook.destroy();
           return;
@@ -872,19 +991,32 @@ export function EpubViewer({
 
     const handleRelocated = (location: Location) => {
       if (!bookRef.current || !location.start?.cfi) return;
-      const loc = Number(bookRef.current.locations.locationFromCfi(location.start.cfi));
-      setPageNumber(Math.min(loc + 1, bookRef.current.locations.length()));
-      setProgressPct(
-        Math.round(bookRef.current.locations.percentageFromCfi(location.start.cfi) * 100),
-      );
+      const index = Number(location.start.index);
       const chapterKey = String(location.start.index);
+      // Real reading position from the generated locations. They can be empty
+      // (generation failed or timed out on a broken book), so the page counter
+      // is left alone and the progress falls back to the chapter index below.
+      let progress: number | null = null;
+      if (bookRef.current.locations.length() > 0) {
+        const loc = Number(bookRef.current.locations.locationFromCfi(location.start.cfi));
+        if (Number.isFinite(loc)) {
+          setPageNumber(Math.min(loc + 1, bookRef.current.locations.length()));
+        }
+        const percentage = bookRef.current.locations.percentageFromCfi(location.start.cfi);
+        if (Number.isFinite(percentage)) progress = Math.min(1, Math.max(0, percentage));
+      }
+      if (progress === null) {
+        const total =
+          (bookRef.current.spine as { spineItems?: unknown[] } | undefined)?.spineItems?.length ?? 0;
+        if (Number.isFinite(index) && total > 1) progress = index / (total - 1);
+      }
+      if (progress !== null) {
+        setProgressPct(Math.round(progress * 100));
+        onProgressChangeRef.current?.(progress);
+      }
       if (chapterKey !== lastChapterKeyRef.current) {
         lastChapterKeyRef.current = chapterKey;
         onChapterChangeRef.current?.(chapterKey);
-      }
-      const pct = bookRef.current.locations.percentageFromCfi(location.start.cfi);
-      if (typeof pct === "number") {
-        onProgressChangeRef.current?.(Math.min(1, Math.max(0, pct)));
       }
       setAiSelection(null);
     };
@@ -975,9 +1107,10 @@ export function EpubViewer({
   }, [book]);
 
   /** Matches the EPUB page (background + text) to the app theme, unless the
-   *  user picked custom colors which then take precedence. When the hard
-   *  text-color override is on, the chosen text color is forced onto every
-   *  element with `!important`, regardless of the book's own styling. */
+   *  user picked custom colors which then take precedence. The text color is
+   *  forced onto every element (so the book's own heading/`<strong>` colors
+   *  cannot clash with the theme) while code blocks keep their syntax colors;
+   *  with the hard text-color override on, the code follows the override too. */
   useEffect(() => {
     const rendition = renditionRef.current;
     if (!rendition) return;
@@ -985,6 +1118,15 @@ export function EpubViewer({
     const readVar = (name: string) => rootStyle.getPropertyValue(name).trim();
     const background = customBg ?? backgroundColorOverride ?? (readVar("--color-page") || "#ffffff");
     const text = customText ?? textColorOverride ?? (readVar("--color-text") || "#322b26");
+    // Code-block surface: the color the user picked, otherwise a barely-tinted
+    // shade of the page background (the value already used by default). Only
+    // a chosen color decides the light/dark token palette — the derived one
+    // always follows the page background's polarity.
+    const codeSurface =
+      codeBackground ?? `color-mix(in srgb, ${background} 92%, ${text})`;
+    const codeSurfaceIsDark = codeBackground
+      ? !backgroundIsLight(codeBackground)
+      : !backgroundIsLight(background);
     // epubjs `themes.override(name, value)` sets an *inline style* on the body
     // element using `name` as a CSS property, so selector-based rules are
     // silently dropped. Inject a real stylesheet instead so links and the
@@ -993,13 +1135,22 @@ export function EpubViewer({
       `html, body { background-color: ${background} !important; color: ${text} !important; }`,
       `p { background-color: ${background} !important; }`,
       `a { color: ${text} !important; }`,
+      // Books color their own headings, `<strong>` lead-ins, captions, table
+      // labels… on top of the body color, which clashes with the reader theme.
+      // Force the chosen text color on every element; the code-token rules
+      // below are more specific and keep the syntax palette.
+      `* { color: ${text} !important; }`,
       `.box1, .box2, .box3, .box4 { background-color: ${background} !important; }`,
       `.box1 *, .box2 *, .box3 *, .box4 * { color: ${text} !important; }`,
+      // Code blocks: the book brings its own background (usually white),
+      // which clashes with the theme — pin every `<pre>`/`<code>` shell to the
+      // reader's page background so only the highlighted block keeps a tint.
+      `pre, pre code, code { background-color: ${background} !important; }`,
       // The zoom effect scales the whole document (`transform: scale`); capping
       // images at 100% of their (scaled) container keeps them exactly in
       // range at any zoom level while the surrounding text still zooms.
       `img { max-width: 100% !important; height: auto !important; }`,
-      highlightCssFor(background),
+      highlightCssFor(text, codeSurface, codeSurfaceIsDark),
       // Hard override: force the text color onto every element, no matter
       // what the book styles. `* !important` beats any non-important book
       // rule (including inline `style=` colors); the higher-specificity
@@ -1013,7 +1164,7 @@ export function EpubViewer({
         : []),
     ].join("\n");
     (rendition.getContents() as unknown as Contents[]).forEach((content) => injectFontStyle(content));
-  }, [theme, book, customBg, customText, hardOverrideText, backgroundColorOverride, textColorOverride, injectFontStyle]);
+  }, [theme, book, customBg, customText, hardOverrideText, codeBackground, backgroundColorOverride, textColorOverride, injectFontStyle]);
 
   /** Closes the color picker on outside click or Escape. */
   useEffect(() => {
@@ -1038,6 +1189,7 @@ export function EpubViewer({
   const handleResetSettings = () => {
     setCustomBg(null);
     setCustomText(null);
+    setCodeBackground(null);
     setHardOverrideText(false);
     setColorOpen(false);
   };
@@ -1209,6 +1361,13 @@ export function EpubViewer({
                     <span>hard override</span>
                   </label>
                 ),
+              },
+              {
+                id: "code-background",
+                label: "Code block background",
+                value: codeBackground ?? "",
+                onChange: (color) => setCodeBackground(color === "" ? null : color),
+                noneLabel: "Auto (match page)",
               },
             ]}
             resetLabel="Reset to theme"

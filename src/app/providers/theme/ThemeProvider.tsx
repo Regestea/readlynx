@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import type { Theme } from "../../../shared/types";
 import { getSystemTheme, ThemeContext } from "./ThemeContext";
@@ -8,7 +8,10 @@ import { getSystemTheme, ThemeContext } from "./ThemeContext";
  *  then adopt the saved value once it loads — without persisting the initial
  *  system value over the user's choice before that happens. */
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setTheme] = useState<Theme>(() => getSystemTheme());
+  const [theme, setThemeValue] = useState<Theme>(() => getSystemTheme());
+  /** Bumped only by the user-facing actions below, never by the startup
+   *  hydration — app-level listeners reset theme-dependent settings on it. */
+  const [themeChangeCount, setThemeChangeCount] = useState(0);
   const initialTheme = useRef(theme);
   const loaded = useRef(false);
 
@@ -27,7 +30,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       loaded.current = true;
       const savedTheme = settings?.theme;
       if (savedTheme === "light" || savedTheme === "dark") {
-        setTheme((current) =>
+        setThemeValue((current) =>
           current === initialTheme.current ? savedTheme : current,
         );
       }
@@ -37,13 +40,19 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  const setTheme = useCallback((next: Theme) => {
+    setThemeValue(next);
+    setThemeChangeCount((count) => count + 1);
+  }, []);
+
+  const toggleTheme = useCallback(() => {
+    setThemeValue((current) => (current === "light" ? "dark" : "light"));
+    setThemeChangeCount((count) => count + 1);
+  }, []);
+
   const value = useMemo(
-    () => ({
-      theme,
-      setTheme,
-      toggleTheme: () => setTheme((current) => (current === "light" ? "dark" : "light")),
-    }),
-    [theme],
+    () => ({ theme, setTheme, toggleTheme, themeChangeCount }),
+    [theme, setTheme, toggleTheme, themeChangeCount],
   );
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;

@@ -72,6 +72,12 @@ export function EpubDefaultsCard() {
           value={defaults.customText}
           onChange={(customText) => defaults.setValues({ customText })}
         />
+        <DefaultColorField
+          label="Code block background"
+          hint="Empty = follow the page background."
+          value={defaults.codeBackground}
+          onChange={(codeBackground) => defaults.setValues({ codeBackground })}
+        />
       </div>
 
       <Checkbox

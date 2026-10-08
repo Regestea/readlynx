@@ -163,16 +163,18 @@ function sanitize(data: ArrayBuffer, env: EpubXmlEnv): ArrayBuffer {
   if (!opfDoc) return data;
 
   const opfChanged = fixAttributes(opfDoc, "item", "href", opfDir, findActual);
-  if (opfChanged) {
-    entries[opfActual] = strToU8(env.serializeXml(opfDoc));
-  }
 
   // Second pass over the (possibly rewritten) manifest: repair the links
-  // inside NCX and EPUB3 nav documents the same way, and strip nav/ncx
-  // items that genuinely don't exist in the archive (broken export).
+  // inside NCX and EPUB3 nav documents the same way, and drop items whose file
+  // is genuinely absent from the archive (broken export). Nav/ncx removals
+  // stop epubjs from requesting them at all; content removals matter even more
+  // — a spine entry that cannot be loaded rejects inside epubjs's location
+  // queue and leaves the reader stuck on its spinner forever.
   let navChanged = false;
+  let itemsRemoved = false;
   const items = opfDoc.getElementsByTagName("item");
   const toRemove: Element[] = [];
+  const brokenIds = new Set<string>();
   for (let index = 0; index < items.length; index += 1) {
     const item = items[index];
     if (!item) continue;
@@ -180,7 +182,8 @@ function sanitize(data: ArrayBuffer, env: EpubXmlEnv): ArrayBuffer {
     const properties = (item.getAttribute("properties") ?? "").toLowerCase();
     const isNcx = mediaType === "application/x-dtbncx+xml";
     const isNav = properties.split(/[\s,]+/).includes("nav");
-    if (!isNcx && !isNav) continue;
+    const isContent = mediaType === "application/xhtml+xml" || mediaType === "text/html";
+    if (!isNcx && !isNav && !isContent) continue;
     const href = item.getAttribute("href");
     if (!href) continue;
     const [pathPart] = [href.split("#")[0] as string];
@@ -193,12 +196,12 @@ function sanitize(data: ArrayBuffer, env: EpubXmlEnv): ArrayBuffer {
     }
     const docActual = findActual(normalizePosix(opfDir ? `${opfDir}/${decoded}` : decoded));
     if (!docActual || !entries[docActual]) {
-      // Nav/ncx file missing from archive — remove from manifest so
-      // epubjs never tries to request it.
       toRemove.push(item);
-      navChanged = true;
+      const id = item.getAttribute("id");
+      if (id) brokenIds.add(id);
       continue;
     }
+    if (!isNcx && !isNav) continue;
     const doc = env.parseXml(strFromU8(entries[docActual] as Uint8Array));
     if (!doc) continue;
     const docDir = dirname(normalizeZipName(docActual));
@@ -210,18 +213,41 @@ function sanitize(data: ArrayBuffer, env: EpubXmlEnv): ArrayBuffer {
       navChanged = true;
     }
   }
-  for (const item of toRemove) {
-    item.parentNode?.removeChild(item);
+
+  // Remove the broken items — but only while the spine keeps at least one
+  // readable entry, otherwise the book is beyond saving and it is left as is.
+  const spine = opfDoc.getElementsByTagName("spine")[0];
+  const itemrefs = spine ? Array.from(spine.getElementsByTagName("itemref")) : [];
+  const danglingRefs = itemrefs.filter((ref) => brokenIds.has(ref.getAttribute("idref") ?? ""));
+  const keepsReadableSpine = !spine || itemrefs.length - danglingRefs.length > 0;
+  if (brokenIds.size > 0 && keepsReadableSpine) {
+    for (const item of toRemove) {
+      item.parentNode?.removeChild(item);
+    }
+    itemsRemoved = true;
+    // An itemref pointing at a removed (or never declared) id makes epubjs
+    // throw while building the spine, so drop those as well.
+    const remainingIds = new Set<string>();
+    const remainingItems = opfDoc.getElementsByTagName("item");
+    for (let index = 0; index < remainingItems.length; index += 1) {
+      const id = remainingItems[index]?.getAttribute("id");
+      if (id) remainingIds.add(id);
+    }
+    for (const ref of itemrefs) {
+      const idref = ref.getAttribute("idref");
+      if (!idref || !remainingIds.has(idref)) {
+        ref.parentNode?.removeChild(ref);
+        itemsRemoved = true;
+      }
+    }
   }
-  // If nav items were removed from the DOM, re-serialize the updated
-  // manifest back into the archive entries.
-  if (toRemove.length > 0) {
+  if (opfChanged || itemsRemoved) {
     entries[opfActual] = strToU8(env.serializeXml(opfDoc));
   }
 
   // Nothing rewritten anywhere: the archive is fine — hand back the
   // original bytes untouched (zero behavior change for good books).
-  if (!opfChanged && !navChanged) return data;
+  if (!opfChanged && !navChanged && !itemsRemoved) return data;
 
   // Re-zip with `mimetype` first and uncompressed, per the EPUB spec.
   const out: Record<string, Uint8Array> = {};
