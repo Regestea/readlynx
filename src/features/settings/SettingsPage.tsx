@@ -4,6 +4,7 @@ import {
   PdfDefaultsCard,
   TranslationDefaultsCard,
 } from "./readerDefaults/ReaderDefaultsCards.tsx";
+import { UpdatesSection } from "./UpdatesSection.tsx";
 import styles from "./SettingsPage.module.css";
 
 export function SettingsPage() {
@@ -21,6 +22,7 @@ export function SettingsPage() {
       <EpubDefaultsCard />
       <TranslationDefaultsCard />
       <PdfDefaultsCard />
+      <UpdatesSection />
     </main>
   );
 }

@@ -90,7 +90,8 @@
 
 .footer {
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  gap: var(--space-2);
   width: 100%;
 }
 
@@ -133,4 +134,49 @@
 .themeIconHidden {
   opacity: 0;
   transform: rotate(90deg) scale(0.5);
+}
+
+/* ---------- Update button ---------- */
+
+/* The badge is pinned to the button, so the button itself has to be the
+   positioning context — the footer gives every child the full sidebar width. */
+.updateButtonActive {
+  position: relative;
+  color: var(--color-primary);
+  background: var(--color-active);
+}
+
+.updateBadge {
+  position: absolute;
+  top: 8px;
+  right: 22px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-danger);
+  box-shadow: 0 0 0 2px var(--color-card);
+  animation: badge-pulse 2s ease-in-out infinite;
+}
+
+@keyframes badge-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+
+  50% {
+    transform: scale(1.25);
+    opacity: 0.7;
+  }
+}
+
+.updateSpinner {
+  animation: update-spin 1s linear infinite;
+}
+
+@keyframes update-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }

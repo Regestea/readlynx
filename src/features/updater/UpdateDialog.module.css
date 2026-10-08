@@ -1,0 +1,261 @@
+/* ---------- Copy ---------- */
+
+.lead {
+  font-size: var(--font-size-md);
+  line-height: var(--line-height-relaxed);
+  color: var(--color-text-secondary);
+}
+
+.hint {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.error,
+.warning,
+.message {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-medium);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-normal);
+}
+
+.error svg,
+.warning svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.error {
+  color: var(--color-danger);
+  background: var(--color-danger-soft);
+}
+
+.warning {
+  color: var(--color-warning);
+  background: rgb(193 139 77 / 14%);
+}
+
+.message {
+  color: var(--color-success);
+  background: var(--color-success-soft);
+}
+
+.upToDate {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-radius: var(--radius-medium);
+  font-size: var(--font-size-md);
+  color: var(--color-success);
+  background: var(--color-success-soft);
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-start;
+}
+
+/* ---------- Version jump ---------- */
+
+.versionRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-primary);
+}
+
+.versionRow svg {
+  /* The upgrade arrow points up but reads left-to-right here (old → new), so
+     it is turned to match the row's direction. */
+  transform: rotate(90deg);
+  color: var(--color-icon-inactive);
+}
+
+.versionFrom {
+  color: var(--color-text-muted);
+}
+
+.versionTo {
+  letter-spacing: -0.01em;
+}
+
+/* ---------- Progress ---------- */
+
+.progress {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-medium);
+  background: var(--color-glass);
+}
+
+.progressRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.progressLabel,
+.progressMeta {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.progressPercent {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-secondary);
+}
+
+/* Verifying and installing report no measurable progress, so the bar sweeps
+   instead of sitting at a fake 0%. */
+.indeterminate {
+  position: relative;
+  height: 8px;
+  overflow: hidden;
+  border-radius: var(--radius-button);
+  background: var(--color-track);
+}
+
+.indeterminate span {
+  position: absolute;
+  inset-block: 0;
+  width: 40%;
+  border-radius: var(--radius-button);
+  background: var(--color-progress);
+  animation: sweep 1.2s ease-in-out infinite;
+}
+
+@keyframes sweep {
+  from {
+    transform: translateX(-100%);
+  }
+
+  to {
+    transform: translateX(250%);
+  }
+}
+
+/* ---------- Release notes ---------- */
+
+.notes {
+  max-height: 260px;
+  overflow-y: auto;
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-medium);
+  background: var(--color-card-solid);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-relaxed);
+  color: var(--color-text-secondary);
+}
+
+.notesTitle {
+  margin-bottom: var(--space-2);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.notes h1,
+.notes h2,
+.notes h3,
+.notes h4 {
+  margin: var(--space-4) 0 var(--space-2);
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+}
+
+.notes h1:first-child,
+.notes h2:first-child,
+.notes h3:first-child {
+  margin-top: 0;
+}
+
+.notes p,
+.notes ul,
+.notes ol,
+.notes blockquote {
+  margin: var(--space-2) 0;
+}
+
+.notes ul,
+.notes ol {
+  padding-inline-start: var(--space-5);
+}
+
+.notes li {
+  margin: var(--space-1) 0;
+}
+
+.notes code {
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: var(--color-track);
+  font-size: var(--font-size-xs);
+  color: var(--color-text);
+}
+
+.notes blockquote {
+  padding-inline-start: var(--space-4);
+  border-inline-start: 3px solid var(--color-border);
+  color: var(--color-text-muted);
+}
+
+.notes hr {
+  margin: var(--space-4) 0;
+  border: 0;
+  border-top: 1px solid var(--color-border);
+}
+
+.noteTable {
+  overflow-x: auto;
+  margin: var(--space-3) 0;
+}
+
+.notes table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-size-xs);
+}
+
+.notes th,
+.notes td {
+  padding: var(--space-2);
+  border: 1px solid var(--color-border);
+  text-align: start;
+}
+
+.notes th {
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+}
+
+.noteLink {
+  padding: 0;
+  border: 0;
+  font: inherit;
+  color: var(--color-primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  background: none;
+  cursor: pointer;
+}
+
+.noteLink:hover {
+  color: var(--color-olive);
+}

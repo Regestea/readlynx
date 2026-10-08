@@ -10,6 +10,7 @@ import { registerFsIpc } from "./ipc/fs.ts";
 import { registerOcrIpc, terminateOcrWorker } from "./ipc/ocr.ts";
 import { registerPdfExportIpc } from "./ipc/pdfExport.ts";
 import { registerSystemFontsIpc } from "./ipc/systemFonts.ts";
+import { registerUpdaterIpc } from "./ipc/updater.ts";
 import { getStore } from "./store/storage.ts";
 
 protocol.registerSchemesAsPrivileged([
@@ -177,6 +178,7 @@ app.whenReady().then(() => {
   registerOcrIpc({ getStore });
   registerAiIpc();
   registerSystemFontsIpc();
+  registerUpdaterIpc();
   registerPdfExportIpc({ getStore });
   registerCoversIpc({ getStore });
   registerBackupIpc({

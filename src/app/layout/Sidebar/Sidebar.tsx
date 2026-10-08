@@ -2,11 +2,15 @@ import {
   BookOpen,
   DatabaseBackup,
   Home,
+  Loader2,
   Moon,
+  RefreshCw,
   Settings,
+  Sparkles,
   Sun,
 } from "lucide-react";
 import { useTheme } from "../../providers/theme/ThemeContext";
+import { useUpdater } from "../../../features/updater/UpdaterContext";
 import styles from "./Sidebar.module.css";
 
 const NAV_ITEMS = [
@@ -42,6 +46,50 @@ interface SidebarProps {
   onNavigate: (id: string) => void;
 }
 
+/** The update button in the footer: a dot marks a waiting release, the icon
+ *  shows what the button does right now (check, download, install). */
+function UpdateButton() {
+  const { check, hasUpdate, phase, openDialog, checkNow } = useUpdater();
+
+  const checking = check.kind === "checking";
+  const busy = phase !== null;
+  const version = check.kind === "done" ? check.result.latestVersion : null;
+  const label = busy
+    ? "Update in progress"
+    : hasUpdate
+      ? `ReadLynx ${version ?? ""} is available — install it`
+      : checking
+        ? "Checking for updates"
+        : "Check for updates";
+
+  const handleClick = () => {
+    openDialog();
+    // The dialog explains itself with the last answer; asking GitHub again the
+    // first time it is opened fills it in.
+    if (check.kind === "idle") void checkNow();
+  };
+
+  const Icon = busy ? Loader2 : hasUpdate ? Sparkles : RefreshCw;
+
+  return (
+    <button
+      type="button"
+      className={`${styles.themeToggle} ${hasUpdate && !busy ? styles.updateButtonActive : ""}`}
+      onClick={handleClick}
+      aria-label={label}
+      title={label}
+    >
+      <Icon
+        size={18}
+        strokeWidth={1.8}
+        aria-hidden="true"
+        className={busy || checking ? styles.updateSpinner : undefined}
+      />
+      {hasUpdate && !busy && <span className={styles.updateBadge} aria-hidden="true" />}
+    </button>
+  );
+}
+
 export function Sidebar({ activeId, onNavigate }: SidebarProps) {
   const { theme, toggleTheme } = useTheme();
   const isDark = theme === "dark";
@@ -67,6 +115,8 @@ export function Sidebar({ activeId, onNavigate }: SidebarProps) {
       </nav>
 
       <div className={styles.footer}>
+        <UpdateButton />
+
         <button
           type="button"
           className={styles.themeToggle}

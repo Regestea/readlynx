@@ -124,4 +124,18 @@ contextBridge.exposeInMainWorld("readlynx", {
   systemFonts: {
     list: () => ipcRenderer.invoke("fonts:list"),
   },
+  updater: {
+    check: () => ipcRenderer.invoke("updater:check"),
+    /** Downloads, verifies and installs the build the last check picked. Takes
+     * no arguments on purpose: the target is decided in the main process. */
+    install: () => ipcRenderer.invoke("updater:install"),
+    cancel: () => ipcRenderer.invoke("updater:cancel"),
+    openReleases: () => ipcRenderer.invoke("updater:open-releases"),
+    openLink: (url) => ipcRenderer.invoke("updater:open-link", url),
+    onProgress: (callback) => {
+      const listener = (_event, data) => callback(data);
+      ipcRenderer.on("updater:progress", listener);
+      return () => ipcRenderer.removeListener("updater:progress", listener);
+    },
+  },
 });

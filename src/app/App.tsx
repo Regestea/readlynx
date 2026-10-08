@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { ThemeProvider } from "./providers/theme/ThemeProvider";
+import { ThemeColorResetGuard } from "./providers/theme/ThemeColorResetGuard";
 import { ToastProvider } from "../components/ui/Toast/ToastProvider";
 import { Header } from "./layout/Header/Header";
 import { Sidebar } from "./layout/Sidebar/Sidebar";
@@ -14,6 +15,7 @@ import { ReadingPage } from "../features/reading/ReadingPage";
 import type { BookListItem } from "../infrastructure/db/entities";
 import { ReadingProgress } from "../features/home/widgets/ReadingProgress/ReadingProgress";
 import { WeeklyStats } from "../features/home/widgets/WeeklyStats/WeeklyStats";
+import { UpdaterProvider } from "../features/updater/UpdaterProvider";
 import { getCloseFlush } from "../shared/closeFlush";
 import styles from "./App.module.css";
 
@@ -96,77 +98,81 @@ export default function App() {
   return (
     <ThemeProvider>
       <ToastProvider>
-        <div className="app-background" aria-hidden="true">
-          <div className="app-background-layer app-background-layer--day" />
-          <div className="app-background-layer app-background-layer--night" />
-          <div className="app-background-overlay" />
-        </div>
+        <UpdaterProvider>
+          <div className="app-background" aria-hidden="true">
+            <div className="app-background-layer app-background-layer--day" />
+            <div className="app-background-layer app-background-layer--night" />
+            <div className="app-background-overlay" />
+          </div>
 
         <div
-          className={`${styles.shell} ${isFullWidth ? styles.shellFull : ""} ${sidebarCollapsed ? styles.shellGapNone : ""}`}
-        >
-          <div
-            className={`${styles.sidebarSlide} ${sidebarCollapsed ? styles.sidebarSlideCollapsed : ""}`}
+            className={`${styles.shell} ${isFullWidth ? styles.shellFull : ""} ${sidebarCollapsed ? styles.shellGapNone : ""}`}
           >
-            <div className={styles.sidebarSlideInner}>
-              <Sidebar activeId={activeId} onNavigate={handleNavigate} />
+            <div
+              className={`${styles.sidebarSlide} ${sidebarCollapsed ? styles.sidebarSlideCollapsed : ""}`}
+            >
+              <div className={styles.sidebarSlideInner}>
+                <Sidebar activeId={activeId} onNavigate={handleNavigate} />
+              </div>
             </div>
-          </div>
 
-          <div className={styles.main}>
-            {isHome && <Header onSelectBook={handleOpenBookFromSearch} />}
+            <div className={styles.main}>
+              {isHome && <Header onSelectBook={handleOpenBookFromSearch} />}
+              {isHome && (
+                <HomePage
+                  onCreateBook={(details) => {
+                    setCreateDetails(details);
+                    setOpenBookId(null);
+                    setReadingBookId(null);
+                    setActiveId("create-book");
+                  }}
+                  onOpenBook={(bookId) => {
+                    setCreateDetails(null);
+                    setOpenBookId(bookId);
+                    setReadingBookId(null);
+                    setActiveId("create-book");
+                  }}
+                  onOpenReadingBook={openReadingBook}
+                />
+              )}
+              {coverJob && <PdfCoverCapture job={coverJob} onDone={clearCoverJob} />}
+              {activeId === "create-book" && (
+                <CreateBookPage
+                  onBack={() => {
+                    setSidebarCollapsed(false);
+                    setActiveId("home");
+                  }}
+                  initialBookId={openBookId}
+                  initialTitle={createDetails?.title ?? ""}
+                  initialMarkdown=""
+                  initialCover={createDetails?.coverSrc ?? null}
+                  onSplitChange={setSidebarCollapsed}
+                />
+              )}
+              {activeId === "reading" && readingBookId && (
+                <ReadingPage
+                  key={readingBookId}
+                  bookId={readingBookId}
+                  onBack={() => {
+                    setSidebarCollapsed(false);
+                    setActiveId("home");
+                  }}
+                />
+              )}
+              {activeId === "backup" && <BackupPage />}
+              {activeId === "settings" && <SettingsPage />}
+            </div>
+
             {isHome && (
-              <HomePage
-                onCreateBook={(details) => {
-                  setCreateDetails(details);
-                  setOpenBookId(null);
-                  setReadingBookId(null);
-                  setActiveId("create-book");
-                }}
-                onOpenBook={(bookId) => {
-                  setCreateDetails(null);
-                  setOpenBookId(bookId);
-                  setReadingBookId(null);
-                  setActiveId("create-book");
-                }}
-                onOpenReadingBook={openReadingBook}
-              />
+              <aside className={styles.panel} aria-label="Reading overview">
+                <ReadingProgress />
+                <WeeklyStats />
+              </aside>
             )}
-            {coverJob && <PdfCoverCapture job={coverJob} onDone={clearCoverJob} />}
-            {activeId === "create-book" && (
-              <CreateBookPage
-                onBack={() => {
-                  setSidebarCollapsed(false);
-                  setActiveId("home");
-                }}
-                initialBookId={openBookId}
-                initialTitle={createDetails?.title ?? ""}
-                initialMarkdown=""
-                initialCover={createDetails?.coverSrc ?? null}
-                onSplitChange={setSidebarCollapsed}
-              />
-            )}
-            {activeId === "reading" && readingBookId && (
-              <ReadingPage
-                key={readingBookId}
-                bookId={readingBookId}
-                onBack={() => {
-                  setSidebarCollapsed(false);
-                  setActiveId("home");
-                }}
-              />
-            )}
-            {activeId === "backup" && <BackupPage />}
-            {activeId === "settings" && <SettingsPage />}
           </div>
 
-          {isHome && (
-            <aside className={styles.panel} aria-label="Reading overview">
-              <ReadingProgress />
-              <WeeklyStats />
-            </aside>
-          )}
-        </div>
+          <ThemeColorResetGuard />
+        </UpdaterProvider>
       </ToastProvider>
     </ThemeProvider>
   );

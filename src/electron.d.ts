@@ -21,6 +21,7 @@ import type { ReaderDefaultsEntity } from "./infrastructure/db/entities";
 import type { ReadingStateInput } from "./infrastructure/db/repositories";
 import type { ReaderSettingsInput } from "./infrastructure/db/repositories";
 import type { TranslationEntity, TranslationMethod } from "./infrastructure/db/entities";
+import type { UpdateCheckResult, UpdateInstallResult, UpdateProgress } from "./shared/updater";
 
 export {};
 
@@ -218,6 +219,23 @@ declare global {
         /** All font families installed on the OS (queried from the main
          *  process — includes user-installed fonts). */
         list(): Promise<string[]>;
+      };
+      updater: {
+        /** Asks GitHub for the newest published release and compares it with
+         *  the running build. `disabled` is true in a dev run. */
+        check(): Promise<UpdateCheckResult>;
+        /** Downloads the build the last check picked, verifies its sha256 and
+         *  installs it. Takes no arguments: the target is chosen in the main
+         *  process. */
+        install(): Promise<UpdateInstallResult>;
+        /** Aborts the running download. */
+        cancel(): Promise<boolean>;
+        /** Opens the release page in the system browser. */
+        openReleases(): Promise<boolean>;
+        /** Opens an https github.com link in the system browser; anything else
+         *  is rejected (release notes are remote content). */
+        openLink(url: string): Promise<boolean>;
+        onProgress(callback: (progress: UpdateProgress) => void): () => void;
       };
     };
   }

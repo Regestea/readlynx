@@ -20,5 +20,5 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["vite.config.ts", "electron", "src/infrastructure/db"]
+  "include": ["vite.config.ts", "electron", "src/infrastructure/db", "src/shared/updater.ts"]
 }
