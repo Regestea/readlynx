@@ -143,6 +143,7 @@ export function ColorPickerPanel({
                 value={section.value}
                 onChange={section.onChange}
                 presets={presets}
+                dialogPresets={presets}
                 label={section.label}
               />
             </div>

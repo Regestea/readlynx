@@ -1,0 +1,72 @@
+/* The picker body: canvas square, hue bar, preview + hex field. Kept apart
+   from `ColorPickerPanel.module.css` so the area can be dropped into the
+   panel or into a settings field without dragging the panel's chrome along. */
+
+.area {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: 100%;
+}
+
+.svSquare {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  height: auto;
+  border-radius: var(--radius-small);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-sm);
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.hueBar {
+  width: 100%;
+  height: 14px;
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  cursor: pointer;
+  touch-action: none;
+}
+
+.previewRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.preview {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border-radius: var(--radius-small);
+
+  /* The ring keeps the swatch readable on a same-coloured background. */
+  border: 1px solid rgb(0 0 0 / 25%);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 45%);
+}
+
+.hexField {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-small);
+  background: var(--color-card);
+  font-family: Consolas, Menlo, Monaco, "Cascadia Mono", "Courier New", monospace;
+  font-size: var(--font-size-xs);
+  color: var(--color-text);
+  transition: border-color var(--transition-fast) ease;
+}
+
+.hexField:focus {
+  border-color: var(--color-primary);
+  outline: none;
+}
+
+.rgbLabel {
+  font-family: Consolas, Menlo, Monaco, "Cascadia Mono", "Courier New", monospace;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}

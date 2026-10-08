@@ -1,5 +1,12 @@
 .wrap {
   display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  width: 100%;
+}
+
+.row {
+  display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: var(--space-3);
@@ -52,13 +59,4 @@
     #c86bff,
     #ff6b6b
   );
-}
-
-.colorInput {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  opacity: 0;
-  margin: 0;
-  pointer-events: none;
 }

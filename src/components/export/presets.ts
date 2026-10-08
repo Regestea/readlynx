@@ -92,7 +92,8 @@ export function isCustomColor(value: string, presets: readonly { value: string }
   return value !== "" && !presets.some((preset) => preset.value.toLowerCase() === value.toLowerCase());
 }
 
-/** `<input type="color">` needs a real hex; empty means "no override". */
+/** The color dialog needs a real hex to seed its picker; an empty setting
+ *  means "no override". */
 export function safeHex(value: string): string {
   return /^#[0-9a-f]{6}$/i.test(value) ? value : "#000000";
 }

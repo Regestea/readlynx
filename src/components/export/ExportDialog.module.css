@@ -317,15 +317,6 @@
   );
 }
 
-.hiddenColorInput {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  opacity: 0;
-  margin: 0;
-  pointer-events: none;
-}
-
 /* ---------- Margins ---------- */
 
 .marginGrid {

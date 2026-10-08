@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Check, Download, FileDown } from "lucide-react";
 import { EpubViewer } from "../epubViewer/EpubViewer";
 import { buildHtmlDocument } from "../../infrastructure/export/htmlDocument";
@@ -13,6 +13,7 @@ import type { ExportCodeThemeId } from "../../infrastructure/export/exportTheme"
 import { Button } from "../ui/Button/Button";
 import { FontFamilySelect } from "../FontFamilySelect/FontFamilySelect";
 import { Modal } from "../ui/Modal/Modal";
+import { ColorPickerModal } from "../ui/ColorPickerPanel/ColorPickerModal";
 import {
   MAX_FONT_SCALE_PCT,
   MIN_FONT_SCALE_PCT,
@@ -78,8 +79,7 @@ export function ExportDialog({
   const [settings, setSettings] = useState<ExportSettings>(() =>
     initialExportSettings(DEFAULT_EXPORT_SETTINGS, { defaultMarginMm, defaultPageFormat }),
   );
-  const textColorInputRef = useRef<HTMLInputElement>(null);
-  const paperColorInputRef = useRef<HTMLInputElement>(null);
+  const [colorPicker, setColorPicker] = useState<"text" | "page" | null>(null);
   const [pageCount, setPageCount] = useState<number | null>(null);
   const [resolvedCover, setResolvedCover] = useState<string | undefined>(undefined);
   const [epubSrc, setEpubSrc] = useState<ArrayBuffer | null>(null);
@@ -448,19 +448,13 @@ export function ExportDialog({
               ))}
               <button
                 type="button"
+                aria-haspopup="dialog"
                 className={`${styles.swatch} ${styles.customSwatch} ${
                   isCustomColor(settings.textColor, TEXT_COLORS) ? styles.swatchActive : ""
                 }`}
                 title="Custom text color…"
                 aria-label="Pick a custom text color"
-                onClick={() => textColorInputRef.current?.click()}
-              />
-              <input
-                ref={textColorInputRef}
-                type="color"
-                className={styles.hiddenColorInput}
-                value={safeHex(settings.textColor)}
-                onChange={(event) => patch({ textColor: event.target.value })}
+                onClick={() => setColorPicker("text")}
               />
             </div>
           </div>
@@ -481,22 +475,35 @@ export function ExportDialog({
               ))}
               <button
                 type="button"
+                aria-haspopup="dialog"
                 className={`${styles.swatch} ${styles.customSwatch} ${
                   isCustomColor(settings.backgroundColor, PAPER_COLORS) ? styles.swatchActive : ""
                 }`}
                 title="Custom page color…"
                 aria-label="Pick a custom page color"
-                onClick={() => paperColorInputRef.current?.click()}
-              />
-              <input
-                ref={paperColorInputRef}
-                type="color"
-                className={styles.hiddenColorInput}
-                value={safeHex(settings.backgroundColor)}
-                onChange={(event) => patch({ backgroundColor: event.target.value })}
+                onClick={() => setColorPicker("page")}
               />
             </div>
           </div>
+
+          {/* The app's one color dialog, shared with the reader toolbars and
+              the settings defaults — edits a draft, writes on Apply only. */}
+          {colorPicker && (
+            <ColorPickerModal
+              title={colorPicker === "text" ? "Pick text color" : "Pick page color"}
+              value={safeHex(colorPicker === "text" ? settings.textColor : settings.backgroundColor)}
+              presets={
+                (colorPicker === "text" ? TEXT_COLORS : PAPER_COLORS)
+                  .map(({ value }) => value)
+                  .filter(Boolean)
+              }
+              onApply={(color) => {
+                patch(colorPicker === "text" ? { textColor: color } : { backgroundColor: color });
+                setColorPicker(null);
+              }}
+              onClose={() => setColorPicker(null)}
+            />
+          )}
 
           {settings.format !== "epub" && (
             <div className={styles.section}>

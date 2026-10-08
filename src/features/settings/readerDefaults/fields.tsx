@@ -1,6 +1,6 @@
-import { useRef } from "react";
 import { Check, Minus, Plus } from "lucide-react";
 import { READING_BACKGROUNDS } from "../../../components/ui/ColorPickerPanel/colors";
+import { ColorSelect } from "../../../components/ui/ColorSelect/ColorSelect";
 import styles from "./readerDefaults.module.css";
 
 const ZOOM_MIN = 60;
@@ -50,8 +50,9 @@ export function ZoomField({
   );
 }
 
-/** Inline color picker: curated reading swatches + custom color + a
- *  "follow theme" reset. `null` means "follow the app theme" (no override). */
+/** Inline color picker: curated reading swatches + the full custom picker
+ *  (saturation/value square, hue bar, hex field) + a "follow theme" reset.
+ *  `null` means "follow the app theme" (no override). */
 export function DefaultColorField({
   label,
   hint,
@@ -66,10 +67,6 @@ export function DefaultColorField({
   themeLabel?: string;
 }) {
   const active = (value ?? "").toLowerCase();
-  const isCustom =
-    value !== null &&
-    !READING_BACKGROUNDS.some(({ color }) => color.toLowerCase() === active);
-  const customInputRef = useRef<HTMLInputElement>(null);
 
   return (
     <div className={styles.field}>
@@ -96,33 +93,16 @@ export function DefaultColorField({
             </button>
           );
         })}
-        <span className={styles.customWrap}>
-          <button
-            type="button"
-            role="radio"
-            aria-checked={isCustom}
-            aria-label={`Custom ${label.toLowerCase()}`}
-            title={`Custom ${label.toLowerCase()}…`}
-            className={`${styles.swatch} ${styles.customSwatch} ${isCustom ? styles.swatchActive : ""}`}
-            onClick={() => customInputRef.current?.click()}
-          >
-            {isCustom ? (
-              <Check size={12} strokeWidth={3.5} className={styles.swatchCheck} aria-hidden="true" />
-            ) : (
-              <Plus size={14} strokeWidth={3} className={styles.swatchCheck} aria-hidden="true" />
-            )}
-          </button>
-          <input
-            ref={customInputRef}
-            type="color"
-            className={styles.hiddenColorInput}
-            value={value ?? "#ffffff"}
-            onChange={(event) => onChange(event.target.value)}
-            aria-label={`Custom ${label.toLowerCase()} picker`}
-            tabIndex={-1}
-          />
-        </span>
       </div>
+      {/* The curated grid above is the palette; below it the custom swatch
+          unfolds the full picker (square, hue bar, hex field) for everything
+          the curated colors miss. */}
+      <ColorSelect
+        value={value ?? ""}
+        onChange={(color) => onChange(color || null)}
+        presets={[]}
+        label={label}
+      />
       <span className={styles.currentValue}>
         {value ?? themeLabel}
         {value !== null && (

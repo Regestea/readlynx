@@ -166,34 +166,6 @@
   filter: drop-shadow(0 1px 2px rgb(0 0 0 / 35%));
 }
 
-.customWrap {
-  display: inline-flex;
-  align-items: center;
-}
-
-.customSwatch {
-  background: conic-gradient(
-    from 180deg,
-    #ff6b6b,
-    #ffd93d,
-    #6bcb77,
-    #4d96ff,
-    #c86bff,
-    #ff6b6b
-  );
-}
-
-.hiddenColorInput {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  opacity: 0;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  pointer-events: none;
-}
-
 .themeButton {
   padding: 6px 12px;
   border-radius: 8px;
