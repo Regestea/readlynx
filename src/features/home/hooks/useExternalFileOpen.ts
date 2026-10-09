@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { bookTitleFromPath, detectBookSourceType } from "../../../shared/bookFiles";
+import type { OpenMode } from "../../../components/ui/OpenModeDialog/OpenModeDialog";
 
 /** Background first-page capture for a freshly imported/refreshed PDF.
  *  Rendered offscreen by the host until `onDone` fires. */
@@ -8,6 +9,18 @@ export interface PdfCoverJob {
   title: string;
   storedPath: string;
   key: number;
+}
+
+/** Where the host wants an opened book to end up, and who decides. */
+export interface ExternalOpenHandlers {
+  /** False in a reader window: it has no tabs to add to, no library, and must
+   *  not claim a file that was queued before the shell's renderer mounted. */
+  enabled: boolean;
+  /** Asked before anything is imported. "cancel" aborts the whole open — no
+   *  copy is written and no library row is created. */
+  askOpenMode: (fileName: string) => Promise<OpenMode>;
+  onOpenTab: (bookId: string) => void;
+  onOpenWindow: (bookId: string) => void;
 }
 
 /**
@@ -19,19 +32,21 @@ export interface PdfCoverJob {
  *   (remembering the new pick location when it changed).
  * - Same pick location but changed content → replace the stored copy,
  *   drop stale translations and reset the reading position (same book).
- * - Otherwise → silent import as a reading book (title = file name) and
- *   open it directly in the reader. PDFs get their cover captured
- *   afterwards via {@link PdfCoverJob}.
+ * - Otherwise → import as a reading book (title = file name) and open it.
+ *   PDFs get their cover captured afterwards via {@link PdfCoverJob}.
+ *
+ * The question of *where* it opens (a tab here, or its own window) is asked
+ * before any of that work starts, so declining leaves the library untouched.
  */
-export function useExternalFileOpen(onOpenReadingBook: (bookId: string) => void) {
+export function useExternalFileOpen(handlers: ExternalOpenHandlers) {
   const [coverJob, setCoverJob] = useState<PdfCoverJob | null>(null);
   const busyRef = useRef(false);
   const queueRef = useRef<string[]>([]);
-  const onOpenRef = useRef(onOpenReadingBook);
+  const handlersRef = useRef(handlers);
 
   useEffect(() => {
-    onOpenRef.current = onOpenReadingBook;
-  }, [onOpenReadingBook]);
+    handlersRef.current = handlers;
+  }, [handlers]);
 
   const clearCoverJob = useCallback(() => {
     setCoverJob(null);
@@ -41,6 +56,11 @@ export function useExternalFileOpen(onOpenReadingBook: (bookId: string) => void)
     const bridge = window.readlynx;
     if (!bridge) return;
     const sourceType = detectBookSourceType(sourcePath);
+
+    // Asked first: cancelling must not import, hash or write anything.
+    const mode = await handlersRef.current.askOpenMode(bookTitleFromPath(sourcePath));
+    if (mode === "cancel") return;
+    const open = mode === "window" ? handlersRef.current.onOpenWindow : handlersRef.current.onOpenTab;
 
     // 1. Content identity (cheap size + streaming hash in main).
     const identity = await bridge.fileIdentity(sourcePath).catch(() => null);
@@ -55,7 +75,7 @@ export function useExternalFileOpen(onOpenReadingBook: (bookId: string) => void)
         await bridge.db.updateBookOriginalPath(byHash.bookId, sourcePath).catch(() => false);
       }
       await bridge.db.markReadingStateOpened(byHash.bookId).catch(() => false);
-      onOpenRef.current(byHash.bookId);
+      open(byHash.bookId);
       return;
     }
 
@@ -83,7 +103,7 @@ export function useExternalFileOpen(onOpenReadingBook: (bookId: string) => void)
         })
         .catch(() => false);
       await bridge.db.markReadingStateOpened(byOrigin.bookId).catch(() => false);
-      onOpenRef.current(byOrigin.bookId);
+      open(byOrigin.bookId);
       if (byOrigin.sourceType === "pdf") {
         const info = await bridge.db.getBook(byOrigin.bookId).catch(() => null);
         setCoverJob({
@@ -96,7 +116,7 @@ export function useExternalFileOpen(onOpenReadingBook: (bookId: string) => void)
       return;
     }
 
-    // 4. Brand-new file → silent import + open in the reader.
+    // 4. Brand-new file → import + open.
     const imported = await bridge.importSource({ sourcePath, sourceType }).catch(() => null);
     if (!imported) return;
     const title = bookTitleFromPath(sourcePath).trim() || "Untitled";
@@ -113,7 +133,7 @@ export function useExternalFileOpen(onOpenReadingBook: (bookId: string) => void)
       .catch(() => null);
     if (!result) return;
     await bridge.db.markReadingStateOpened(result.bookId).catch(() => false);
-    onOpenRef.current(result.bookId);
+    open(result.bookId);
     if (sourceType === "pdf") {
       setCoverJob({ bookId: result.bookId, title, storedPath: imported, key: Date.now() });
     }
@@ -140,6 +160,7 @@ export function useExternalFileOpen(onOpenReadingBook: (bookId: string) => void)
   useEffect(() => {
     const bridge = window.readlynx;
     if (!bridge?.onOpenFile || !bridge?.getPendingFile) return;
+    if (!handlersRef.current.enabled) return;
     const enqueue = (filePath: string) => {
       if (!filePath) return;
       queueRef.current.push(filePath);

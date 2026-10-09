@@ -79,6 +79,10 @@
   --sidebar-width-collapsed: 80px;
   --panel-width: 320px;
 
+  /* The custom title bar replaces the OS caption, so it is part of the layout
+     rather than an overlay: `.shell` takes the rest of the column. */
+  --titlebar-height: 36px;
+
   /* ==========================================================
      LIGHT THEME — calm mountain morning
      ========================================================== */

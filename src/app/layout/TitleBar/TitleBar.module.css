@@ -1,0 +1,344 @@
+/* Slim replacement for the OS caption. Stays flat and square-cornered: these
+   read as OS chrome rather than app buttons, and a rounded close button
+   hovering a square corner looks broken. */
+
+.bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: 0 0 auto;
+  height: var(--titlebar-height);
+  padding-inline: var(--space-3);
+  background: var(--color-glass);
+  border-bottom: 1px solid var(--color-border);
+  backdrop-filter: blur(var(--blur-glass));
+
+  /* Deliberately no `z-index` and no `position`. `backdrop-filter` already
+     makes this a stacking context, so whatever it is given, the whole bar is
+     painted as one layer — and a layer above `.shell` also means below every
+     `position: fixed` overlay *inside* `.shell`, whose own z-index can never
+     compete with it. That is how a reader's fullscreen ended up under this
+     bar. Leaving the bar unlayered puts `.shell` (z-index 0, later in the DOM)
+     on top, so the viewer's `--z-dialog` overlays cover the bar as intended.
+     The tab dropdown therefore cannot live in here at all: it is portaled to
+     `document.body` instead, the same escape `Modal` uses. */
+
+  /* The window has no caption to drag, so the bar itself is the handle. Text
+     selection and a text cursor would both fight that gesture. */
+  user-select: none;
+  -webkit-app-region: drag;
+}
+
+/* ---------- Tabs ---------- */
+
+/* A reader window has no tabs; it shows the book's name instead. */
+.barLabel {
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Drop-target hint while a tab is being dragged past the strip: the whole bar
+   lights up, because the cursor alone does not say "release to open a
+   window". */
+.barDetach {
+  background: var(--color-active);
+  box-shadow: inset 0 0 0 1px var(--color-primary);
+}
+
+.tabs {
+  display: flex;
+  align-items: stretch;
+  align-self: stretch;
+  gap: var(--space-1);
+  flex: 1;
+  min-width: 0;
+
+  /* Fixed-width tabs overflow rather than scroll: the chevron's dropdown is
+     the way to reach the ones that do not fit. `scrollWidth` still reports the
+     full row while clipped, which is what the chevron measures. */
+  overflow: hidden;
+}
+
+/* Fades the clipped edge, so a tab sliced in half by the strip reads as "the
+   row continues" rather than as a tab that failed to render. */
+.tabsClipped {
+  mask-image: linear-gradient(to right, #000 calc(100% - 32px), transparent);
+}
+
+.tab {
+  --tab-width: 172px;
+
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+
+  /* One width for every tab, so a long book title can never squeeze the
+     Library tab narrower than a short one — the strip stays uniform however
+     many tabs are open. Fixed rather than flexible: the tabs that do not fit
+     are reached through the chevron's dropdown, not by scrolling. */
+  flex: 0 0 var(--tab-width);
+  width: var(--tab-width);
+  min-width: 0;
+  padding-inline: var(--space-2) var(--space-1);
+  border-radius: var(--radius-small);
+  color: var(--color-text-muted);
+  cursor: default;
+  -webkit-app-region: no-drag;
+  transition:
+    background-color var(--transition-fast) ease,
+    color var(--transition-fast) ease;
+}
+
+.tab:hover,
+.tabActive {
+  background: var(--color-hover);
+}
+
+.tabActive {
+  color: var(--color-text);
+  font-weight: var(--font-weight-semibold);
+}
+
+.tabIcon {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.tabTitle {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--font-size-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Only the close button earns a button role; the tab itself is a div so the
+   whole strip can carry the `drag` app region without the buttons inside it
+   needing to opt back out twice. */
+.tabClose {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: inherit;
+  cursor: default;
+  transition:
+    background-color var(--transition-fast) ease,
+    color var(--transition-fast) ease;
+}
+
+.tabClose:hover {
+  background: var(--color-danger);
+  color: var(--color-on-primary);
+}
+
+/* ---------- Overflow dropdown ---------- */
+
+/* The chevron and its panel share one wrapper so the pointer can travel from
+   the button into the list without a gap in between closing it. */
+.overflow {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+
+  /* Stretched to the bar's height so the panel's `top: 100%` lands exactly on
+     the bar's bottom edge instead of on the button's own box. */
+  align-self: stretch;
+  flex-shrink: 0;
+}
+
+.overflowButton {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 100%;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-small);
+  background: transparent;
+  color: var(--color-text-secondary);
+  -webkit-app-region: no-drag;
+  cursor: default;
+  transition:
+    background-color var(--transition-fast) ease,
+    color var(--transition-fast) ease;
+}
+
+.overflowButton:hover,
+.overflowButtonOpen {
+  background: var(--color-hover);
+  color: var(--color-text);
+}
+
+.overflowButtonOpen {
+  border-radius: var(--radius-small) var(--radius-small) 0 0;
+}
+
+.overflowPanel {
+  /* Portaled to `document.body` and pinned with inline coordinates measured
+     from the chevron, because the bar is its own stacking context (see
+     above) and anything positioned inside it paints under the page. Fixed, not
+     absolute: the containing block is then the viewport, which is what the
+     measured viewport coordinates already are. */
+  position: fixed;
+  z-index: var(--z-dialog);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: 300px;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-medium);
+  background: var(--color-card-solid);
+  box-shadow: var(--shadow-lg);
+}
+
+.overflowSearch {
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: var(--color-card);
+  font-family: inherit;
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
+}
+
+.overflowSearch:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 1px;
+}
+
+.overflowList {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 320px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.overflowRow {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.overflowItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: 1;
+  min-width: 0;
+  padding: var(--space-2) var(--space-3);
+  border: none;
+  border-radius: var(--radius-small);
+  background: transparent;
+  font-family: inherit;
+  font-size: var(--font-size-sm);
+  text-align: start;
+  color: var(--color-text-secondary);
+  cursor: default;
+  transition:
+    background-color var(--transition-fast) ease,
+    color var(--transition-fast) ease;
+}
+
+.overflowItem:hover {
+  background: var(--color-hover);
+  color: var(--color-text);
+}
+
+.overflowItemCurrent {
+  color: var(--color-primary);
+  font-weight: var(--font-weight-semibold);
+}
+
+.overflowItemTitle {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.overflowItemClose {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: default;
+  transition:
+    background-color var(--transition-fast) ease,
+    color var(--transition-fast) ease;
+}
+
+.overflowItemClose:hover {
+  background: var(--color-danger);
+  color: var(--color-on-primary);
+}
+
+.overflowEmpty {
+  padding: var(--space-3);
+  font-size: var(--font-size-sm);
+  text-align: center;
+  color: var(--color-text-muted);
+}
+
+.controls {
+  display: flex;
+  align-items: stretch;
+  height: 100%;
+  margin-inline-start: auto;
+}
+
+.button {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 100%;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--color-text-secondary);
+
+  /* Inside a `drag` region nothing receives clicks until it opts back out. */
+  -webkit-app-region: no-drag;
+  cursor: default;
+  transition:
+    background-color var(--transition-fast) ease,
+    color var(--transition-fast) ease;
+}
+
+.button:hover {
+  background: var(--color-hover);
+  color: var(--color-text);
+}
+
+/* Declared after `.button:hover` at equal specificity, so the two hover rules
+   cascade instead of the base resetting the background. */
+.buttonClose:hover {
+  background: var(--color-danger);
+  color: var(--color-on-primary);
+}

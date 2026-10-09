@@ -397,6 +397,40 @@ interface EpubViewerProps {
   /** When provided, a floating "Ask AI" bubble appears next to text
    *  selections inside the book and hands the selected text to the host. */
   onAskAi?: (text: string) => void;
+  /** False while the reader sits in a background tab. epubjs builds the
+   *  chapter iframe at whatever size the host happens to be when
+   *  `display()` runs, so a book that is opened behind another tab would get
+   *  a 0×0 frame and come up blank. */
+  active?: boolean;
+}
+
+/** Resolves once `host` has a real box, or after a short grace period.
+ *
+ *  epubjs attaches its stage inside `display()` and sizes it from the host
+ *  element *once*. A host inside a collapsed panel reports 0×0, so the stage —
+ *  and with it every chapter iframe — is built empty and the book opens as a
+ *  blank page that a later `resize()` does not always recover from. Waiting
+ *  for a non-zero box first is what keeps a book opened in the background
+ *  rendering like any other. The timeout bounds the wait for the case where
+ *  the panel really is 0×0 (a headless preview), where the observer below
+ *  takes over. */
+function waitForHostSize(host: HTMLElement): Promise<void> {
+  if (host.clientWidth > 0 && host.clientHeight > 0) return Promise.resolve();
+  return new Promise<void>((resolve) => {
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      observer.disconnect();
+      window.clearTimeout(timer);
+      resolve();
+    };
+    const observer = new ResizeObserver(() => {
+      if (host.clientWidth > 0 && host.clientHeight > 0) finish();
+    });
+    const timer = window.setTimeout(finish, 2000);
+    observer.observe(host);
+  });
 }
 
 /** Imperative handle for hosts that need the current chapter's text (e.g.
@@ -478,6 +512,7 @@ export function EpubViewer({
   onProgressChange,
   onExtractPage,
   onAskAi,
+  active = true,
   ref,
 }: EpubViewerProps & { ref?: Ref<EpubViewerHandle> }) {
   const { theme } = useTheme();
@@ -1021,6 +1056,15 @@ export function EpubViewer({
         // Last, so it judges the finished chapter: our own code colours and
         // image wrappers are in place and the book is not restyled afterwards.
         rendition.hooks.content.register(harmonizeBook);
+        // epubjs sizes the stage (and every chapter iframe inside it) once, from
+        // the host element, as part of `display()`. Behind a collapsed panel
+        // that element is 0×0 and the book comes up blank — so wait for a real
+        // box before the first chapter is shown.
+        await waitForHostSize(host);
+        if (cancelled) {
+          nextBook.destroy();
+          return;
+        }
         await rendition.display();
         // Resume reading where the user left off: jump to the saved chapter
         // (spine index). The relocated handler fires and reports the restored
@@ -1159,6 +1203,19 @@ export function EpubViewer({
     observer.observe(host);
     return () => observer.disconnect();
   }, [book]);
+
+  /** Re-fits when the reader comes back to the front. The observer above only
+   *  fires on a size *change*, so a tab that was hidden for its whole life and
+   *  sized itself from a 0×0 host would otherwise keep that empty box. */
+  useEffect(() => {
+    if (!active) return;
+    const host = hostRef.current;
+    const rendition = renditionRef.current;
+    if (!host || !rendition) return;
+    const width = host.clientWidth;
+    const height = host.clientHeight;
+    if (width > 0 && height > 0) rendition.resize(width, height);
+  }, [active]);
 
   /** Matches the EPUB page (background + text) to the app theme, unless the
    * user picked custom colors which then take precedence. Only the page

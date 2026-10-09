@@ -1,12 +1,22 @@
+/* The window frame column: title bar on top, shell filling the rest. The
+   shell cannot claim `100vh` any more — with the OS caption gone that is the
+   full window height, which would push the shell's bottom padding off-screen. */
+.frame {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
 .shell {
   position: relative;
   z-index: var(--z-base);
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) var(--panel-width);
   gap: var(--space-6);
+  flex: 1;
+  min-height: 0;
   width: 100%;
   max-width: 1920px;
-  height: 100vh;
   margin: 0 auto;
   padding: var(--space-6);
 }
@@ -14,9 +24,34 @@
 .main {
   display: flex;
   flex-direction: column;
-  gap: var(--space-6);
   min-width: 0;
   min-height: 0;
+}
+
+/* One open view. The `display` here would otherwise beat the user-agent
+   `[hidden] { display: none }` rule at equal specificity, leaving every
+   background tab painted instead of hidden. */
+.tabPanel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.tabPanel[hidden] {
+  display: none;
+}
+
+/* A reader window has no sidebar and no stats panel: the book fills the
+   window under the title bar, with the shell's own padding. */
+.readerStage {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  padding: var(--space-6);
 }
 
 .panel {
@@ -69,5 +104,20 @@
 
   .shellFull {
     grid-template-columns: auto minmax(0, 1fr);
+  }
+}
+
+/* Narrow enough that the stats panel and the shelf cannot both be usable —
+   roughly one half of a 1440-wide screen, which is what two windows side by
+   side leave each other. The shelf keeps the space: it is the page people
+   navigate from, the panel is a read-only glance. Nothing is lost, because
+   the panel is already gone for every non-library tab. */
+@media (width <= 1120px) {
+  .shell {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .panel {
+    display: none;
   }
 }

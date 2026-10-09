@@ -88,6 +88,10 @@ interface UseTranslationOptions {
    *  second, headless copy of the archive when the Manage dialog translates
    *  chapters the reading view is not showing. */
   sourceFilePath?: string | null;
+  /** False while the book's tab is in the background. Only the tab in front can
+   *  reach for the app-wide abort in the main process, which would otherwise
+   *  cancel the AI requests of the other open books too. */
+  active?: boolean;
 }
 
 /** Chunk keys are ordered by their index, zero-padded so string ordering
@@ -245,6 +249,7 @@ export function useTranslation({
   epubReady,
   markdownText = null,
   sourceFilePath = null,
+  active = true,
 }: UseTranslationOptions) {
   const [viewMode, setViewModeState] = useState<TranslationViewMode>("original");
   const [settings, setSettings] = useState<TranslationSettings>(DEFAULT_TRANSLATION_SETTINGS);
@@ -1476,13 +1481,15 @@ export function useTranslation({
     if (typeof cancel === "function") {
       if (ids.length > 0) {
         void Promise.allSettled(ids.map((id) => cancel(id))).catch(() => {});
-      } else {
+      } else if (active) {
         // No chat in flight (e.g. stuck in OCR / image save) — still abort
-        // anything pending in main as a safety net.
+        // anything pending in main as a safety net. Only the tab in front may
+        // do this: the call is app-wide, so from a background tab it would
+        // cancel the translations the other open books are running.
         void cancel().catch(() => {});
       }
     }
-  }, []);
+  }, [active]);
 
   /** Translates the current unit. With `force`, regeneration bypasses the
    *  cache and overwrites the stored rows. */

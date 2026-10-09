@@ -28,6 +28,25 @@ export {};
 declare global {
   interface Window {
     readlynx?: {
+      /** Custom title bar controls — the window has no OS caption
+       *  (`titleBarStyle: "hidden"`). `close` goes through the same save-flush
+       *  handshake as the OS close button, so it never drops pending writes. */
+      windowControls: {
+        minimize(): Promise<void>;
+        /** Maximizes or restores; resolves to the new maximized state. */
+        toggleMaximize(): Promise<boolean>;
+        close(): Promise<void>;
+        isMaximized(): Promise<boolean>;
+        /** What this window is for. Pulled once on mount so a reader window
+         *  paints its book rather than the whole shell for a frame. */
+        getContext(): Promise<{ role: "main" | "reader"; bookId: string | null }>;
+        /** Opens a book in its own window, focusing one already showing it.
+         *  Ignored when called from a reader window. */
+        openBook(bookId: string): Promise<boolean>;
+        /** Fires on state changes the user did not ask for (taskbar
+         *  double-click, Win+Up, snap layouts, a restored size). */
+        onMaximizedChanged(callback: (maximized: boolean) => void): () => void;
+      };
       exportPdf(options: {
         defaultPath: string;
         html: string;

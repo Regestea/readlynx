@@ -78,12 +78,15 @@
   display: flex;
   align-items: center;
   gap: var(--space-1);
-  min-width: 86px;
+  min-width: 100px;
   justify-content: center;
 }
 
 .pageInput {
-  width: 48px;
+  /* Room for a four-digit page number (9999) with room to spare. The field is
+     `border-box`, so this is 62px less the 12px of padding and 2px of border:
+     48px left for digits, about six of them. */
+  width: 62px;
   padding: 4px 6px;
   text-align: center;
   font-size: var(--font-size-sm);
@@ -92,9 +95,21 @@
   border: 1px solid var(--color-border);
   border-radius: 8px;
   background: var(--color-card);
+  appearance: textfield;
   transition:
     border-color var(--transition-base) ease,
     box-shadow var(--transition-base) ease;
+}
+
+/* Same treatment as the shared `NumberInput`. Chromium keeps ~15px inside the
+   content box for these arrows and only reveals them on hover or focus — so
+   they squeeze the digits out of view exactly while the number is being read
+   or typed. The toolbar's prev/next buttons and the arrow keys still step the
+   page, so nothing is lost when they go. */
+.pageInput::-webkit-outer-spin-button,
+.pageInput::-webkit-inner-spin-button {
+  appearance: none;
+  margin: 0;
 }
 
 .pageInput:focus-visible {
@@ -135,14 +150,17 @@
    flex item defaults to `auto`, which a tall page would push out of the viewer
    instead of scrolling. Never give it a viewport height: `.viewer` clips with
    `overflow: hidden`, so the page bottom and this padding would be cut off and
-   unreachable — visibly different at every zoom level. */
+   unreachable — visibly different at every zoom level.
+   `justify-content` stays at its default: centring a flex item that is wider
+   than the scroll container spills it past the scroll origin, and the strip on
+   the start edge can never be scrolled to. `.page` centres itself with auto
+   margins instead, which collapse to zero once it no longer fits. */
 .scroll {
   flex: 1;
   min-height: 0;
   overflow: auto;
   display: flex;
   align-items: flex-start;
-  justify-content: center;
   padding: var(--space-6);
   background: var(--color-active);
 }
@@ -152,11 +170,23 @@
   display: flex;
   align-items: flex-start;
   justify-content: center;
+
+  /* A flex item shrinks by default, which quietly squeezed a zoomed-in page
+     back down to the viewer's width instead of letting it overflow. Opt out
+     so the page is exactly as large as the zoom asked for, and centre it here
+     rather than on the container so the overflow stays reachable. */
+  flex: 0 0 auto;
+  margin-inline: auto;
   box-shadow: 0 6px 24px rgb(0 0 0 / 16%);
 }
 
 .canvas {
   display: block;
+
+  /* A flex item of `.page`, with the same default shrink: without this the
+     canvas is squeezed to its container rather than keeping its rendered
+     size. */
+  flex: 0 0 auto;
   background: var(--pdf-background-color, #fff);
   border-radius: 2px;
 }

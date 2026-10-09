@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ThemeProvider } from "./providers/theme/ThemeProvider";
 import { ThemeColorResetGuard } from "./providers/theme/ThemeColorResetGuard";
 import { ToastProvider } from "../components/ui/Toast/ToastProvider";
 import { Header } from "./layout/Header/Header";
 import { Sidebar } from "./layout/Sidebar/Sidebar";
+import { TitleBar } from "./layout/TitleBar/TitleBar";
 import { HomePage } from "../features/home/HomePage";
 import { SettingsPage } from "../features/settings/SettingsPage";
 import { BackupPage } from "../features/backup/BackupPage";
@@ -12,46 +13,214 @@ import type { CreateBookDetails } from "../features/home/components/CreateBookDi
 import { PdfCoverCapture } from "../features/home/components/PdfCoverCapture";
 import { useExternalFileOpen } from "../features/home/hooks/useExternalFileOpen";
 import { ReadingPage } from "../features/reading/ReadingPage";
-import type { BookListItem } from "../infrastructure/db/entities";
+import type { BookListItem } from "../infrastructure/db/entities/types";
 import { ReadingProgress } from "../features/home/widgets/ReadingProgress/ReadingProgress";
 import { WeeklyStats } from "../features/home/widgets/WeeklyStats/WeeklyStats";
 import { UpdaterProvider } from "../features/updater/UpdaterProvider";
-import { getCloseFlush } from "../shared/closeFlush";
+import { getCloseFlushes } from "../shared/closeFlush";
+import { OpenModeDialog } from "../components/ui/OpenModeDialog/OpenModeDialog";
+import type { OpenMode } from "../components/ui/OpenModeDialog/OpenModeDialog";
+import { HOME_TAB, createTabId, readingTabId, useTabs } from "./tabs";
+import type { Tab } from "./tabs";
 import styles from "./App.module.css";
 
-export default function App() {
-  const [activeId, setActiveId] = useState("home");
-  const [createDetails, setCreateDetails] = useState<CreateBookDetails | null>(null);
-  const [openBookId, setOpenBookId] = useState<string | null>(null);
-  const [readingBookId, setReadingBookId] = useState<string | null>(null);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const isHome = activeId === "home";
-  const isFullWidth = !isHome;
+/** A window opened for one book: the reader alone, no sidebar and no tabs, so
+ *  it can sit beside the shell instead of sharing its renderer with it. */
+function ReaderWindow({ bookId }: { bookId: string }) {
+  return (
+    <div className={styles.frame}>
+      <TitleBar tabs={[]} activeId="" label="ReadLynx" />
+      <div className={styles.readerStage}>
+        {/* Back has nowhere to go in a window of its own, so it closes the
+            window — after the reader has flushed its position, as usual. */}
+        <ReadingPage bookId={bookId} onBack={() => void window.readlynx?.windowControls?.close()} />
+      </div>
+    </div>
+  );
+}
 
-  /** Shared routing into the read-only reader (home shelf + OS open-with). */
-  const openReadingBook = useCallback((bookId: string) => {
-    setCreateDetails(null);
-    setOpenBookId(null);
-    setReadingBookId(bookId);
-    setSidebarCollapsed(true);
-    setActiveId("reading");
+export default function App() {
+  /** What this window is for. `null` until the main process answers — a reader
+   *  window must not paint the shell on the way there. With no bridge at all
+   *  (a plain browser) there is nothing to ask and it is the shell. */
+  const [windowRole, setWindowRole] = useState<"main" | "reader" | null>(() =>
+    window.readlynx?.windowControls ? null : "main",
+  );
+  const [readerBookId, setReaderBookId] = useState<string | null>(null);
+
+  const { tabs, activeTab, activeId, openTab, activateTab, closeTab, renameTab, moveTab } = useTabs();
+  /** Set by the editor when it goes split, which wants the sidebar out of the
+   *  way. Every other tab derives its own width from its kind. */
+  const [editorSplit, setEditorSplit] = useState(false);
+  /** The file an external open is waiting on an answer for. */
+  const [openPrompt, setOpenPrompt] = useState<string | null>(null);
+  const openPromptAnswer = useRef<((mode: OpenMode) => void) | null>(null);
+
+  useEffect(() => {
+    const controls = window.readlynx?.windowControls;
+    if (!controls) return;
+    let cancelled = false;
+    void controls
+      .getContext()
+      .then((context) => {
+        if (cancelled) return;
+        setWindowRole(context.role);
+        setReaderBookId(context.bookId);
+      })
+      .catch(() => {
+        if (!cancelled) setWindowRole("main");
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  /** OS "Open with ReadLynx" (double-click on pdf/epub/md): silent import
-   *  into the library, then straight to the reader. */
-  const { coverJob, clearCoverJob } = useExternalFileOpen(openReadingBook);
+  /** Opens a book in its own window. The main process focuses one already
+   *  showing it rather than stacking a second copy. */
+  const openBookInWindow = useCallback((bookId: string) => {
+    void window.readlynx?.windowControls?.openBook(bookId).catch(() => false);
+  }, []);
+
+  /** Suspends `useExternalFileOpen` on a promise the dialog settles. Kept in a
+   *  ref so the handler object can change without re-registering the listener. */
+  const askOpenMode = useCallback(
+    (fileName: string) =>
+      new Promise<OpenMode>((resolve) => {
+        openPromptAnswer.current = resolve;
+        setOpenPrompt(fileName);
+      }),
+    [],
+  );
+
+  const chooseOpenMode = useCallback((mode: OpenMode) => {
+    setOpenPrompt(null);
+    const answer = openPromptAnswer.current;
+    openPromptAnswer.current = null;
+    answer?.(mode);
+  }, []);
+
+  const isHome = activeTab.kind === "home";
+  /** The reader always wants the whole width; the editor only gives up the
+   *  sidebar when it goes split, and reports that itself through
+   *  `onSplitChange`. Gating on the active kind makes the flag forget itself
+   *  when another tab is opened, rather than leaving the editor's last report
+   *  to collapse the sidebar on an unrelated page. */
+  const sidebarCollapsed =
+    activeTab.kind === "reading" || (activeTab.kind === "create" && editorSplit);
+
+  /** Shared routing into the read-only reader (home shelf + OS open-with). */
+  const openReadingBook = useCallback(
+    (bookId: string) => {
+      openTab({ id: readingTabId(bookId), kind: "reading", bookId, title: "Loading…" });
+    },
+    [openTab],
+  );
+
+  /** The editor for an existing book, or a fresh draft seeded from the create
+   *  dialog. A draft has no book id yet, so it shares a single tab. */
+  const openCreateBook = useCallback(
+    (bookId: string | null, details: CreateBookDetails | null) => {
+      openTab({
+        id: createTabId(bookId),
+        kind: "create",
+        bookId,
+        details,
+        title: details?.title || "Untitled",
+      });
+    },
+    [openTab],
+  );
+
+  /** OS "Open with ReadLynx" (double-click on pdf/epub/md): import into the
+   *  library, then place the book where the user said. Only the shell owns
+   *  this hook — a reader window has no tabs to add to and no library. */
+  const { coverJob, clearCoverJob } = useExternalFileOpen({
+    enabled: windowRole !== "reader",
+    askOpenMode,
+    onOpenTab: openReadingBook,
+    onOpenWindow: openBookInWindow,
+  });
+
+  /** Sidebar navigation opens (or focuses) a singleton app tab. */
+  const handleNavigate = useCallback(
+    (id: string) => {
+      if (id === "settings") openTab({ id, kind: "settings", title: "Settings" });
+      else if (id === "backup") openTab({ id, kind: "backup", title: "Backup & Restore" });
+      else openTab(HOME_TAB);
+    },
+    [openTab],
+  );
+
+  /** Opens a book from the header search suggestions — same routing as the
+   *  home shelf: reading books go to the read-only reader, the rest to the
+   *  editor. */
+  const handleOpenBookFromSearch = useCallback(
+    (book: BookListItem) => {
+      if (book.kind === "reading") openReadingBook(book.id);
+      else openCreateBook(book.id, null);
+    },
+    [openCreateBook, openReadingBook],
+  );
+
+  /** A reader replaces its placeholder label once the book has loaded. */
+  const handleTabTitle = useCallback(
+    (id: string, title: string) => renameTab(id, title),
+    [renameTab],
+  );
+
+  /** A page's back button returns to the library *and* dismisses the tab it
+   *  was in. Both pages have already written their last reading position /
+   *  document save by the time they call this, so nothing is lost by dropping
+   *  the tab — and leaving it in the bar would let the same book be opened
+   *  twice. The close on its own hands focus to a neighbour; activating the
+   *  library straight after wins, because both updates run through the same
+   *  reducer queue in one commit. */
+  const backToLibrary = useCallback(
+    (id: string) => {
+      closeTab(id);
+      activateTab(HOME_TAB.id);
+    },
+    [activateTab, closeTab],
+  );
+
+  /** Tab keyboard shortcuts. `Ctrl+W` would close the window outright and
+   *  `Ctrl+Tab` does nothing without a menu, so both are ours. `Ctrl+T` is the
+   *  nearest thing this app has to a new tab: the library, where a book gets
+   *  opened. `Ctrl+W` on the last tab falls through to the window closing,
+   *  which is what every tabbed app does. */
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey)) return;
+      const key = event.key.toLowerCase();
+      if (key === "t") {
+        event.preventDefault();
+        activateTab(HOME_TAB.id);
+        return;
+      }
+      if (key === "w" && activeId !== HOME_TAB.id) {
+        event.preventDefault();
+        closeTab(activeId);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [activeId, activateTab, closeTab]);
 
   /** When the window is closing, run the active page's save flush first (the
-   *  same work its top-bar back button would do), then let the window close. */
+   *  same work its top-bar back button would do), then let the window close.
+   *  Every registered page flushes, not just the frontmost one — a reader
+   *  behind another tab still has unsaved reading position to write. */
   useEffect(() => {
     const unsubscribe = window.readlynx?.onPrepareClose(() => {
       const finish = () => window.readlynx?.notifyReadyToClose();
-      const flush = getCloseFlush();
-      if (!flush) {
+      const flushes = getCloseFlushes();
+      if (flushes.length === 0) {
         finish();
         return;
       }
-      void flush().then(finish, finish);
+      // `allSettled` never rejects, so one failing save cannot keep the window
+      // open; the main process also gives up waiting after a few seconds.
+      void Promise.allSettled(flushes.map((flush) => flush())).then(finish, finish);
     });
     return () => unsubscribe?.();
   }, []);
@@ -70,30 +239,58 @@ export default function App() {
     });
   }, []);
 
-  const handleNavigate = (id: string) => {
-    if (id !== "create-book") {
-      setSidebarCollapsed(false);
+  const renderTab = (tab: Tab) => {
+    switch (tab.kind) {
+      case "home":
+        return (
+          <>
+            <Header onSelectBook={handleOpenBookFromSearch} />
+            <HomePage
+              onCreateBook={(details) => openCreateBook(null, details)}
+              onOpenBook={(bookId) => openCreateBook(bookId, null)}
+              onOpenReadingBook={openReadingBook}
+            />
+          </>
+        );
+      case "reading":
+        return (
+          <ReadingPage
+            bookId={tab.bookId}
+            active={tab.id === activeId}
+            onTitleChange={(title) => handleTabTitle(tab.id, title)}
+            onBack={() => backToLibrary(tab.id)}
+          />
+        );
+      case "create":
+        return (
+          <CreateBookPage
+            initialBookId={tab.bookId}
+            initialTitle={tab.details?.title ?? ""}
+            initialMarkdown=""
+            initialCover={tab.details?.coverSrc ?? null}
+            onBack={() => backToLibrary(tab.id)}
+            onSplitChange={setEditorSplit}
+          />
+        );
+      case "settings":
+        return <SettingsPage />;
+      case "backup":
+        return <BackupPage />;
+      default:
+        return null;
     }
-    setActiveId(id);
   };
 
-  /** Opens a book from the header search suggestions — same routing as the
-   *  home shelf: reading books go to the read-only reader, the rest to the
-   *  editor. */
-  const handleOpenBookFromSearch = (book: BookListItem) => {
-    if (book.kind === "reading") {
-      setCreateDetails(null);
-      setOpenBookId(null);
-      setReadingBookId(book.id);
-      setSidebarCollapsed(true);
-      setActiveId("reading");
-    } else {
-      setCreateDetails(null);
-      setOpenBookId(book.id);
-      setReadingBookId(null);
-      setActiveId("create-book");
-    }
-  };
+  /** Dragging a book tab off the strip opens it in its own window. Only books
+   *  can go: a reader window shows one book, and an editor tab has unsaved
+   *  state that has nowhere to travel to. */
+  const handleDetach = useCallback(
+    (tab: Tab) => {
+      if (tab.kind !== "reading") return;
+      openBookInWindow(tab.bookId);
+    },
+    [openBookInWindow],
+  );
 
   return (
     <ThemeProvider>
@@ -105,72 +302,62 @@ export default function App() {
             <div className="app-background-overlay" />
           </div>
 
-        <div
-            className={`${styles.shell} ${isFullWidth ? styles.shellFull : ""} ${sidebarCollapsed ? styles.shellGapNone : ""}`}
-          >
+          {/* Nothing is painted until the window knows what it is: a reader
+              window would otherwise show the whole shell for a frame and then
+              swap to a single book. */}
+          {windowRole === null ? null : windowRole === "reader" && readerBookId ? (
+            <ReaderWindow bookId={readerBookId} />
+          ) : (
+          <div className={styles.frame}>
+            <TitleBar
+              tabs={tabs}
+              activeId={activeId}
+              onActivate={activateTab}
+              onClose={closeTab}
+              onMove={moveTab}
+              onDetach={handleDetach}
+            />
+
             <div
-              className={`${styles.sidebarSlide} ${sidebarCollapsed ? styles.sidebarSlideCollapsed : ""}`}
+              className={`${styles.shell} ${isHome ? "" : styles.shellFull} ${sidebarCollapsed ? styles.shellGapNone : ""}`}
             >
-              <div className={styles.sidebarSlideInner}>
-                <Sidebar activeId={activeId} onNavigate={handleNavigate} />
+              <div
+                className={`${styles.sidebarSlide} ${sidebarCollapsed ? styles.sidebarSlideCollapsed : ""}`}
+              >
+                <div className={styles.sidebarSlideInner}>
+                  <Sidebar activeId={activeTab.id} onNavigate={handleNavigate} />
+                </div>
               </div>
-            </div>
 
-            <div className={styles.main}>
-              {isHome && <Header onSelectBook={handleOpenBookFromSearch} />}
+              {/* Every tab stays mounted: the reader holds a loaded PDF, a
+                  scroll offset and a translation cache that a remount would
+                  throw away. Background panels are hidden and `inert`, so they
+                  keep their state while taking no focus and no clicks. */}
+              <div className={styles.main}>
+                {tabs.map((tab) => (
+                  <div
+                    key={tab.id}
+                    className={styles.tabPanel}
+                    hidden={tab.id !== activeId}
+                    inert={tab.id !== activeId}
+                  >
+                    {renderTab(tab)}
+                  </div>
+                ))}
+              </div>
+
               {isHome && (
-                <HomePage
-                  onCreateBook={(details) => {
-                    setCreateDetails(details);
-                    setOpenBookId(null);
-                    setReadingBookId(null);
-                    setActiveId("create-book");
-                  }}
-                  onOpenBook={(bookId) => {
-                    setCreateDetails(null);
-                    setOpenBookId(bookId);
-                    setReadingBookId(null);
-                    setActiveId("create-book");
-                  }}
-                  onOpenReadingBook={openReadingBook}
-                />
+                <aside className={styles.panel} aria-label="Reading overview">
+                  <ReadingProgress />
+                  <WeeklyStats />
+                </aside>
               )}
-              {coverJob && <PdfCoverCapture job={coverJob} onDone={clearCoverJob} />}
-              {activeId === "create-book" && (
-                <CreateBookPage
-                  onBack={() => {
-                    setSidebarCollapsed(false);
-                    setActiveId("home");
-                  }}
-                  initialBookId={openBookId}
-                  initialTitle={createDetails?.title ?? ""}
-                  initialMarkdown=""
-                  initialCover={createDetails?.coverSrc ?? null}
-                  onSplitChange={setSidebarCollapsed}
-                />
-              )}
-              {activeId === "reading" && readingBookId && (
-                <ReadingPage
-                  key={readingBookId}
-                  bookId={readingBookId}
-                  onBack={() => {
-                    setSidebarCollapsed(false);
-                    setActiveId("home");
-                  }}
-                />
-              )}
-              {activeId === "backup" && <BackupPage />}
-              {activeId === "settings" && <SettingsPage />}
             </div>
-
-            {isHome && (
-              <aside className={styles.panel} aria-label="Reading overview">
-                <ReadingProgress />
-                <WeeklyStats />
-              </aside>
-            )}
           </div>
+          )}
 
+          <OpenModeDialog fileName={openPrompt} onChoose={chooseOpenMode} />
+          {coverJob && <PdfCoverCapture job={coverJob} onDone={clearCoverJob} />}
           <ThemeColorResetGuard />
         </UpdaterProvider>
       </ToastProvider>

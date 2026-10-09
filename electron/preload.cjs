@@ -1,6 +1,24 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("readlynx", {
+  /** Custom title bar controls (`titleBarStyle: "hidden"`). `close` runs the
+   *  main process's save-flush handshake, same as the OS close button. */
+  windowControls: {
+    minimize: () => ipcRenderer.invoke("window:minimize"),
+    toggleMaximize: () => ipcRenderer.invoke("window:toggle-maximize"),
+    close: () => ipcRenderer.invoke("window:close"),
+    isMaximized: () => ipcRenderer.invoke("window:is-maximized"),
+    /** What this window is for: the shell, or a reader showing one book. Pulled
+     *  once on mount so a reader window never paints the shell first. */
+    getContext: () => ipcRenderer.invoke("window:get-context"),
+    /** Opens a book in its own window. Ignored by a reader window. */
+    openBook: (bookId) => ipcRenderer.invoke("window:open-book", bookId),
+    onMaximizedChanged: (callback) => {
+      const listener = (_event, maximized) => callback(maximized);
+      ipcRenderer.on("window:maximized-changed", listener);
+      return () => ipcRenderer.removeListener("window:maximized-changed", listener);
+    },
+  },
   exportPdf: (options) => ipcRenderer.invoke("export-pdf", options),
   onPrepareClose: (callback) => {
     const listener = () => callback();

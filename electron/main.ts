@@ -11,6 +11,8 @@ import { registerOcrIpc, terminateOcrWorker } from "./ipc/ocr.ts";
 import { registerPdfExportIpc } from "./ipc/pdfExport.ts";
 import { registerSystemFontsIpc } from "./ipc/systemFonts.ts";
 import { registerUpdaterIpc } from "./ipc/updater.ts";
+import { registerWindowIpc, watchWindowState } from "./ipc/window.ts";
+import type { WindowContext } from "./ipc/window.ts";
 import { getStore } from "./store/storage.ts";
 
 protocol.registerSchemesAsPrivileged([
@@ -25,10 +27,27 @@ protocol.registerSchemesAsPrivileged([
 ]);
 
 let mainWindow: BrowserWindow | null = null;
+/** Book shown by each reader window, keyed by webContents id. Read back by the
+ *  renderer's `window:get-context`, which is how a reader window knows to
+ *  paint one book instead of the whole shell. */
+const readerBooks = new Map<number, string>();
 /** A book file handed by the OS before the window/renderer was ready
  *  (cold start via double-click, or macOS `open-file`). Flushed once the
  *  page finishes loading, or pulled by the renderer on mount. */
 let pendingOpenFile: string | null = null;
+
+/** Opens `bookId` in its own window, focusing one already showing it instead
+ *  of stacking a second copy of the same book. */
+function openReaderWindow(bookId: string) {
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (win.isDestroyed()) continue;
+    if (readerBooks.get(win.webContents.id) !== bookId) continue;
+    if (win.isMinimized()) win.restore();
+    win.focus();
+    return;
+  }
+  createWindow("reader", bookId);
+}
 
 /** True for OS-provided paths that are actual book files (filters out the
  *  exe path itself, dev flags, …). Mirrors the main-side check in
@@ -71,16 +90,27 @@ if (!gotSingleLock) {
   });
 }
 
-function createWindow() {
+function createWindow(role: WindowContext["role"] = "main", bookId: string | null = null) {
   const win = new BrowserWindow({
-    width: 1440,
-    height: 900,
-    minWidth: 1200,
-    minHeight: 800,
+    width: role === "reader" ? 1080 : 1440,
+    height: role === "reader" ? 860 : 900,
+    // Sized so two windows sit side by side on a 1440-wide screen (720 each).
+    // The shell has no width floor of its own — the home view drops its stats
+    // panel below 1120px (`App.module.css`), so the shelf keeps the space —
+    // and a reading window fills everything except the collapsed sidebar.
+    minWidth: role === "reader" ? 480 : 700,
+    minHeight: role === "reader" ? 420 : 560,
     title: "ReadLynx",
     icon: path.join(import.meta.dirname, "../src/assets/icon/app-icon.png"),
     backgroundColor: "#f7f2ea",
     autoHideMenuBar: true,
+    // Removes the OS caption so the app can draw its own slim title bar (see
+    // `src/app/layout/TitleBar`). The frame, resize border, drop shadow and
+    // rounded corners stay native: unlike `frame: false`, only the title bar
+    // is gone. `titleBarOverlay` is deliberately left off, which is what hides
+    // the native minimize/maximize/close buttons on Windows and Linux — the
+    // renderer draws those instead.
+    titleBarStyle: "hidden",
     show: false,
     webPreferences: {
       contextIsolation: true,
@@ -91,11 +121,29 @@ function createWindow() {
     },
   });
 
+  // The custom title bar replaces the traffic lights on macOS too, so they
+  // would otherwise sit on top of it.
+  if (process.platform === "darwin") {
+    win.setWindowButtonVisibility(false);
+  }
+
+  watchWindowState(win);
+
   win.once("ready-to-show", () => {
     win.show();
   });
 
-  mainWindow = win;
+  if (role === "reader" && bookId) {
+    // Registered before the renderer can ask what it is: the renderer pulls
+    // its context on mount, and a reader window would otherwise paint the
+    // whole shell for one frame before learning it is a reader.
+    readerBooks.set(win.webContents.id, bookId);
+  }
+  win.webContents.once("destroyed", () => {
+    readerBooks.delete(win.webContents.id);
+  });
+
+  if (role === "main") mainWindow = win;
   win.on("closed", () => {
     if (mainWindow === win) mainWindow = null;
   });
@@ -120,11 +168,24 @@ function createWindow() {
     if (closeConfirmed) return;
     event.preventDefault();
     if (closeWaitTimer !== null) return;
-    const onReady = () => {
+    /** Runs on the renderer's confirmation and on the timeout alike, so it has
+     *  to be idempotent: the timer is *not* cleared anywhere else, and a
+     *  still-pending one would fire a second time on an already closed window
+     *  ("Object has been destroyed"). That only surfaced with a second window,
+     *  because closing the last one quits the process before the timer is
+     *  ever reached. */
+    const onReady = (readyEvent?: Electron.IpcMainEvent) => {
+      // `ipcMain` is shared by every window, so another window announcing it
+      // is done must not close this one.
+      if (readyEvent && readyEvent.sender !== win.webContents) return;
+      if (closeConfirmed) return;
       closeConfirmed = true;
-      closeWaitTimer = null;
+      if (closeWaitTimer !== null) {
+        clearTimeout(closeWaitTimer);
+        closeWaitTimer = null;
+      }
       ipcMain.removeListener("app:ready-to-close", onReady);
-      win.close();
+      if (!win.isDestroyed()) win.close();
     };
     closeWaitTimer = setTimeout(onReady, 3000);
     ipcMain.on("app:ready-to-close", onReady);
@@ -179,6 +240,11 @@ app.whenReady().then(() => {
   registerAiIpc();
   registerSystemFontsIpc();
   registerUpdaterIpc();
+  registerWindowIpc({
+    mainWindow: () => mainWindow,
+    readerBooks,
+    openReader: openReaderWindow,
+  });
   registerPdfExportIpc({ getStore });
   registerCoversIpc({ getStore });
   registerBackupIpc({

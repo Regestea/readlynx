@@ -38,6 +38,14 @@ function decodeMarkdownBytes(data: ArrayBuffer): string {
 interface ReadingPageProps {
   bookId: string;
   onBack?: () => void;
+  /** False while another tab is in front. The page stays mounted so it keeps
+   *  its page, scroll and translation; only the parts that read the keyboard or
+   *  the clock stand down, so a background book is neither navigated by the
+   *  arrow keys nor credited with reading time. */
+  active?: boolean;
+  /** Reports the book's real title once it loads, so the tab label can stop
+   *  being the placeholder the tab was opened with. */
+  onTitleChange?: (title: string) => void;
 }
 
 /** Reading is counted while the user is on this page and interacting with
@@ -60,7 +68,7 @@ type PageState =
   | { status: "error"; message: string }
   | { status: "ready"; book: ReadingBook };
 
-export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
+export function ReadingPage({ bookId, onBack, active = true, onTitleChange }: ReadingPageProps) {
   const [state, setState] = useState<PageState>({ status: "loading" });
   const [savedPage, setSavedPage] = useState(1);
   const [savedChapter, setSavedChapter] = useState<string | null>(null);
@@ -114,6 +122,20 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
   /** Latest EPUB position 0..1 reported by the viewer, kept in a ref so
    *  closes can persist it after the viewer is gone. */
   const epubProgressRef = useRef(0);
+  /** Mirrored into a ref so the document-level listeners below stay subscribed
+   *  once: every open reader holds the same listeners, so they have to ask
+   *  whether *they* are the tab in front before acting on a keypress or
+   *  counting activity. */
+  const activeRef = useRef(active);
+  useEffect(() => {
+    activeRef.current = active;
+  }, [active]);
+  /** Mirrored into a ref so the book-loading effect does not re-run (and the
+   *  reader reload from disk) when only the tab label changes. */
+  const onTitleChangeRef = useRef(onTitleChange);
+  useEffect(() => {
+    onTitleChangeRef.current = onTitleChange;
+  }, [onTitleChange]);
 
   const readyBook = state.status === "ready" ? state.book : null;
   const translation = useTranslation({
@@ -124,6 +146,7 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
     epubReady,
     markdownText: markdownSource,
     sourceFilePath: readyBook?.filePath ?? null,
+    active,
   });
   const { setUnit: setTranslationUnit } = translation;
 
@@ -216,20 +239,27 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
   /** Every interaction with the app counts as reading activity while the
    *  book is open — clicks, keys, wheel/touch and capture-phase scrolling
    *  anywhere in the window (translation Markdown and the AI chat included).
-   *  Nothing here requires the user to keep scrolling a page. */
+   *  Nothing here requires the user to keep scrolling a page.
+   *
+   *  Only the tab in front counts: the listeners live on `document`, so every
+   *  open reader sees every event, and without the guard a book sitting in the
+   *  background would accrue reading time and idle out on the user's behalf. */
   useEffect(() => {
-    const onScrollCapture = () => onActivity();
-    document.addEventListener("mousedown", onActivity);
-    document.addEventListener("wheel", onActivity);
-    document.addEventListener("touchstart", onActivity);
+    const onInteraction = () => {
+      if (activeRef.current) onActivity();
+    };
+    const onScrollCapture = () => onInteraction();
+    document.addEventListener("mousedown", onInteraction);
+    document.addEventListener("wheel", onInteraction);
+    document.addEventListener("touchstart", onInteraction);
     document.addEventListener("scroll", onScrollCapture, true);
-    document.addEventListener("keydown", onActivity);
+    document.addEventListener("keydown", onInteraction);
     return () => {
-      document.removeEventListener("mousedown", onActivity);
-      document.removeEventListener("wheel", onActivity);
-      document.removeEventListener("touchstart", onActivity);
+      document.removeEventListener("mousedown", onInteraction);
+      document.removeEventListener("wheel", onInteraction);
+      document.removeEventListener("touchstart", onInteraction);
       document.removeEventListener("scroll", onScrollCapture, true);
-      document.removeEventListener("keydown", onActivity);
+      document.removeEventListener("keydown", onInteraction);
     };
   }, [onActivity]);
 
@@ -266,6 +296,7 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
           filePath: result.source.filePath,
         },
       });
+      onTitleChangeRef.current?.(result.book.title);
       if (sourceType === "markdown") {
         // Markdown books are a single translation unit; the viewer shows the
         // whole file and the pipeline chunks it for the AI.
@@ -805,10 +836,13 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
 
   /** Arrow keys navigate prev/next page or chapter (same movement as the
    *  toolbar nav strip), in both the original viewer and the translation
-   *  view. Ignored inside form controls, while a dialog is open, or with
-   *  modifier keys. */
+   *  view. Ignored inside form controls, while a dialog is open, with
+   *  modifier keys, or from a tab in the background — the listener is on
+   *  `document`, so one keypress would otherwise turn the page in every open
+   *  book at once. */
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
+      if (!activeRef.current) return;
       if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
       if (event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) return;
       const target = event.target as HTMLElement | null;
@@ -941,6 +975,7 @@ export function ReadingPage({ bookId, onBack }: ReadingPageProps) {
                   fill
                   toolbar
                   showExtract={false}
+                  active={active}
                   settingsBookId={bookId}
                   initialChapter={savedChapter}
                   className={styles.viewer}

@@ -601,6 +601,10 @@ function PdfViewerInner({
     async (pdf: PDFDocumentProxy) => {
       const scroll = scrollRef.current;
       if (!scroll) return;
+      // A hidden tab reports a zero-width box. Fitting to it would drop the
+      // page to the 0.1 floor and show "10%" in the zoom readout until the tab
+      // comes back; the observer refires when it does, so skipping is enough.
+      if (scroll.clientWidth === 0) return;
       const page = await pdf.getPage(1);
       const viewport = page.getViewport({ scale: 1 });
       const pad = 48;
@@ -681,15 +685,22 @@ function PdfViewerInner({
   /** Refits on container resize. Fullscreen flips the viewer from the pane's
    *  box to the whole viewport without remounting it, so the load-time fit
    *  alone would leave a pane-sized page adrift on a large screen. Coalesced
-   *  into one fit per frame because the observer fires per resize edge, and
-   *  skipped while the reader has zoomed by hand — their zoom wins over an
-   *  automatic fit until the document changes. */
+   *  into one fit per frame because the observer fires per resize edge.
+   *
+   *  A hand-chosen zoom wins, and that has to be checked *per callback*: the
+   *  observer's deps do not change when the reader zooms, so it outlives the
+   *  first manual zoom and stays attached. Reading the flag once at setup left
+   *  it live, and zooming in made the page wider — which brings back a
+   *  horizontal scrollbar, which is itself a resize — so every zoom-in was
+   *  undone the moment it landed and the page could never be scrolled
+   *  sideways. */
   useEffect(() => {
-    if (!doc || (!fit && !fitWidth) || userZoomedRef.current) return;
+    if (!doc || (!fit && !fitWidth)) return;
     const scroll = scrollRef.current;
     if (!scroll) return;
     let frame = 0;
     const observer = new ResizeObserver(() => {
+      if (userZoomedRef.current) return;
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(() => {
         frame = 0;
