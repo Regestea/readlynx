@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, DragEvent, MouseEvent as ReactMouseEvent } from "react";
 import { createPortal } from "react-dom";
-import { BookOpen, Check, ChevronDown, Copy, DatabaseBackup, Minus, Settings, Square, X } from "lucide-react";
+import { BookOpen, Check, ChevronDown, Copy, Minus, Square, X } from "lucide-react";
 import type { Tab } from "../../tabs";
 import { isClosableTab } from "../../tabs";
 import styles from "./TitleBar.module.css";
@@ -19,18 +19,12 @@ const OVERFLOW_SLACK = 1;
 function TabIcon({ kind }: { kind: Tab["kind"] }) {
   const size = 13;
   const strokeWidth = 1.8;
-  switch (kind) {
-    case "home":
-      return <BookOpen size={size} strokeWidth={strokeWidth} aria-hidden="true" />;
-    case "settings":
-      return <Settings size={size} strokeWidth={strokeWidth} aria-hidden="true" />;
-    case "backup":
-      return <DatabaseBackup size={size} strokeWidth={strokeWidth} aria-hidden="true" />;
-    default:
-      // Books are identified by their label. A cover thumbnail per tab would
-      // cost a file read and a decode for every open book.
-      return null;
+  if (kind === "home") {
+    return <BookOpen size={size} strokeWidth={strokeWidth} aria-hidden="true" />;
   }
+  // Books are identified by their label. A cover thumbnail per tab would cost
+  // a file read and a decode for every open book.
+  return null;
 }
 
 interface TitleBarProps {

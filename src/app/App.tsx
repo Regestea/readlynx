@@ -21,7 +21,7 @@ import { getCloseFlushes } from "../shared/closeFlush";
 import { OpenModeDialog } from "../components/ui/OpenModeDialog/OpenModeDialog";
 import type { OpenMode } from "../components/ui/OpenModeDialog/OpenModeDialog";
 import { HOME_TAB, createTabId, readingTabId, useTabs } from "./tabs";
-import type { Tab } from "./tabs";
+import type { LibrarySection, Tab } from "./tabs";
 import styles from "./App.module.css";
 
 /** A window opened for one book: the reader alone, no sidebar and no tabs, so
@@ -54,6 +54,9 @@ export default function App() {
   const [editorSplit, setEditorSplit] = useState(false);
   /** The file an external open is waiting on an answer for. */
   const [openPrompt, setOpenPrompt] = useState<string | null>(null);
+  /** Which section of the library tab the sidebar points at. Kept here rather
+   *  than as tabs of its own — see `handleNavigate`. */
+  const [section, setSection] = useState<LibrarySection>("library");
   const openPromptAnswer = useRef<((mode: OpenMode) => void) | null>(null);
 
   useEffect(() => {
@@ -100,6 +103,13 @@ export default function App() {
   }, []);
 
   const isHome = activeTab.kind === "home";
+  /** Only the library itself wears the wide sidebar/stats layout. Settings and
+   *  Backup & Restore take the whole width, exactly as they did when each was
+   *  its own page, so switching sections changes nothing about the frame. */
+  const isLibrary = isHome && section === "library";
+  /** The sidebar highlights the section on show, not the tab hosting it —
+   *  otherwise Settings would light up while the library tab is in front. */
+  const sidebarActiveId = isHome ? (section === "library" ? "home" : section) : activeTab.id;
   /** The reader always wants the whole width; the editor only gives up the
    *  sidebar when it goes split, and reports that itself through
    *  `onSplitChange`. Gating on the active kind makes the flag forget itself
@@ -141,14 +151,18 @@ export default function App() {
     onOpenWindow: openBookInWindow,
   });
 
-  /** Sidebar navigation opens (or focuses) a singleton app tab. */
+  /** Sidebar navigation points the library tab at a section rather than opening
+   *  one. Settings and Backup & Restore are not documents: giving them a tab
+   *  each would fill the bar with entries nobody closes. */
   const handleNavigate = useCallback(
     (id: string) => {
-      if (id === "settings") openTab({ id, kind: "settings", title: "Settings" });
-      else if (id === "backup") openTab({ id, kind: "backup", title: "Backup & Restore" });
-      else openTab(HOME_TAB);
+      const section: LibrarySection = id === "settings" ? "settings" : id === "backup" ? "backup" : "library";
+      setSection(section);
+      // Coming from a book tab, the sidebar must take the user somewhere the
+      // section is actually on show.
+      activateTab(HOME_TAB.id);
     },
-    [openTab],
+    [activateTab],
   );
 
   /** Opens a book from the header search suggestions — same routing as the
@@ -242,6 +256,11 @@ export default function App() {
   const renderTab = (tab: Tab) => {
     switch (tab.kind) {
       case "home":
+        // The library tab hosts whichever section the sidebar points at. The
+        // header and the stats panel belong to the library alone — Settings
+        // and Backup & Restore have always been shown without them.
+        if (section === "settings") return <SettingsPage />;
+        if (section === "backup") return <BackupPage />;
         return (
           <>
             <Header onSelectBook={handleOpenBookFromSearch} />
@@ -249,6 +268,7 @@ export default function App() {
               onCreateBook={(details) => openCreateBook(null, details)}
               onOpenBook={(bookId) => openCreateBook(bookId, null)}
               onOpenReadingBook={openReadingBook}
+              onOpenBookInWindow={openBookInWindow}
             />
           </>
         );
@@ -272,10 +292,6 @@ export default function App() {
             onSplitChange={setEditorSplit}
           />
         );
-      case "settings":
-        return <SettingsPage />;
-      case "backup":
-        return <BackupPage />;
       default:
         return null;
     }
@@ -319,13 +335,13 @@ export default function App() {
             />
 
             <div
-              className={`${styles.shell} ${isHome ? "" : styles.shellFull} ${sidebarCollapsed ? styles.shellGapNone : ""}`}
+              className={`${styles.shell} ${isLibrary ? "" : styles.shellFull} ${sidebarCollapsed ? styles.shellGapNone : ""}`}
             >
               <div
                 className={`${styles.sidebarSlide} ${sidebarCollapsed ? styles.sidebarSlideCollapsed : ""}`}
               >
                 <div className={styles.sidebarSlideInner}>
-                  <Sidebar activeId={activeTab.id} onNavigate={handleNavigate} />
+                  <Sidebar activeId={sidebarActiveId} onNavigate={handleNavigate} />
                 </div>
               </div>
 
@@ -346,7 +362,7 @@ export default function App() {
                 ))}
               </div>
 
-              {isHome && (
+              {isLibrary && (
                 <aside className={styles.panel} aria-label="Reading overview">
                   <ReadingProgress />
                   <WeeklyStats />

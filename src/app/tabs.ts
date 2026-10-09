@@ -3,23 +3,28 @@ import type { CreateBookDetails } from "../features/home/components/CreateBookDi
 
 /** One open view in the title bar.
  *
+ *  Only books get a tab. Settings and Backup & Restore are sections of the
+ *  app's main area, reached from the sidebar like the library itself — a tab
+ *  for each would fill the bar with two permanent entries that nobody closes
+ *  and everybody switches past.
+ *
  *  `id` is the React key and is derived from what the tab *is*, never from a
  *  counter: reopening a book focuses the tab already showing it instead of
  *  stacking duplicates, and the id cannot drift when the tab's own state moves
  *  on (the reader turning a page changes nothing about which tab it is). */
 export type Tab =
   | { id: "home"; kind: "home"; title: string }
-  | { id: "settings"; kind: "settings"; title: string }
-  | { id: "backup"; kind: "backup"; title: string }
   | { id: string; kind: "reading"; title: string; bookId: string }
   | { id: string; kind: "create"; title: string; bookId: string | null; details: CreateBookDetails | null };
 
+/** Sections the sidebar can point the main area at. The library is the one on
+ *  show to begin with; the other two replace it in place. */
+export type LibrarySection = "library" | "settings" | "backup";
+
 export const HOME_TAB: Tab = { id: "home", kind: "home", title: "Library" };
 
-/** Only books can be closed. Library, Settings and Backup are places the
- *  sidebar can always return to, so their tabs are bookmarks rather than
- *  something to dismiss — and closing Library would leave no way back to the
- *  shelf at all. */
+/** Only books can be closed. The library is where the sidebar always returns
+ *  to, so its tab is a bookmark rather than something to dismiss. */
 export function isClosableTab(tab: Tab): boolean {
   return tab.kind === "reading" || tab.kind === "create";
 }
