@@ -162,6 +162,9 @@ function PdfViewerInner({
   const onPageChangeRef = useRef(onPageChange);
   const readyRef = useRef(false);
   const snapshottedRef = useRef(false);
+  /** True once the reader zoomed by hand. Automatic fits (load, fullscreen,
+   *  pane resize) yield to it so a deliberate zoom is not overridden. */
+  const userZoomedRef = useRef(false);
 
   const [ocrOpen, setOcrOpen] = useState(false);
   const [extractMode, setExtractMode] = useState<"ocr" | "vision">("ocr");
@@ -591,6 +594,27 @@ function PdfViewerInner({
     onPageSnapshotRef.current = onPageSnapshot;
   }, [onPageSnapshot]);
 
+  /** Fits the page to the scroll area. Recomputed whenever the area resizes,
+   *  so entering (and leaving) fullscreen shows the page filling the screen
+   *  instead of keeping the size it had in the reading pane. */
+  const applyFit = useCallback(
+    async (pdf: PDFDocumentProxy) => {
+      const scroll = scrollRef.current;
+      if (!scroll) return;
+      const page = await pdf.getPage(1);
+      const viewport = page.getViewport({ scale: 1 });
+      const pad = 48;
+      const availableWidth = Math.max(1, scroll.clientWidth - pad);
+      let fitted = availableWidth / viewport.width;
+      if (fit && !fitWidth) {
+        const availableHeight = Math.max(1, scroll.clientHeight - pad);
+        fitted = Math.min(fitted, availableHeight / viewport.height);
+      }
+      setScale(Math.max(0.1, Math.min(ZOOM_MAX, fitted)));
+    },
+    [fit, fitWidth],
+  );
+
   useEffect(() => {
     let cancelled = false;
 
@@ -604,6 +628,8 @@ function PdfViewerInner({
         setRendering(true);
         snapshottedRef.current = false;
         readyRef.current = false;
+        // A new document starts out in automatic-fit mode again.
+        userZoomedRef.current = false;
         setRegionEditing(false);
 
         const data = await window.readlynx?.readFileBytes(filePath);
@@ -628,19 +654,7 @@ function PdfViewerInner({
           setPageNumber(Math.min(Math.max(1, initialPage), nextDoc.numPages));
         }
         if (fit || fitWidth) {
-          const firstPage = await nextDoc.getPage(1);
-          const viewport = firstPage.getViewport({ scale: 1 });
-          const scroll = scrollRef.current;
-          if (scroll) {
-            const pad = 48;
-            const availableWidth = Math.max(1, scroll.clientWidth - pad);
-            let fitted = availableWidth / viewport.width;
-            if (fit && !fitWidth) {
-              const availableHeight = Math.max(1, scroll.clientHeight - pad);
-              fitted = Math.min(fitted, availableHeight / viewport.height);
-            }
-            setScale(Math.max(0.1, Math.min(ZOOM_MAX, fitted)));
-          }
+          await applyFit(nextDoc);
         }
       } catch (err: unknown) {
         if (!cancelled) {
@@ -662,7 +676,32 @@ function PdfViewerInner({
       void loadTaskRef.current?.destroy();
       loadTaskRef.current = null;
     };
-  }, [filePath, fit, fitWidth, initialPage]);
+  }, [filePath, fit, fitWidth, initialPage, applyFit]);
+
+  /** Refits on container resize. Fullscreen flips the viewer from the pane's
+   *  box to the whole viewport without remounting it, so the load-time fit
+   *  alone would leave a pane-sized page adrift on a large screen. Coalesced
+   *  into one fit per frame because the observer fires per resize edge, and
+   *  skipped while the reader has zoomed by hand — their zoom wins over an
+   *  automatic fit until the document changes. */
+  useEffect(() => {
+    if (!doc || (!fit && !fitWidth) || userZoomedRef.current) return;
+    const scroll = scrollRef.current;
+    if (!scroll) return;
+    let frame = 0;
+    const observer = new ResizeObserver(() => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        void applyFit(doc);
+      });
+    });
+    observer.observe(scroll);
+    return () => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+    };
+  }, [doc, fit, fitWidth, applyFit]);
 
   const renderPage = useCallback(async (pdf: PDFDocumentProxy, page: number, s: number) => {
     const canvas = canvasRef.current;
@@ -809,7 +848,13 @@ const task = pageProxy.render({ canvas, viewport, transform });
   ].filter(Boolean).join(" ");
   const showCanvas = doc && !error;
 
+  // The viewer root is a sibling of the layout spacer, never its parent: the
+  // fullscreen overlay is `position: fixed`, so a spacer nested inside it
+  // would steal that much height from the overlay's own flex column (leaving
+  // the page a couple of inches tall) instead of reserving space in the page
+  // it was displaced from. Mirrors EpubViewer / Markdown.
   return (
+    <>
     <div ref={viewerRef} className={classes} aria-label={ariaLabel}>
       {toolbar && (
         <div className={`${styles.toolbar} pdf-toolbar`} role="toolbar" aria-label="PDF controls">
@@ -850,7 +895,10 @@ const task = pageProxy.render({ canvas, viewport, transform });
         <button
           type="button"
           className={styles.toolButton}
-          onClick={() => setScale((current) => Math.max(ZOOM_MIN, +(current - ZOOM_STEP).toFixed(2)))}
+          onClick={() => {
+            userZoomedRef.current = true;
+            setScale((current) => Math.max(ZOOM_MIN, +(current - ZOOM_STEP).toFixed(2)));
+          }}
           disabled={!doc || scale <= ZOOM_MIN}
           aria-label="Zoom out"
           title="Zoom out"
@@ -860,7 +908,10 @@ const task = pageProxy.render({ canvas, viewport, transform });
         <button
           type="button"
           className={styles.zoomValue}
-          onClick={() => setScale(1)}
+          onClick={() => {
+            userZoomedRef.current = true;
+            setScale(1);
+          }}
           aria-label={`Zoom ${Math.round(scale * 100)} percent, click to reset`}
           title="Reset zoom to 100%"
         >
@@ -869,7 +920,10 @@ const task = pageProxy.render({ canvas, viewport, transform });
         <button
           type="button"
           className={styles.toolButton}
-          onClick={() => setScale((current) => Math.min(ZOOM_MAX, +(current + ZOOM_STEP).toFixed(2)))}
+          onClick={() => {
+            userZoomedRef.current = true;
+            setScale((current) => Math.min(ZOOM_MAX, +(current + ZOOM_STEP).toFixed(2)));
+          }}
           disabled={!doc || scale >= ZOOM_MAX}
           aria-label="Zoom in"
           title="Zoom in"
@@ -891,20 +945,6 @@ const task = pageProxy.render({ canvas, viewport, transform });
           </button>
           <PdfThemeSettings open={themeOpen} onClose={() => setThemeOpen(false)} />
         </span>
-        <button
-          type="button"
-          className={`${styles.toolButton} ${styles.toolbarEnd} ${isFullscreen ? styles.toolButtonActive : ""}`}
-          onClick={toggleFullscreen}
-          disabled={!doc}
-          aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
-          title={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
-        >
-          {isFullscreen ? (
-            <Minimize2 size={16} strokeWidth={2} aria-hidden="true" />
-          ) : (
-            <Maximize2 size={16} strokeWidth={2} aria-hidden="true" />
-          )}
-        </button>
         {onScanRegionChange && (
           <>
             <span className={styles.divider} aria-hidden="true" />
@@ -925,6 +965,20 @@ const task = pageProxy.render({ canvas, viewport, transform });
             </button>
           </>
         )}
+        <button
+          type="button"
+          className={`${styles.toolButton} ${styles.toolbarEnd} ${isFullscreen ? styles.toolButtonActive : ""}`}
+          onClick={toggleFullscreen}
+          disabled={!doc}
+          aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+          title={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+        >
+          {isFullscreen ? (
+            <Minimize2 size={16} strokeWidth={2} aria-hidden="true" />
+          ) : (
+            <Maximize2 size={16} strokeWidth={2} aria-hidden="true" />
+          )}
+        </button>
         {showOcr && (
           <>
             <span className={styles.divider} aria-hidden="true" />
@@ -1025,9 +1079,6 @@ const task = pageProxy.render({ canvas, viewport, transform });
           </div>
         )}
       </div>
-      {isFullscreen && (
-        <div className={styles.fullscreenSpacer} style={{ height: spacerHeight }} aria-hidden="true" />
-      )}
       {aiSelection && onAskAi && !regionEditing && (
         <AiSelectionBubble
           x={aiSelection.x}
@@ -1040,5 +1091,9 @@ const task = pageProxy.render({ canvas, viewport, transform });
         />
       )}
     </div>
+    {isFullscreen && (
+      <div className={styles.fullscreenSpacer} style={{ height: spacerHeight }} aria-hidden="true" />
+    )}
+    </>
   );
 }
