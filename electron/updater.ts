@@ -1,7 +1,7 @@
 import { app, shell } from "electron";
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { createReadStream } from "node:fs";
+import { createReadStream, readdirSync, rmSync, statSync } from "node:fs";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -30,6 +30,16 @@ const PROGRESS_INTERVAL_MS = 300;
 /** Grace period between handing the update to the OS and quitting, so the IPC
  *  reply (which shows the "restarting" message) still reaches the renderer. */
 const QUIT_DELAY_MS = 600;
+
+/** Folder the installers are streamed into. */
+const UPDATE_DIR_NAME = "readlynx-updates";
+
+/** Nothing ever reuses a downloaded installer, and each one is ~200 MB, so a
+ *  folder that is never pruned grows by that much with every single update. The
+ *  grace period keeps a fresh file alive, because on macOS and the Linux
+ *  fallback the user still has to drag it into place, and on Windows the
+ *  installer may still be running out of it when the app comes back. */
+const PRUNE_GRACE_MS = 12 * 60 * 60 * 1000;
 
 interface GithubAsset {
   name: string;
@@ -310,6 +320,39 @@ export async function openExternalLink(rawUrl: string): Promise<boolean> {
 /* Download                                                                    */
 /* -------------------------------------------------------------------------- */
 
+/** Absolute path of the folder streamed installers land in. */
+function updateCacheDir(): string {
+  return path.join(app.getPath("temp"), UPDATE_DIR_NAME);
+}
+
+/** Deletes installers left behind by earlier updates so the folder does not
+ *  grow by one ~200 MB build every time the app is updated.
+ *
+ *  Only files older than the grace period go: whatever was downloaded in the
+ *  last few hours either is being installed right now or still has to be
+ *  installed by hand. Best-effort throughout — a file the OS still holds open is
+ *  left alone and picked up by a later run. */
+export function pruneUpdateCache(): void {
+  const directory = updateCacheDir();
+  let names: string[];
+  try {
+    names = readdirSync(directory);
+  } catch {
+    return;
+  }
+  const cutoff = Date.now() - PRUNE_GRACE_MS;
+  for (const name of names) {
+    const filePath = path.join(directory, name);
+    try {
+      const stats = statSync(filePath);
+      if (!stats.isFile() || stats.mtimeMs > cutoff) continue;
+      rmSync(filePath, { force: true });
+    } catch (error) {
+      console.log(`[updater] could not prune ${name}:`, error);
+    }
+  }
+}
+
 function throttleProgress(): { shouldEmit: () => boolean } {
   let last = 0;
   return {
@@ -331,7 +374,7 @@ export async function downloadAsset(
   asset: UpdateAsset,
   onProgress: (progress: UpdateProgress) => void,
 ): Promise<string> {
-  const directory = path.join(app.getPath("temp"), "readlynx-updates");
+  const directory = updateCacheDir();
   await fs.mkdir(directory, { recursive: true });
   const filePath = path.join(directory, asset.name);
   await fs.rm(filePath, { force: true });
@@ -539,6 +582,10 @@ async function installOnLinux(
   if (/\.AppImage$/i.test(asset.name)) {
     const replaced = await replaceAppImage(filePath);
     if (replaced.ok) {
+      // The image has already been unpacked and renamed over the target, so this
+      // copy is spent. It is the one path where the download is consumed here
+      // instead of being handed to the user.
+      await fs.rm(filePath, { force: true });
       scheduleQuit();
       return {
         ok: true,

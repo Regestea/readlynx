@@ -14,6 +14,7 @@ import { registerUpdaterIpc } from "./ipc/updater.ts";
 import { registerWindowIpc, watchWindowState } from "./ipc/window.ts";
 import type { WindowContext } from "./ipc/window.ts";
 import { getStore } from "./store/storage.ts";
+import { pruneUpdateCache } from "./updater.ts";
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -240,6 +241,7 @@ app.whenReady().then(() => {
   registerAiIpc();
   registerSystemFontsIpc();
   registerUpdaterIpc();
+  pruneUpdateCache();
   registerWindowIpc({
     mainWindow: () => mainWindow,
     readerBooks,
