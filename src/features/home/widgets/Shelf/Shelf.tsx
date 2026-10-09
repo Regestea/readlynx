@@ -14,6 +14,10 @@ interface ShelfProps {
   onDeleteBook?: (book: Book) => void;
   onEditBook?: (book: Book) => void;
   onTogglePin?: (book: Book) => void;
+  /** Opens a book in its own window, offered from a reading book's card menu.
+   *  Passed straight through: whether it applies is the card's call, since it
+   *  depends on the book's kind. */
+  onOpenBookInWindow?: (book: Book) => void;
   emptyText?: string;
   emptyHint?: string;
 }
@@ -30,6 +34,7 @@ export function Shelf({
   onDeleteBook,
   onEditBook,
   onTogglePin,
+  onOpenBookInWindow,
   emptyText = "Your shelf is empty.",
   emptyHint = "Create your first book to get started.",
 }: ShelfProps) {
@@ -73,6 +78,7 @@ export function Shelf({
               onDelete={onDeleteBook ? () => onDeleteBook(book) : undefined}
               onEdit={onEditBook ? () => onEditBook(book) : undefined}
               onTogglePin={onTogglePin ? () => onTogglePin(book) : undefined}
+              onOpenInWindow={onOpenBookInWindow ? () => onOpenBookInWindow(book) : undefined}
             />
           ))}
         </div>

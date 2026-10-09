@@ -19,6 +19,8 @@ interface HomePageProps {
   onOpenBook?: (bookId: string) => void;
   /** Opens a reading-kind book in the read-only reader. */
   onOpenReadingBook?: (bookId: string) => void;
+  /** Opens a reading-kind book in a window of its own, beside the shell. */
+  onOpenBookInWindow?: (bookId: string) => void;
 }
 
 const COVER_STYLES: CoverStyle[] = ["forest", "moss", "terracotta", "navy", "sand", "moon"];
@@ -44,7 +46,12 @@ function toBook(row: BookListItem): Book {
   };
 }
 
-export function HomePage({ onCreateBook, onOpenBook, onOpenReadingBook }: HomePageProps) {
+export function HomePage({
+  onCreateBook,
+  onOpenBook,
+  onOpenReadingBook,
+  onOpenBookInWindow,
+}: HomePageProps) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [translateOpen, setTranslateOpen] = useState(false);
   const [readOpen, setReadOpen] = useState(false);
@@ -161,6 +168,9 @@ export function HomePage({ onCreateBook, onOpenBook, onOpenReadingBook }: HomePa
           onDeleteBook={setBookToDelete}
           onEditBook={setBookToEdit}
           onTogglePin={handleTogglePin}
+          onOpenBookInWindow={
+            onOpenBookInWindow ? (book) => onOpenBookInWindow(book.id) : undefined
+          }
           emptyText="No pinned books yet."
           emptyHint="Pin a book to keep it at the top."
         />
@@ -176,6 +186,7 @@ export function HomePage({ onCreateBook, onOpenBook, onOpenReadingBook }: HomePa
         onDeleteBook={setBookToDelete}
         onEditBook={setBookToEdit}
         onTogglePin={handleTogglePin}
+        onOpenBookInWindow={onOpenBookInWindow ? (book) => onOpenBookInWindow(book.id) : undefined}
       />
 
       <CreateBookDialog
