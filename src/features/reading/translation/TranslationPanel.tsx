@@ -1,5 +1,13 @@
-import { useCallback, useState } from "react";
-import { Languages, ListChecks, Loader2, RefreshCw, X } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  ChevronDown,
+  Languages,
+  ListChecks,
+  Loader2,
+  RefreshCw,
+  SlidersHorizontal,
+  X,
+} from "lucide-react";
 import type { AiModel } from "../../../infrastructure/db/entities/AiModel.ts";
 import type { BookSourceType } from "../../../infrastructure/db/entities/types.ts";
 import { Button } from "../../../components/ui/Button/Button";
@@ -8,6 +16,7 @@ import type { ExportContent, ExportSettings } from "../../../components/export/t
 import { PageRangeModal } from "./PageRangeModal.tsx";
 import { TranslationControls } from "./TranslationControls.tsx";
 import { TranslationManageModal } from "./TranslationManageModal.tsx";
+import { useToolbarCollapsed } from "./useToolbarCollapsed.ts";
 import { runContentExport } from "../export/runContentExport.ts";
 import {
   renderTranslatedBook,
@@ -118,6 +127,12 @@ export function TranslationSettingsPanel({
 }: TranslationSettingsPanelProps) {
   const [rangeOpen, setRangeOpen] = useState(false);
   const [manageOpen, setManageOpen] = useState(false);
+  /** Whether the settings row is folded into the dropdown (narrow viewport).
+   *  Re-checked on resize, and the panel closes when the bar expands again so
+   *  the settings are never hidden behind a trigger that is gone. */
+  const collapsed = useToolbarCollapsed();
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const settingsWrapRef = useRef<HTMLSpanElement>(null);
   const [manageChapters, setManageChapters] = useState<
     Array<{ index: number; key: string; title: string }>
   >([]);
@@ -148,7 +163,7 @@ export function TranslationSettingsPanel({
    *  it has its own scope and progress display. Run progress is shown by the
    *  host (spinner in the toolbar, footer line in the dialog) while results
    *  and failures arrive as toasts, so no status line is rendered here. */
-  const renderControls = (host: "toolbar" | "manage") => (
+  const renderControls = (host: "toolbar" | "manage" | "popover") => (
     <TranslationControls
       sourceType={sourceType}
       models={models}
@@ -166,10 +181,16 @@ export function TranslationSettingsPanel({
       downloadProgress={downloadProgress}
       onDownload={onDownload}
       onDelete={onDelete}
-      showUnitPicker={host === "toolbar"}
+      showUnitPicker={host === "toolbar" || host === "popover"}
       onOpenRange={() => setRangeOpen(true)}
       onOpenScanRegion={onOpenScanRegion}
-      className={host === "toolbar" ? styles.controlsToolbar : styles.controlsDialog}
+      className={
+        host === "toolbar"
+          ? styles.controlsToolbar
+          : host === "popover"
+            ? styles.controlsPopover
+            : styles.controlsDialog
+      }
     />
   );
 
@@ -211,6 +232,40 @@ export function TranslationSettingsPanel({
     }
   }, [manageChapters, onLoadTranslatedUnits, exportTitle]);
 
+  /** Closes the settings dropdown on outside click or Escape — the usual
+   *  popover contract. Its own dropdowns (AI models, OCR languages) close on
+   *  the same events, and both checks ignore clicks inside the panel, so the
+   *  two layers never close each other by accident. */
+  useEffect(() => {
+    if (!settingsOpen) return;
+    const close = () => setSettingsOpen(false);
+    const onDown = (event: MouseEvent) => {
+      if (settingsWrapRef.current?.contains(event.target as Node)) return;
+      close();
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      // Document-level listeners run before the host's window-level one, so
+      // stopping here keeps a single Escape from closing both.
+      event.stopPropagation();
+      close();
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [settingsOpen]);
+
+  // Growing past the breakpoint puts the settings back on the bar, so a panel
+  // left open over the collapsed trigger must not linger — and must not spring
+  // open again the moment the window shrinks. Adjusted during render, which is
+  // React's pattern for deriving state from a changed input.
+  if (!collapsed && settingsOpen) {
+    setSettingsOpen(false);
+  }
+
   return (
     <div className={styles.toolbar} role="toolbar" aria-label="Translation settings">
       {busy ? (
@@ -236,7 +291,29 @@ export function TranslationSettingsPanel({
         </>
       ) : (
         <>
-          {renderControls("toolbar")}
+          {collapsed ? (
+            <span className={styles.settingsWrap} ref={settingsWrapRef}>
+              <button
+                type="button"
+                className={`${styles.settingsTrigger} ${settingsOpen ? styles.settingsTriggerActive : ""}`}
+                onClick={() => setSettingsOpen((open) => !open)}
+                aria-label="Translation settings"
+                title="Translation settings — models, method, languages, instructions"
+                aria-haspopup="dialog"
+                aria-expanded={settingsOpen}
+              >
+                <SlidersHorizontal size={15} strokeWidth={1.8} aria-hidden="true" />
+                <ChevronDown size={14} strokeWidth={1.8} aria-hidden="true" />
+              </button>
+              {settingsOpen && (
+                <div className={styles.settingsPanel} role="dialog" aria-label="Translation settings">
+                  {renderControls("popover")}
+                </div>
+              )}
+            </span>
+          ) : (
+            renderControls("toolbar")
+          )}
 
           <Button
             variant="primary"

@@ -4,7 +4,14 @@
   gap: var(--space-2);
   flex-wrap: wrap;
   justify-content: flex-end;
-  flex-shrink: 0;
+
+  /* Shrinkable so the settings can wrap onto extra rows when the header runs
+   * out of room. The controls already declare `flex-wrap: wrap`, but a flex
+   * item that refuses to shrink never gets narrower than its widest row, so
+   * that wrap was unreachable and the tail of the toolbar — the unit picker,
+   * the scan region, both action buttons — was simply clipped away in a narrow
+   * window. */
+  flex-shrink: 1;
   min-width: 0;
 }
 
@@ -20,6 +27,59 @@
 .controlsDialog {
   justify-content: flex-start;
   width: 100%;
+}
+
+/* Anchor for the collapsed toolbar's settings dropdown. */
+.settingsWrap {
+  position: relative;
+  display: inline-flex;
+}
+
+/* Opens from the trigger's right edge, like the model dropdown above it, so
+ * both panels leave from the same side of the bar. Wide enough to hold the
+ * model list (320px) and the OCR language panel (360px) that open from inside
+ * it without spilling over the window edge on a narrow screen. */
+.settingsPanel {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 40;
+  width: 380px;
+  max-width: calc(100vw - var(--space-4) * 2);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-medium);
+  background: var(--color-bg);
+  box-shadow: var(--shadow-lg);
+}
+
+/* Matches the height and border of the controls it stands in for, so the bar
+   * keeps one row when it collapses. */
+.settingsTrigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-small);
+  background: var(--color-glass);
+  color: var(--color-text);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition:
+    border-color var(--transition-base) ease,
+    box-shadow var(--transition-base) ease;
+}
+
+.settingsTrigger:hover {
+  border-color: var(--color-primary);
+}
+
+.settingsTriggerActive,
+.settingsTriggerActive:hover {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-glow);
 }
 
 .action {
