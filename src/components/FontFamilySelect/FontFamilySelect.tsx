@@ -86,8 +86,17 @@ export function FontFamilySelect({
         setOpen(false);
       }
     };
+    /** Escape closes the list — the usual popover contract, so a fullscreen
+     *  reader yielding to open popovers can never trap the key on this one. */
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
     window.addEventListener("mousedown", handleOutside);
-    return () => window.removeEventListener("mousedown", handleOutside);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("mousedown", handleOutside);
+      document.removeEventListener("keydown", onKey);
+    };
   }, [open, setOpen]);
 
   useEffect(() => {

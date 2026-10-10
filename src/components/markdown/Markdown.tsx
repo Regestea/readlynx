@@ -19,6 +19,7 @@ import { ColorPickerPanel } from "../ui/ColorPickerPanel/ColorPickerPanel";
 import { AiSelectionBubble } from "../AiSelectionBubble/AiSelectionBubble";
 import { useReaderSettings } from "../../hooks/useReaderSettings.ts";
 import { getSelectionEndRect } from "../../shared/selection";
+import { enterReaderFullscreen, exitReaderFullscreen, popoverOpen } from "../../shared/readerFullscreen";
 import { getTextDir, textAlignForDir } from "../../shared/document/direction";
 import { MermaidDiagram } from "./MermaidDiagram";
 import { safeUrlTransform } from "./safeUrl";
@@ -580,15 +581,33 @@ export function Markdown({
     };
   }, [onAskAi, content]);
 
-  /** Exits the in-page fullscreen overlay with Escape. */
+  const exitFullscreen = useCallback(() => {
+    setIsFullscreen(false);
+    exitReaderFullscreen();
+  }, []);
+
+  /** Exits the in-page fullscreen overlay with Escape. An open popover (colors,
+   *  font list) eats the key first — it closes itself, and the next Escape
+   *  leaves fullscreen instead of both going at once. */
   useEffect(() => {
     if (!isFullscreen) return;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setIsFullscreen(false);
+      if (event.key !== "Escape" || popoverOpen()) return;
+      exitFullscreen();
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
+  }, [isFullscreen, exitFullscreen]);
+
+  /** A fullscreen viewer unmounting (tab closed, book switched) releases the
+   *  chrome, or the shell stays chromeless with nothing fullscreen. */
+  const isFullscreenRef = useRef(false);
+  useEffect(() => {
+    isFullscreenRef.current = isFullscreen;
   }, [isFullscreen]);
+  useEffect(() => () => {
+    if (isFullscreenRef.current) exitReaderFullscreen();
+  }, []);
 
   /** Closes the color picker on outside click or Escape. */
   useEffect(() => {
@@ -620,13 +639,18 @@ export function Markdown({
 
   const changeZoom = useCallback((delta: number) => {
     setZoomPct((current) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, current + delta)));
-  }, [setZoomPct]);
+  }, []);
 
   const toggleFullscreen = () => {
-    if (!isFullscreen && hostRef.current) {
+    if (isFullscreen) {
+      exitFullscreen();
+      return;
+    }
+    if (hostRef.current) {
       setSpacerHeight(hostRef.current.offsetHeight);
     }
-    setIsFullscreen((prev) => !prev);
+    enterReaderFullscreen();
+    setIsFullscreen(true);
   };
 
   const body = useMemo(

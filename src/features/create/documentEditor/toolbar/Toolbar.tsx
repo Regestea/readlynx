@@ -52,6 +52,7 @@ import { ExportDialog } from "../../../../components/export/ExportDialog";
 import type { ExportContent, ExportSettings } from "../../../../components/export/types";
 import { toHtml } from "../../../../infrastructure/export/lexicalToHtml";
 import { MarginDialog } from "./MarginDialog";
+import { popoverOpen } from "../../../../shared/readerFullscreen";
 import { DEFAULT_FONT_SIZE_VALUE, FONT_SIZE_OPTIONS, HEADING_OPTIONS, TEXT_COLORS, BACKGROUND_COLORS, PAGE_MARGIN_OPTIONS, PAGE_MARGIN_MM, uniformMargins } from "../constants";
 import type { PageFormat, PageMargins } from "../constants";
 import type { BlockType, ExportThemeOptions } from "../types";
@@ -146,8 +147,17 @@ function Menu({
     const handleOutside = (event: MouseEvent) => {
       if (ref.current && !ref.current.contains(event.target as Node)) setOpen(false);
     };
+    /** Escape closes the menu — the usual popover contract (see
+     *  ColorPickerPanel). */
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
     window.addEventListener("mousedown", handleOutside);
-    return () => window.removeEventListener("mousedown", handleOutside);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("mousedown", handleOutside);
+      document.removeEventListener("keydown", onKey);
+    };
   }, [open]);
 
   const close = () => setOpen(false);
@@ -173,6 +183,8 @@ function Menu({
           ]
             .filter(Boolean)
             .join(" ")}
+          role="menu"
+          aria-label={label}
         >
           {children(close)}
         </div>
@@ -293,7 +305,10 @@ export function Toolbar({
   useEffect(() => {
     if (!fullscreen) return;
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") handleToggleFullscreen();
+      // An open popover (colors, margins, export, menus) eats the key first —
+      // it closes itself, and the next Escape leaves fullscreen.
+      if (event.key !== "Escape" || popoverOpen()) return;
+      handleToggleFullscreen();
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);

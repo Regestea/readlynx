@@ -21,6 +21,7 @@ import {
 } from "./translation/types";
 import type { PdfScanRegion } from "./translation/types";
 import { useCloseFlush } from "../../shared/closeFlush";
+import { useReaderFullscreen } from "../../shared/readerFullscreen";
 import {
   loadScrollRatio,
   markdownRatio,
@@ -70,6 +71,9 @@ type PageState =
 
 export function ReadingPage({ bookId, onBack, active = true, onTitleChange }: ReadingPageProps) {
   const [state, setState] = useState<PageState>({ status: "loading" });
+  /** Hides the page chrome (back button, title, translation settings) while a
+   *  reader is fullscreen, with the rest of the shell. */
+  const readerFullscreen = useReaderFullscreen();
   const [savedPage, setSavedPage] = useState(1);
   const [savedChapter, setSavedChapter] = useState<string | null>(null);
   /** Total pages of the loaded PDF (0 until the viewer reports it). */
@@ -871,6 +875,10 @@ export function ReadingPage({ bookId, onBack, active = true, onTitleChange }: Re
 
   return (
     <main className={styles.page} aria-label="Reading book">
+      {/* A fullscreen reader hides the page chrome with the rest of the shell —
+          back button, title and translation settings all go, so the overlay is
+          the whole window rather than maximise with a bigger page. */}
+      {readerFullscreen ? null : (
       <header className={`${styles.topBar} animate-fade-up`}>
         <Button
           variant="icon"
@@ -937,6 +945,7 @@ export function ReadingPage({ bookId, onBack, active = true, onTitleChange }: Re
           />
         )}
       </header>
+      )}
 
       <div className={styles.viewerArea}>
         {state.status === "loading" ? (

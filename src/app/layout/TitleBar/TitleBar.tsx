@@ -173,9 +173,19 @@ export function TitleBar({
   }, []);
 
   /** With no OS caption there is no double-click-to-maximize, so the gesture
-   *  the drag region used to provide is re-implemented here. */
+   *  the drag region used to provide is re-implemented here. Scoped to empty
+   *  bar areas only (see the `stopPropagation` below): double-clicking a tab
+   *  or a window button must not yank the window size as a side effect. */
   const handleBarDoubleClick = () => {
     void window.readlynx?.windowControls?.toggleMaximize();
+  };
+
+  /** Double-clicks on interactive bar content stay local: without this they
+   *  bubble to the bar and toggle maximise — double-clicking the minimise
+   *  button would minimise and instantly restore-maximise, and double-clicking
+   *  a tab would resize the window instead of just selecting it. */
+  const keepDoubleClickLocal = (event: ReactMouseEvent<HTMLDivElement>) => {
+    event.stopPropagation();
   };
 
   /** Dragging a tab off the strip opens it in its own window, the way every
@@ -283,7 +293,11 @@ export function TitleBar({
           {label}
         </span>
       )}
-      <div className={`${styles.tabs} ${clipped ? styles.tabsClipped : ""}`} ref={stripRef}>
+      <div
+        className={`${styles.tabs} ${clipped ? styles.tabsClipped : ""}`}
+        ref={stripRef}
+        onDoubleClick={keepDoubleClickLocal}
+      >
         {tabs.map((tab, index) => {
           const isActive = tab.id === activeId;
           return (
@@ -326,7 +340,7 @@ export function TitleBar({
           exactly when it is needed. Click to open — hover made it flicker
           shut the moment the pointer crossed the gap on its way to the list. */}
       {clipped && (
-        <div className={styles.overflow} ref={overflowRef}>
+        <div className={styles.overflow} ref={overflowRef} onDoubleClick={keepDoubleClickLocal}>
           <button
             type="button"
             className={`${styles.overflowButton} ${overflowOpen ? styles.overflowButtonOpen : ""}`}
@@ -415,7 +429,7 @@ export function TitleBar({
 
       {/* `margin-inline-start: auto` keeps the controls on the trailing edge
           in either writing direction. */}
-      <div className={styles.controls}>
+      <div className={styles.controls} onDoubleClick={keepDoubleClickLocal}>
         <button
           type="button"
           className={styles.button}

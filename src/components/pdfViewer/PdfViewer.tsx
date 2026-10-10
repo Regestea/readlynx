@@ -15,6 +15,7 @@ import { OcrPanel } from "./OcrPanel";
 import { PdfScanRegionOverlay } from "./PdfScanRegionOverlay";
 import { AiSelectionBubble } from "../AiSelectionBubble/AiSelectionBubble";
 import { useToast } from "../ui/Toast/ToastContext";
+import { enterReaderFullscreen, exitReaderFullscreen, popoverOpen } from "../../shared/readerFullscreen";
 import { annotateRegions, extractPdfRegions } from "../../features/reading/translation/pdfRegions";
 import type { PdfRegionSnapshot } from "../../features/reading/translation/pdfRegions";
 import {
@@ -516,21 +517,44 @@ function PdfViewerInner({
     void refreshModels();
   }, [refreshModels]);
 
-  /** Exits the in-page fullscreen overlay with Escape. */
+  const exitFullscreen = useCallback(() => {
+    setIsFullscreen(false);
+    exitReaderFullscreen();
+  }, []);
+
+  /** Exits the in-page fullscreen overlay with Escape. An open popover (theme,
+   *  OCR) eats the key first — it closes itself, and the next Escape leaves
+   *  fullscreen instead of both going at once. */
   useEffect(() => {
     if (!isFullscreen) return;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setIsFullscreen(false);
+      if (event.key !== "Escape" || popoverOpen()) return;
+      exitFullscreen();
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
+  }, [isFullscreen, exitFullscreen]);
+
+  /** A fullscreen viewer unmounting (tab closed, book switched) releases the
+   *  chrome, or the shell stays chromeless with nothing fullscreen. */
+  const isFullscreenRef = useRef(false);
+  useEffect(() => {
+    isFullscreenRef.current = isFullscreen;
   }, [isFullscreen]);
+  useEffect(() => () => {
+    if (isFullscreenRef.current) exitReaderFullscreen();
+  }, []);
 
   const toggleFullscreen = () => {
-    if (!isFullscreen && viewerRef.current) {
+    if (isFullscreen) {
+      exitFullscreen();
+      return;
+    }
+    if (viewerRef.current) {
       setSpacerHeight(viewerRef.current.offsetHeight);
     }
-    setIsFullscreen((prev) => !prev);
+    enterReaderFullscreen();
+    setIsFullscreen(true);
   };
 
   /** Click-to-ask: floats the "Ask AI" bubble at the cursor. The bubble's

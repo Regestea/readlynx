@@ -22,14 +22,18 @@ import { OpenModeDialog } from "../components/ui/OpenModeDialog/OpenModeDialog";
 import type { OpenMode } from "../components/ui/OpenModeDialog/OpenModeDialog";
 import { HOME_TAB, createTabId, readingTabId, useTabs } from "./tabs";
 import type { LibrarySection, Tab } from "./tabs";
+import { useReaderFullscreen } from "../shared/readerFullscreen";
 import styles from "./App.module.css";
 
 /** A window opened for one book: the reader alone, no sidebar and no tabs, so
  *  it can sit beside the shell instead of sharing its renderer with it. */
 function ReaderWindow({ bookId }: { bookId: string }) {
+  // A fullscreen reader hides the window chrome too — the overlay alone is
+  // maximise with a bigger page, not fullscreen.
+  const readerFullscreen = useReaderFullscreen();
   return (
     <div className={styles.frame}>
-      <TitleBar tabs={[]} activeId="" label="ReadLynx" />
+      {readerFullscreen ? null : <TitleBar tabs={[]} activeId="" label="ReadLynx" />}
       <div className={styles.readerStage}>
         {/* Back has nowhere to go in a window of its own, so it closes the
             window — after the reader has flushed its position, as usual. */}
@@ -117,6 +121,11 @@ export default function App() {
    *  to collapse the sidebar on an unrelated page. */
   const sidebarCollapsed =
     activeTab.kind === "reading" || (activeTab.kind === "create" && editorSplit);
+  /** A fullscreen reader takes the whole window: no title bar, no sidebar,
+   *  no stats panel. The overlay alone is maximise with a bigger page — the
+   *  chrome has to go for it to read as fullscreen. */
+  const readerFullscreen = useReaderFullscreen();
+  const chromeHidden = readerFullscreen;
 
   /** Shared routing into the read-only reader (home shelf + OS open-with). */
   const openReadingBook = useCallback(
@@ -325,6 +334,7 @@ export default function App() {
             <ReaderWindow bookId={readerBookId} />
           ) : (
           <div className={styles.frame}>
+            {chromeHidden ? null : (
             <TitleBar
               tabs={tabs}
               activeId={activeId}
@@ -333,12 +343,13 @@ export default function App() {
               onMove={moveTab}
               onDetach={handleDetach}
             />
+            )}
 
             <div
-              className={`${styles.shell} ${isLibrary ? "" : styles.shellFull} ${sidebarCollapsed ? styles.shellGapNone : ""}`}
+              className={`${styles.shell} ${isLibrary ? "" : styles.shellFull} ${sidebarCollapsed ? styles.shellGapNone : ""} ${chromeHidden ? styles.shellReaderFullscreen : ""}`}
             >
               <div
-                className={`${styles.sidebarSlide} ${sidebarCollapsed ? styles.sidebarSlideCollapsed : ""}`}
+                className={`${styles.sidebarSlide} ${sidebarCollapsed || chromeHidden ? styles.sidebarSlideCollapsed : ""}`}
               >
                 <div className={styles.sidebarSlideInner}>
                   <Sidebar activeId={sidebarActiveId} onNavigate={handleNavigate} />
@@ -362,7 +373,7 @@ export default function App() {
                 ))}
               </div>
 
-              {isLibrary && (
+              {isLibrary && !chromeHidden && (
                 <aside className={styles.panel} aria-label="Reading overview">
                   <ReadingProgress />
                   <WeeklyStats />

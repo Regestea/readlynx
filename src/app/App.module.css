@@ -67,6 +67,14 @@
   grid-template-columns: auto minmax(0, 1fr);
 }
 
+/* A fullscreen reader hides every chrome panel, so the shell collapses to a
+   single column behind the overlay. Declared after `.shellFull` so it wins
+   when both apply. */
+.shellReaderFullscreen {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+}
+
 .shellGapNone {
   gap: 0;
 }

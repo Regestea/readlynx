@@ -10,6 +10,7 @@ import { sanitizeEpubArchive } from "../../shared/document/epubSanitize";
 import type { EpubHtmlExtraction } from "../../shared/document/epubToMarkdown";
 import type { EpubImageRef } from "../../shared/document/epubToMarkdown";
 import { getSelectionEndRect } from "../../shared/selection";
+import { enterReaderFullscreen, exitReaderFullscreen, popoverOpen } from "../../shared/readerFullscreen";
 import { FontFamilySelect } from "../FontFamilySelect/FontFamilySelect";
 import { ColorPickerPanel } from "../ui/ColorPickerPanel/ColorPickerPanel";
 import { AiSelectionBubble } from "../AiSelectionBubble/AiSelectionBubble";
@@ -761,15 +762,33 @@ export function EpubViewer({
     },
   }));
 
-  /** Exits the in-page fullscreen overlay with Escape. */
+  const exitFullscreen = useCallback(() => {
+    setIsFullscreen(false);
+    exitReaderFullscreen();
+  }, []);
+
+  /** Exits the in-page fullscreen overlay with Escape. An open popover
+   *  (colors, font list, image view) eats the key first — it closes itself,
+   *  and the next Escape leaves fullscreen instead of both going at once. */
   useEffect(() => {
     if (!isFullscreen) return;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setIsFullscreen(false);
+      if (event.key !== "Escape" || popoverOpen()) return;
+      exitFullscreen();
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
+  }, [isFullscreen, exitFullscreen]);
+
+  /** A fullscreen viewer unmounting (tab closed, book switched) releases the
+   *  chrome, or the shell stays chromeless with nothing fullscreen. */
+  const isFullscreenRef = useRef(false);
+  useEffect(() => {
+    isFullscreenRef.current = isFullscreen;
   }, [isFullscreen]);
+  useEffect(() => () => {
+    if (isFullscreenRef.current) exitReaderFullscreen();
+  }, []);
 
   /** Exits the image fullscreen overlay with Escape. */
   useEffect(() => {
@@ -1323,10 +1342,15 @@ export function EpubViewer({
   };
 
   const toggleFullscreen = () => {
-    if (!isFullscreen && viewerRef.current) {
+    if (isFullscreen) {
+      exitFullscreen();
+      return;
+    }
+    if (viewerRef.current) {
       setSpacerHeight(viewerRef.current.offsetHeight);
     }
-    setIsFullscreen((prev) => !prev);
+    enterReaderFullscreen();
+    setIsFullscreen(true);
   };
 
   /** Converts the currently rendered section to Markdown and hands it to the

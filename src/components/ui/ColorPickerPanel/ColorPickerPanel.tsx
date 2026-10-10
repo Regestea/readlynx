@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { useEffect } from "react";
 import { X } from "lucide-react";
 import { Button } from "../Button/Button";
 import { ColorSelect } from "../ColorSelect/ColorSelect";
@@ -66,6 +67,18 @@ export function ColorPickerPanel({
   align = "left",
   className,
 }: ColorPickerPanelProps) {
+  /** Escape closes the panel — the usual popover contract. Fullscreen readers
+   *  yield their own Escape to an open popover, so this is what makes one key
+   *  press close exactly one layer. */
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+
   if (!open) return null;
 
   return (

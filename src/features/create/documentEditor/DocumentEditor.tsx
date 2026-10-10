@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { CSSProperties, RefObject } from "react";
 import { createPortal } from "react-dom";
 import { ContentEditable } from "@lexical/react/LexicalContentEditable";
@@ -6,6 +6,7 @@ import { LexicalErrorBoundary } from "@lexical/react/LexicalErrorBoundary";
 import { RichTextPlugin } from "@lexical/react/LexicalRichTextPlugin";
 import { EditorProvider } from "./EditorProvider";
 import { Toolbar } from "./toolbar/Toolbar";
+import { enterReaderFullscreen, exitReaderFullscreen } from "../../../shared/readerFullscreen";
 import { PAGE_FORMATS, PAGE_MARGIN_MM, uniformMargins, marginPx, PLACEHOLDER_TEXT } from "./constants";
 import type { PageFormat, PageMargins } from "./constants";
 import type { EditorAPI } from "./types";
@@ -71,12 +72,28 @@ export function DocumentEditor({
   const rootRef = useRef<HTMLDivElement>(null);
 
   const toggleFullscreen = (editorState: string) => {
-    if (!fullscreen && rootRef.current) {
+    setSnapshot(editorState);
+    if (fullscreen) {
+      setFullscreen(false);
+      exitReaderFullscreen();
+      return;
+    }
+    if (rootRef.current) {
       setSpacerHeight(rootRef.current.offsetHeight);
     }
-    setSnapshot(editorState);
-    setFullscreen((prev) => !prev);
+    enterReaderFullscreen();
+    setFullscreen(true);
   };
+
+  /** Unmounting while fullscreen (tab closed) releases the chrome, or the
+   *  shell stays chromeless with nothing fullscreen. */
+  const fullscreenRef = useRef(false);
+  useEffect(() => {
+    fullscreenRef.current = fullscreen;
+  }, [fullscreen]);
+  useEffect(() => () => {
+    if (fullscreenRef.current) exitReaderFullscreen();
+  }, []);
 
   const rootClasses = [
     styles.root,

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { CheckCircle2, Download, Loader2, ScanText, Search, Sparkles, Trash2, X } from "lucide-react";
 import { Checkbox } from "../ui/Checkbox/Checkbox";
 import { Button } from "../ui/Button/Button";
@@ -82,6 +82,17 @@ export function OcrPanel({
   className = "",
 }: OcrPanelProps) {
   const [query, setQuery] = useState("");
+  /** Escape closes the panel — the usual popover contract (see
+   *  ColorPickerPanel). */
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+
   if (!open) return null;
 
   const isVision = mode === "vision";
