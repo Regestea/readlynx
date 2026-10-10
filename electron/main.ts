@@ -3,6 +3,7 @@ import path from "node:path";
 import { DbWorkerClient } from "./db/client.ts";
 import { registerAiIpc } from "./ipc/ai.ts";
 import { registerBackupIpc } from "./ipc/backup.ts";
+import { registerClipboardIpc } from "./ipc/clipboard.ts";
 import { registerCoverProtocol, registerCoversIpc } from "./ipc/covers.ts";
 import { registerTranslationImageProtocol, registerTranslationImagesIpc } from "./ipc/translationImages.ts";
 import { registerDbIpc } from "./ipc/db.ts";
@@ -240,6 +241,7 @@ app.whenReady().then(() => {
   registerOcrIpc({ getStore });
   registerAiIpc();
   registerSystemFontsIpc();
+  registerClipboardIpc();
   registerUpdaterIpc();
   pruneUpdateCache();
   registerWindowIpc({

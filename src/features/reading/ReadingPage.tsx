@@ -22,6 +22,10 @@ import {
 import type { PdfScanRegion } from "./translation/types";
 import { useCloseFlush } from "../../shared/closeFlush";
 import { useReaderFullscreen } from "../../shared/readerFullscreen";
+import { useAiModelList } from "../../infrastructure/ai/useAiModelList";
+import { resolveProviderBaseUrl } from "../../infrastructure/ai/modelResolver";
+import { VISION_EXTRACT_SYSTEM_PROMPT } from "../../infrastructure/ai/visionExtractPrompt";
+import type { CopyPageTextMode } from "../../components/pdfViewer/CopyPageTextMenu";
 import {
   loadScrollRatio,
   markdownRatio,
@@ -153,6 +157,9 @@ export function ReadingPage({ bookId, onBack, active = true, onTitleChange }: Re
     active,
   });
   const { setUnit: setTranslationUnit } = translation;
+  /** Saved AI models, so the "copy with AI" menu can offer a picker; the
+   *  default is the pick when the reader does not choose one. */
+  const aiModels = useAiModelList();
 
   /** Chapter list for the Manage translations dialog, read from the viewer's
    *  parsed table of contents only when the dialog is opened. */
@@ -529,6 +536,78 @@ export function ReadingPage({ bookId, onBack, active = true, onTitleChange }: Re
       }
     },
     [readyBook?.sourceType, translation.pdfMethod, translation.settings, translation.installed],
+  );
+
+  /** PDF page-text copy. OCR follows the translate panel's language choice —
+   *  the same one click-to-ask uses — so the reader never has to pick a
+   *  language a second time; AI vision hands the page to the model the reader
+   *  picked in the copy menu (the app default when they left it alone) and
+   *  returns Markdown. The viewer has already captured the page at scan
+   *  resolution with the scan region applied, so the region the reader set is
+   *  the region that gets copied. */
+  const handleCopyPdfText = useCallback(
+    async ({
+      mode,
+      image,
+      modelId,
+    }: {
+      mode: CopyPageTextMode;
+      image: string;
+      modelId: string;
+    }): Promise<string> => {
+      if (mode === "ocr") {
+        const langs = translation.settings.ocrLangs;
+        if (langs.length === 0) {
+          throw new Error(
+            "No OCR language is selected. Pick the page language in the Translate panel first.",
+          );
+        }
+        // Tesseract only works with models on disk, so a missing one can never
+        // produce page text. The error points at the Download button of the
+        // language that is missing rather than at a retry that cannot help.
+        const installed = new Set(translation.installed);
+        const missing = langs.filter((lang) => !installed.has(lang));
+        if (missing.length > 0) {
+          const label = ocrLanguagesLabel(missing);
+          throw new Error(
+            `The OCR model for ${label} is not downloaded yet. Open the Translate panel, ` +
+              `click “${label}” in OCR languages and press Download, then copy again.`,
+          );
+        }
+        const result = await window.readlynx?.ocr.recognize({ dataUrl: image, langs });
+        if (!result) throw new Error("OCR is unavailable.");
+        if (result.error) throw new Error(result.error);
+        return (result.text ?? "").trim();
+      }
+      const model = aiModels.models.find((entry) => entry.Id === modelId) ?? aiModels.defaultModel;
+      if (!model) {
+        throw new Error(aiModels.error ?? "No AI model configured. Add one in Settings → AI Models.");
+      }
+      if (!model.APIKey || !model.ModelName) {
+        throw new Error(
+          `"${model.DisplayName ?? model.ModelName ?? model.Provider}" is missing an API key or model name. Fix it in Settings → AI Models.`,
+        );
+      }
+      const ai = window.readlynx?.ai;
+      if (!ai) throw new Error("The AI bridge is not available.");
+      const markdown = (
+        (await ai.chat({
+          input: {
+            url: resolveProviderBaseUrl(model),
+            apiKey: model.APIKey,
+            modelName: model.ModelName,
+          },
+          messages: [
+            { role: "system", content: VISION_EXTRACT_SYSTEM_PROMPT },
+            { role: "user", content: "Extract the text of the page in the image as Markdown, preserving its structure." },
+          ],
+          images: [image],
+        })) ?? ""
+      ).trim();
+      if (!markdown) throw new Error("The AI returned no text for this page.");
+      return markdown;
+    },
+    [translation.settings, translation.installed, aiModels],
   );
 
   const book = state.status === "ready" ? state.book : null;
@@ -974,6 +1053,7 @@ export function ReadingPage({ bookId, onBack, active = true, onTitleChange }: Re
                   onReady={persistTotals}
                   onPageChange={handlePageChange}
                   onAskAi={handleAskPdfRegion}
+                  onCopyPageText={handleCopyPdfText}
                   scanRegion={translation.settings.pdfScanRegion}
                   onScanRegionChange={handleScanRegionChange}
                 />

@@ -239,6 +239,14 @@ declare global {
          *  process — includes user-installed fonts). */
         list(): Promise<string[]>;
       };
+      clipboard: {
+        /** Copies text to the OS clipboard. Goes through the main process
+         *  because `navigator.clipboard` needs a focused, secure-context
+         *  document, which is not guaranteed once an async extraction moved
+         *  focus to a popover. Resolves false when there was nothing to
+         *  copy. */
+        writeText(text: string): Promise<boolean>;
+      };
       updater: {
         /** Asks GitHub for the newest published release and compares it with
          *  the running build. `disabled` is true in a dev run. */

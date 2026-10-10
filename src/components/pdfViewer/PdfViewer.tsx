@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import type { CSSProperties, MouseEvent as ReactMouseEvent, Ref } from "react";
-import { ChevronLeft, ChevronRight, Crop, FileWarning, Loader2, Maximize2, Minimize2, Palette, ScanText, ZoomIn, ZoomOut } from "lucide-react";
+import { ChevronLeft, ChevronRight, ClipboardCopy, Crop, FileWarning, Loader2, Maximize2, Minimize2, Palette, ScanText, ZoomIn, ZoomOut } from "lucide-react";
 import * as pdfjsLib from "pdfjs-dist";
 import { AnnotationLayer, TextLayer } from "pdfjs-dist";
 import type {
@@ -12,6 +12,8 @@ import type {
 } from "pdfjs-dist";
 import type { PDFLinkService } from "pdfjs-dist/types/web/pdf_link_service";
 import { OcrPanel } from "./OcrPanel";
+import { CopyPageTextMenu } from "./CopyPageTextMenu";
+import type { CopyPageTextMode } from "./CopyPageTextMenu";
 import { PdfScanRegionOverlay } from "./PdfScanRegionOverlay";
 import { AiSelectionBubble } from "../AiSelectionBubble/AiSelectionBubble";
 import { useToast } from "../ui/Toast/ToastContext";
@@ -104,6 +106,18 @@ interface PdfViewerProps {
    *  clicking the bubble hands a PNG of the current page to the host, which
    *  decides between OCR and AI vision. */
   onAskAi?: (payload: { image: string }) => void;
+  /** Turns the current page's text into something to copy — plain text via
+   *  local OCR, or Markdown via an AI vision call — and returns the text that
+   *  was copied. `modelId` is the model the reader picked in the menu; it is
+   *  empty for OCR, which runs locally. The host owns the recognition (it
+   *  knows the book's OCR languages and the AI models), the viewer owns the
+   *  capture and the clipboard. The page is captured exactly as the extract
+   *  panel captures it, so a scan region applies to the copy as well. */
+  onCopyPageText?: (payload: {
+    mode: CopyPageTextMode;
+    image: string;
+    modelId: string;
+  }) => Promise<string>;
   /** Page area that is scanned (OCR) or sent to AI vision, as page fractions;
    *  null = the whole page. Applies to every capture this viewer hands out. */
   scanRegion?: PdfScanRegion | null;
@@ -142,6 +156,7 @@ function PdfViewerInner({
   onOcrText,
   onAiVision,
   onAskAi,
+  onCopyPageText,
   scanRegion = null,
   onScanRegionChange,
   initialPage,
@@ -184,6 +199,10 @@ function PdfViewerInner({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [spacerHeight, setSpacerHeight] = useState(0);
   const [themeOpen, setThemeOpen] = useState(false);
+  const [copyMenuOpen, setCopyMenuOpen] = useState(false);
+  /** Which copy mode is running, so its menu row and the toolbar button can
+   *  show the wait; null when nothing is being copied. */
+  const [copyBusyMode, setCopyBusyMode] = useState<CopyPageTextMode | null>(null);
   const viewerRef = useRef<HTMLDivElement>(null);
   const downloadingRef = useRef<string | null>(null);
   const extractingRef = useRef(false);
@@ -192,6 +211,7 @@ function PdfViewerInner({
   const textLayerTaskRef = useRef<TextLayer | null>(null);
   const annotationLayerTaskRef = useRef<AnnotationLayer | null>(null);
   const themeWrapRef = useRef<HTMLSpanElement>(null);
+  const copyWrapRef = useRef<HTMLSpanElement>(null);
   /** Latest scan region and change handler, read through refs because the
    *  imperative handle is built once and an async render must not work from
    *  the values it started with. */
@@ -408,6 +428,26 @@ function PdfViewerInner({
     return () => document.removeEventListener("pointerdown", handlePointerDown);
   }, [themeOpen]);
 
+  /** Close the copy menu when clicking outside of it, or on Escape — the
+   *  usual popover contract. */
+  useEffect(() => {
+    if (!copyMenuOpen) return;
+    const handlePointerDown = (event: PointerEvent) => {
+      if (copyWrapRef.current && !copyWrapRef.current.contains(event.target as Node)) {
+        setCopyMenuOpen(false);
+      }
+    };
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setCopyMenuOpen(false);
+    };
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKey);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKey);
+    };
+  }, [copyMenuOpen]);
+
   /** Applies the reading theme to the viewer root. Purely a CSS custom
    *  property swap — no pdfjs-dist re-render happens on theme changes, so
    *  switching themes stays instant even on multi-hundred-page documents. */
@@ -446,6 +486,37 @@ function PdfViewerInner({
     await refreshModels();
     toast.info(`"${lang}" model removed.`);
   }, [refreshModels, toast]);
+
+  /** Copies the page's text to the clipboard, either as recognized plain text
+   *  or as the Markdown an AI vision model returns. The capture is the same
+   *  one the extract panel uses — scan resolution, scan region applied — so
+   *  the region the reader picked is the region that gets copied.
+   *
+   *  The clipboard write goes through the main process: recognition is slow
+   *  enough that focus can have moved on by the time it finishes, and the
+   *  browser clipboard API rejects a write from a blurred document. */
+  const handleCopyPageText = useCallback(
+    async ({ mode, modelId }: { mode: CopyPageTextMode; modelId: string }) => {
+      if (!onCopyPageText) return;
+      setCopyBusyMode(mode);
+      try {
+        const image = await capturePageForScan();
+        if (!image) throw new Error("The page is still loading.");
+        const text = (await onCopyPageText({ mode, image, modelId })).trim();
+        if (!text) throw new Error("No text was found on this page.");
+        const copied = await window.readlynx?.clipboard.writeText(text);
+        if (copied === false) throw new Error("Could not reach the clipboard.");
+        setCopyMenuOpen(false);
+        toast.success(`Copied ${text.length.toLocaleString()} characters to the clipboard.`);
+      } catch (err: unknown) {
+        if (err instanceof Error && err.name === "RenderingCancelledException") return;
+        toast.error(err instanceof Error ? err.message : String(err));
+      } finally {
+        setCopyBusyMode(null);
+      }
+    },
+    [capturePageForScan, onCopyPageText, toast],
+  );
 
   const handleExtract = useCallback(async () => {
     const canvas = canvasRef.current;
@@ -524,8 +595,23 @@ function PdfViewerInner({
 
   const handleOcrToggle = useCallback(() => {
     setOcrOpen((open) => !open);
+    // The toolbar popovers share the strip; only one can be open at a time.
+    setThemeOpen(false);
+    setCopyMenuOpen(false);
     void refreshModels();
   }, [refreshModels]);
+
+  const handleThemeToggle = useCallback(() => {
+    setThemeOpen((open) => !open);
+    setOcrOpen(false);
+    setCopyMenuOpen(false);
+  }, []);
+
+  const handleCopyMenuToggle = useCallback(() => {
+    setCopyMenuOpen((open) => !open);
+    setThemeOpen(false);
+    setOcrOpen(false);
+  }, []);
 
   const exitFullscreen = useCallback(() => {
     setIsFullscreen(false);
@@ -975,8 +1061,8 @@ const task = pageProxy.render({ canvas, viewport, transform });
           <button
             type="button"
             className={`${styles.toolButton} ${themeOpen ? styles.toolButtonActive : ""}`}
-            onClick={() => setThemeOpen((open) => !open)}
-            aria-label="Reading theme"
+              onClick={handleThemeToggle}
+              aria-label="Reading theme"
             title="Reading theme"
             aria-haspopup="true"
             aria-expanded={themeOpen}
@@ -985,6 +1071,32 @@ const task = pageProxy.render({ canvas, viewport, transform });
           </button>
           <PdfThemeSettings open={themeOpen} onClose={() => setThemeOpen(false)} />
         </span>
+        {onCopyPageText && (
+          <span className={styles.themeWrap} ref={copyWrapRef}>
+            <button
+              type="button"
+              className={`${styles.toolButton} ${copyMenuOpen ? styles.toolButtonActive : ""}`}
+              onClick={handleCopyMenuToggle}
+              disabled={!doc || copyBusyMode !== null}
+              aria-label="Copy page text"
+              title="Copy the current page's text — by OCR, or as Markdown with AI"
+              aria-haspopup="menu"
+              aria-expanded={copyMenuOpen}
+            >
+              {copyBusyMode !== null ? (
+                <Loader2 size={16} strokeWidth={2} className={styles.spinner} aria-hidden="true" />
+              ) : (
+                <ClipboardCopy size={16} strokeWidth={2} aria-hidden="true" />
+              )}
+            </button>
+            <CopyPageTextMenu
+              open={copyMenuOpen}
+              onCopy={handleCopyPageText}
+              busyMode={copyBusyMode}
+              regionSet={!isWholePageScanRegion(scanRegion)}
+            />
+          </span>
+        )}
         {onScanRegionChange && (
           <>
             <span className={styles.divider} aria-hidden="true" />

@@ -142,6 +142,9 @@ contextBridge.exposeInMainWorld("readlynx", {
   systemFonts: {
     list: () => ipcRenderer.invoke("fonts:list"),
   },
+  clipboard: {
+    writeText: (text) => ipcRenderer.invoke("clipboard:write-text", text),
+  },
   updater: {
     check: () => ipcRenderer.invoke("updater:check"),
     /** Downloads, verifies and installs the build the last check picked. Takes
