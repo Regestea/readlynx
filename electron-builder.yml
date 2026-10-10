@@ -1,6 +1,6 @@
 appId: com.readlynx.app
 productName: ReadLynx
-copyright: Copyright (c) 2026 ReadLynx Contributors
+copyright: Copyright (c) 2026 Regestea. Licensed under BUSL-1.1
 
 directories:
   output: release

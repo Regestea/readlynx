@@ -3,8 +3,9 @@
   "private": true,
   "version": "0.0.0",
   "description": "ReadLynx - a modern reading app",
+  "license": "BUSL-1.1",
   "author": {
-    "name": "ReadLynx Contributors",
+    "name": "Regestea",
     "email": "readlynx@users.noreply.github.com"
   },
   "type": "module",
