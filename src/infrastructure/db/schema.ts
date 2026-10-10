@@ -69,8 +69,9 @@ CREATE TABLE IF NOT EXISTS ReadingState (
 -- Per-book, per-viewer reader settings (zoom, font, colors) that used to
 -- live in localStorage. One row per (book, viewer) pair; the same table
 -- serves the EPUB viewer ('epub'), the translation Markdown view ('markdown'),
--- the PDF viewer's reading theme ('pdf') and the per-book global image zoom
--- ('image', only its zoomPct column is used).
+-- the PDF viewer's page zoom and reading theme ('pdf', zoomPct and
+-- pdfBackground) and the per-book global image zoom ('image', only its
+-- zoomPct column is used).
 CREATE TABLE IF NOT EXISTS ReaderSettings (
   bookId            TEXT NOT NULL REFERENCES Books(id) ON DELETE CASCADE,
   viewer            TEXT NOT NULL,

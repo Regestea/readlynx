@@ -26,6 +26,14 @@ import {
 } from "../../features/reading/translation/pdfScan";
 import type { PdfScanRegion } from "../../features/reading/translation/pdfScan";
 import type { PdfRegionBox } from "../../features/reading/translation/pdfRegions";
+import {
+  PDF_ZOOM_DEFAULT_PCT,
+  PDF_ZOOM_MAX_PCT,
+  PDF_ZOOM_MIN_PCT,
+  PDF_ZOOM_STEP_PCT,
+  clampPdfFitScale,
+  pdfScaleForZoom,
+} from "./pdfZoom";
 import { usePdfTheme } from "./theme/PdfThemeContext";
 import { applyPdfTheme } from "./theme/PdfThemeManager";
 import { PdfThemeProvider } from "./theme/PdfThemeProvider";
@@ -37,10 +45,6 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
   "pdfjs-dist/build/pdf.worker.min.mjs",
   import.meta.url,
 ).toString();
-
-const ZOOM_STEP = 0.2;
-const ZOOM_MIN = 0.5;
-const ZOOM_MAX = 3;
 
 /** Imperative handle for hosts that need to peek at the rendered page (e.g.
  *  reading-mode translation captures the canvas for OCR / AI vision). */
@@ -146,7 +150,6 @@ function PdfViewerInner({
   const [doc, setDoc] = useState<PDFDocumentProxy | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pageNumber, setPageNumber] = useState(1);
-  const [scale, setScale] = useState(1);
   const [numPages, setNumPages] = useState(0);
   const [rendering, setRendering] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -163,9 +166,6 @@ function PdfViewerInner({
   const onPageChangeRef = useRef(onPageChange);
   const readyRef = useRef(false);
   const snapshottedRef = useRef(false);
-  /** True once the reader zoomed by hand. Automatic fits (load, fullscreen,
-   *  pane resize) yield to it so a deliberate zoom is not overridden. */
-  const userZoomedRef = useRef(false);
 
   const [ocrOpen, setOcrOpen] = useState(false);
   const [extractMode, setExtractMode] = useState<"ocr" | "vision">("ocr");
@@ -255,7 +255,17 @@ function PdfViewerInner({
   }, [renderScanPage, pageNumber]);
 
   const showOcr = ocrEnabled || Boolean(onOcrText) || Boolean(onAiVision);
-  const { state: pdfTheme } = usePdfTheme();
+  const { state: pdfTheme, zoomPct, setZoomPct, zoomLoaded } = usePdfTheme();
+  /** Scale the automatic fit produced for the current pane (1 when the host
+   *  asked for no fit). The rendered scale is this multiplied by the stored
+   *  zoom, which is why the reader's zoom survives a resize instead of being
+   *  flattened back to "fills the pane" by the next fit. */
+  const [fitScale, setFitScale] = useState(1);
+  /** What pdf.js actually renders at. Derived rather than stored, so the fit
+   *  baseline and the zoom can never disagree about it — and so a book that
+   *  opens away from 100% shows that size on its very first paint instead of
+   *  at the default until the stored zoom arrives. */
+  const scale = pdfScaleForZoom(fitScale, zoomPct);
   /** OCR results and failures are reported as notifications; the panel's own
    *  status line is left for live progress ("Recognizing page… 42%"). */
   const toast = useToast();
@@ -618,16 +628,17 @@ function PdfViewerInner({
     onPageSnapshotRef.current = onPageSnapshot;
   }, [onPageSnapshot]);
 
-  /** Fits the page to the scroll area. Recomputed whenever the area resizes,
-   *  so entering (and leaving) fullscreen shows the page filling the screen
-   *  instead of keeping the size it had in the reading pane. */
+  /** Fits the page to the scroll area and stores that as the baseline the zoom
+   *  is applied on top of. Recomputed whenever the area resizes, so entering
+   *  (and leaving) fullscreen shows the page filling the screen instead of
+   *  keeping the size it had in the reading pane. */
   const applyFit = useCallback(
     async (pdf: PDFDocumentProxy) => {
       const scroll = scrollRef.current;
       if (!scroll) return;
-      // A hidden tab reports a zero-width box. Fitting to it would drop the
-      // page to the 0.1 floor and show "10%" in the zoom readout until the tab
-      // comes back; the observer refires when it does, so skipping is enough.
+      // A hidden tab reports a zero-width box. Fitting to it would collapse
+      // the page to nothing until the tab comes back; the observer refires
+      // when it does, so skipping is enough.
       if (scroll.clientWidth === 0) return;
       const page = await pdf.getPage(1);
       const viewport = page.getViewport({ scale: 1 });
@@ -638,7 +649,7 @@ function PdfViewerInner({
         const availableHeight = Math.max(1, scroll.clientHeight - pad);
         fitted = Math.min(fitted, availableHeight / viewport.height);
       }
-      setScale(Math.max(0.1, Math.min(ZOOM_MAX, fitted)));
+      setFitScale(clampPdfFitScale(fitted));
     },
     [fit, fitWidth],
   );
@@ -656,8 +667,6 @@ function PdfViewerInner({
         setRendering(true);
         snapshottedRef.current = false;
         readyRef.current = false;
-        // A new document starts out in automatic-fit mode again.
-        userZoomedRef.current = false;
         setRegionEditing(false);
 
         const data = await window.readlynx?.readFileBytes(filePath);
@@ -683,6 +692,10 @@ function PdfViewerInner({
         }
         if (fit || fitWidth) {
           await applyFit(nextDoc);
+        } else {
+          // No automatic fit to wait for, so the baseline is the PDF's own
+          // size and the zoom alone decides how big the page renders.
+          setFitScale(1);
         }
       } catch (err: unknown) {
         if (!cancelled) {
@@ -711,20 +724,18 @@ function PdfViewerInner({
    *  alone would leave a pane-sized page adrift on a large screen. Coalesced
    *  into one fit per frame because the observer fires per resize edge.
    *
-   *  A hand-chosen zoom wins, and that has to be checked *per callback*: the
-   *  observer's deps do not change when the reader zooms, so it outlives the
-   *  first manual zoom and stays attached. Reading the flag once at setup left
-   *  it live, and zooming in made the page wider — which brings back a
-   *  horizontal scrollbar, which is itself a resize — so every zoom-in was
-   *  undone the moment it landed and the page could never be scrolled
-   *  sideways. */
+   *  Only the baseline moves here; the zoom is re-applied on top of it, so a
+   *  reader who zoomed in keeps their reading size across a window drag
+   *  instead of snapping back to "fills the pane". That is also what keeps
+   *  zooming usable: the page growing past the pane brings a horizontal
+   *  scrollbar back, which is itself a resize, and a fit that ignored the
+   *  zoom would undo every zoom-in the moment it landed. */
   useEffect(() => {
     if (!doc || (!fit && !fitWidth)) return;
     const scroll = scrollRef.current;
     if (!scroll) return;
     let frame = 0;
     const observer = new ResizeObserver(() => {
-      if (userZoomedRef.current) return;
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(() => {
         frame = 0;
@@ -852,7 +863,10 @@ const task = pageProxy.render({ canvas, viewport, transform });
   }, [pdfLinkService]);
 
   useEffect(() => {
-    if (!doc) return;
+    // Nothing is painted until the stored zoom has been read: rendering first
+    // and re-rendering after would show the reader a page jumping out of
+    // itself every time a book opens away from 100%.
+    if (!doc || !zoomLoaded) return;
     let cancelled = false;
     const run = async () => {
       await Promise.resolve();
@@ -864,7 +878,7 @@ const task = pageProxy.render({ canvas, viewport, transform });
     return () => {
       cancelled = true;
     };
-  }, [doc, pageNumber, scale, renderPage]);
+  }, [doc, pageNumber, scale, zoomLoaded, renderPage]);
 
   const goTo = (page: number) => {
     if (!doc) return;
@@ -930,11 +944,8 @@ const task = pageProxy.render({ canvas, viewport, transform });
         <button
           type="button"
           className={styles.toolButton}
-          onClick={() => {
-            userZoomedRef.current = true;
-            setScale((current) => Math.max(ZOOM_MIN, +(current - ZOOM_STEP).toFixed(2)));
-          }}
-          disabled={!doc || scale <= ZOOM_MIN}
+          onClick={() => setZoomPct(zoomPct - PDF_ZOOM_STEP_PCT)}
+          disabled={!doc || zoomPct <= PDF_ZOOM_MIN_PCT}
           aria-label="Zoom out"
           title="Zoom out"
         >
@@ -943,23 +954,17 @@ const task = pageProxy.render({ canvas, viewport, transform });
         <button
           type="button"
           className={styles.zoomValue}
-          onClick={() => {
-            userZoomedRef.current = true;
-            setScale(1);
-          }}
-          aria-label={`Zoom ${Math.round(scale * 100)} percent, click to reset`}
-          title="Reset zoom to 100%"
+          onClick={() => setZoomPct(PDF_ZOOM_DEFAULT_PCT)}
+          aria-label={`Zoom ${zoomPct} percent of the page, click to reset`}
+          title="Reset zoom to 100% (fill the reader)"
         >
-          {Math.round(scale * 100)}%
+          {zoomPct}%
         </button>
         <button
           type="button"
           className={styles.toolButton}
-          onClick={() => {
-            userZoomedRef.current = true;
-            setScale((current) => Math.min(ZOOM_MAX, +(current + ZOOM_STEP).toFixed(2)));
-          }}
-          disabled={!doc || scale >= ZOOM_MAX}
+          onClick={() => setZoomPct(zoomPct + PDF_ZOOM_STEP_PCT)}
+          disabled={!doc || zoomPct >= PDF_ZOOM_MAX_PCT}
           aria-label="Zoom in"
           title="Zoom in"
         >

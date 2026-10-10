@@ -7,21 +7,30 @@ const ZOOM_MIN = 60;
 const ZOOM_MAX = 200;
 const ZOOM_STEP = 10;
 
-/** Zoom stepper mirroring the reader toolbars (60–200%, click value resets). */
+/** Zoom stepper mirroring the reader toolbars (click the value to reset). The
+ *  bounds are per-viewer because the ranges genuinely differ: the text
+ *  readers zoom body text between 60 and 200%, while the PDF viewer scales
+ *  the page itself and goes from half to three times the fitted size. */
 export function ZoomField({
   value,
   onChange,
+  min = ZOOM_MIN,
+  max = ZOOM_MAX,
+  step = ZOOM_STEP,
 }: {
   value: number;
   onChange: (next: number) => void;
+  min?: number;
+  max?: number;
+  step?: number;
 }) {
   return (
     <div className={styles.zoomRow}>
       <button
         type="button"
         className={styles.zoomButton}
-        onClick={() => onChange(Math.max(ZOOM_MIN, value - ZOOM_STEP))}
-        disabled={value <= ZOOM_MIN}
+        onClick={() => onChange(Math.max(min, value - step))}
+        disabled={value <= min}
         aria-label="Decrease default zoom"
         title="Decrease default zoom"
       >
@@ -39,8 +48,8 @@ export function ZoomField({
       <button
         type="button"
         className={styles.zoomButton}
-        onClick={() => onChange(Math.min(ZOOM_MAX, value + ZOOM_STEP))}
-        disabled={value >= ZOOM_MAX}
+        onClick={() => onChange(Math.min(max, value + step))}
+        disabled={value >= max}
         aria-label="Increase default zoom"
         title="Increase default zoom"
       >

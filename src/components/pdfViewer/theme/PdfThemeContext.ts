@@ -8,6 +8,12 @@ export interface PdfThemeContextValue {
   setBackground: (color: string) => void;
   /** Restores the default eye-friendly background. */
   reset: () => void;
+  /** Page zoom as a percentage of the fitted page (100 = fills the reader). */
+  zoomPct: number;
+  /** Sets the page zoom; clamped to the range the viewer can render. */
+  setZoomPct: (zoomPct: number) => void;
+  /** False until the stored zoom has been read from the database. */
+  zoomLoaded: boolean;
 }
 
 export const PdfThemeContext = createContext<PdfThemeContextValue | null>(null);

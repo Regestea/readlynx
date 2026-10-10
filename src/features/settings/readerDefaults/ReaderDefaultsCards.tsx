@@ -5,6 +5,11 @@ import { Checkbox } from "../../../components/ui/Checkbox/Checkbox";
 import { FontFamilySelect } from "../../../components/FontFamilySelect/FontFamilySelect";
 import { Code } from "../../../components/ui/Code/Code";
 import { MermaidDiagram } from "../../../components/markdown/MermaidDiagram";
+import {
+  PDF_ZOOM_MAX_PCT,
+  PDF_ZOOM_MIN_PCT,
+  PDF_ZOOM_STEP_PCT,
+} from "../../../components/pdfViewer/pdfZoom";
 import { useReaderDefaults } from "../../../hooks/useReaderDefaults.ts";
 import { DefaultColorField, ZoomField } from "./fields.tsx";
 import styles from "./readerDefaults.module.css";
@@ -214,7 +219,8 @@ export function TranslationDefaultsCard() {
   );
 }
 
-/** Global PDF default: reading background for newly added PDF books. */
+/** Global PDF defaults: starting zoom and reading background for books whose
+ *  PDF settings were never customized per book. */
 export function PdfDefaultsCard() {
   const defaults = useReaderDefaults("pdf");
 
@@ -228,18 +234,35 @@ export function PdfDefaultsCard() {
           <h2 className={styles.sectionTitle}>PDF defaults</h2>
         </div>
         <p className={styles.sectionDesc}>
-          Starting reading background for newly added PDF books. Changing a book inside its
-          reader keeps winning over this default.
+          Starting zoom and reading background for newly added PDF books. Changing a book inside
+          its reader keeps winning over this default.
         </p>
       </div>
 
-      <DefaultColorField
-        label="Reading background"
-        hint="Empty = the default warm paper."
-        value={defaults.pdfBackground}
-        onChange={(pdfBackground) => defaults.setValues({ pdfBackground })}
-        themeLabel="Default paper"
-      />
+      <div className={styles.grid}>
+        <div className={styles.field}>
+          <span className={styles.fieldLabel}>Zoom</span>
+          <span className={styles.fieldHint}>
+            Page size for new PDF books. 100% fills the reader window; below that it shrinks,
+            above it grows.
+          </span>
+          <ZoomField
+            value={defaults.zoomPct}
+            onChange={(zoomPct) => defaults.setValues({ zoomPct })}
+            min={PDF_ZOOM_MIN_PCT}
+            max={PDF_ZOOM_MAX_PCT}
+            step={PDF_ZOOM_STEP_PCT}
+          />
+        </div>
+
+        <DefaultColorField
+          label="Reading background"
+          hint="Empty = the default warm paper."
+          value={defaults.pdfBackground}
+          onChange={(pdfBackground) => defaults.setValues({ pdfBackground })}
+          themeLabel="Default paper"
+        />
+      </div>
 
       <div className={styles.footer}>
         <Button variant="ghost" onClick={defaults.reset}>
