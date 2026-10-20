@@ -134,4 +134,22 @@ export function registerFsIpc({ getStore }: FsIpcDeps) {
       }
     },
   );
+
+  /** Deletes an already-imported store copy (`books/<uuid>.ext`) that never
+   *  got its book row — the cleanup for a failed `create-reading-book` after
+   *  a successful `fs:import-source`, so a rejected import leaves no orphan
+   *  file in the store. Only touches keys inside the books bucket. */
+  ipcMain.handle("fs:delete-stored-source", async (_event, storedPath: string) => {
+    try {
+      if (typeof storedPath !== "string") return false;
+      if (!storedPath.startsWith("books/")) return false;
+      const fileName = storedPath.slice("books/".length);
+      if (!fileName || fileName.includes("/") || fileName.includes("\\")) return false;
+      const store = getStore();
+      store.delete("books", fileName);
+      return true;
+    } catch {
+      return false;
+    }
+  });
 }

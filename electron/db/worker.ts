@@ -130,6 +130,31 @@ function purgeTemporaryBooks(): void {
 
 purgeTemporaryBooks();
 
+/** Sweeps store copies in the books bucket that no `BookSources` row points
+ *  at: imports whose crash landed between the file copy (`fs:import-source`)
+ *  and the book row (`create-reading-book`). The row-based purge above cannot
+ *  see them, so they would linger forever. Runs after the source-path
+ *  migration rewrites rows to `books/<name>` keys and after the temporary
+ *  purge, so every copy of a live book is referenced by then. */
+function sweepOrphanSourceFiles(): void {
+  const referenced = new Set(
+    (db.prepare("SELECT filePath FROM BookSources").all() as Array<{ filePath: string }>).map(
+      (row) => path.basename(row.filePath),
+    ),
+  );
+  for (const entry of store.list("books")) {
+    const fileName = entry.key.slice("books/".length);
+    if (referenced.has(fileName)) continue;
+    try {
+      store.delete("books", fileName);
+    } catch {
+      // Best effort — the next launch's sweep gets another chance.
+    }
+  }
+}
+
+sweepOrphanSourceFiles();
+
 function handleCreateBook(): { bookId: string; documentId: string } {
   const bookId = randomUUID();
   const documentId = randomUUID();

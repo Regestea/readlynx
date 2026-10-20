@@ -189,7 +189,12 @@ export function useExternalFileOpen(handlers: ExternalOpenHandlers) {
         temporary: !addToLibrary,
       })
       .catch(() => null);
-    if (!result) return;
+    if (!result) {
+      // The book row never landed: delete the store copy it would have
+      // pointed at, so a failed import leaves no orphan file behind.
+      await bridge.deleteStoredSource?.(imported).catch(() => false);
+      return;
+    }
     await bridge.db.markReadingStateOpened(result.bookId).catch(() => false);
     open(result.bookId);
     // A temporary book is never shown on the shelf, so its cover would only

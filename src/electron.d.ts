@@ -77,6 +77,9 @@ declare global {
       fileIdentity(sourcePath: string): Promise<{ fileSize: number; fileHash: string } | null>;
       /** Overwrites an imported `books/<uuid>` copy with fresh outside bytes. */
       replaceSource(options: { storedPath: string; sourcePath: string }): Promise<boolean>;
+      /** Deletes an imported `books/<uuid>` copy whose book row never landed
+       *  (create failure) so the store keeps no orphan file. */
+      deleteStoredSource(storedPath: string): Promise<boolean>;
       /** OS "Open with" events (file association / double-click). */
       onOpenFile(callback: (filePath: string) => void): () => void;
       /** Cold-start file queued before the renderer mounted. */

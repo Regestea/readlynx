@@ -37,6 +37,7 @@ contextBridge.exposeInMainWorld("readlynx", {
   importSource: (options) => ipcRenderer.invoke("fs:import-source", options),
   fileIdentity: (sourcePath) => ipcRenderer.invoke("fs:file-identity", sourcePath),
   replaceSource: (options) => ipcRenderer.invoke("fs:replace-source", options),
+  deleteStoredSource: (storedPath) => ipcRenderer.invoke("fs:delete-stored-source", storedPath),
   /** OS "Open with" delivery: pushed while running, pulled on cold start. */
   onOpenFile: (callback) => {
     const listener = (_event, filePath) => callback(filePath);

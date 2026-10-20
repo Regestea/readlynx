@@ -13,7 +13,11 @@
 
 export type ScrollViewKind = "epub-orig" | "md-orig" | "trans";
 
-const PREFIX = "readlynx:scroll:v1";
+/** Namespace of every scroll key in localStorage. Also used by the startup
+ *  sweep that drops entries whose book is gone. */
+export const SCROLL_MEMORY_PREFIX = "readlynx:scroll:v1";
+
+const PREFIX = SCROLL_MEMORY_PREFIX;
 
 function keyFor(kind: ScrollViewKind, bookId: string, unit: string): string {
   return `${PREFIX}:${kind}:${bookId}:${unit}`;

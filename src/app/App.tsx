@@ -13,6 +13,7 @@ import type { CreateBookDetails } from "../features/home/components/CreateBookDi
 import { PdfCoverCapture } from "../features/home/components/PdfCoverCapture";
 import { useExternalFileOpen } from "../features/home/hooks/useExternalFileOpen";
 import { ReadingPage } from "../features/reading/ReadingPage";
+import { sweepStaleScrollMemory } from "../features/reading/staleScrollSweep";
 import type { BookListItem } from "../infrastructure/db/entities/types";
 import { ReadingProgress } from "../features/home/widgets/ReadingProgress/ReadingProgress";
 import { WeeklyStats } from "../features/home/widgets/WeeklyStats/WeeklyStats";
@@ -85,6 +86,16 @@ export default function App() {
       cancelled = true;
     };
   }, []);
+
+  /** Startup hygiene for the shell: scroll-ratio localStorage entries of
+   *  books that no longer exist (deleted books, and session-only "Open with"
+   *  imports purged at launch) linger forever without this. Reader windows
+   *  skip the sweep — the shell, the only window with a library, runs it
+   *  once when the role lands. */
+  useEffect(() => {
+    if (windowRole !== "main") return;
+    void sweepStaleScrollMemory();
+  }, [windowRole]);
 
   /** Opens a book in its own window. The main process focuses one already
    *  showing it rather than stacking a second copy. */

@@ -73,6 +73,9 @@ export function ReadBookDialog({ open, onClose, onConfirm }: ReadBookDialogProps
         coverImage: coverImageForSave,
       });
       if (!result) {
+        // The book row never landed: delete the store copy it would have
+        // pointed at, so a failed import leaves no orphan file behind.
+        void window.readlynx?.deleteStoredSource?.(imported);
         throw new Error("Could not create the book.");
       }
       resetForm();
