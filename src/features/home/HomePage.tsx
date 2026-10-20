@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { BookOpen, Languages, NotebookPen, Pin } from "lucide-react";
 import { AddModeCard } from "./widgets/AddModeCard/AddModeCard";
 import { Shelf } from "./widgets/Shelf/Shelf";
@@ -10,11 +10,16 @@ import { EditBookDialog } from "./components/EditBookDialog";
 import { Modal } from "../../components/ui/Modal/Modal";
 import { Button } from "../../components/ui/Button/Button";
 import { coverUrl } from "../../shared/coverUrl";
+import { useLibraryChanged } from "../../shared/libraryChanged";
 import type { Book, CoverStyle } from "../../shared/types";
 import type { BookListItem } from "../../infrastructure/db/entities/types";
 import styles from "./HomePage.module.css";
 
 interface HomePageProps {
+  /** When the library tab is the one in front. The page stays mounted behind
+   *  other tabs, so books created while it was hidden only get picked up on
+   *  the way back — this flag says when to look again. */
+  active?: boolean;
   onCreateBook?: (details: CreateBookDetails) => void;
   onOpenBook?: (bookId: string) => void;
   /** Opens a reading-kind book in the read-only reader. */
@@ -47,6 +52,7 @@ function toBook(row: BookListItem): Book {
 }
 
 export function HomePage({
+  active = false,
   onCreateBook,
   onOpenBook,
   onOpenReadingBook,
@@ -60,18 +66,34 @@ export function HomePage({
   const [bookToEdit, setBookToEdit] = useState<Book | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  useEffect(() => {
-    const db = window.readlynx?.db;
-    if (!db) return;
-    let cancelled = false;
-    void db.listBooks().then((rows) => {
-      if (cancelled) return;
-      setBooks(rows.map(toBook));
-    });
-    return () => {
-      cancelled = true;
-    };
+  /** One shelf reload, reused by every refresh trigger: the first mount,
+   *  coming back to the library tab, the change registry, and the dialogs
+   *  here that create books and should show them at once. */
+  const loadBooks = useCallback(() => {
+    void window.readlynx?.db
+      .listBooks()
+      .then((rows) => {
+        setBooks(rows.map(toBook));
+      })
+      .catch(() => {
+        // Nothing to do — the shelf keeps what it has.
+      });
   }, []);
+
+  useEffect(() => {
+    void loadBooks();
+  }, [loadBooks]);
+
+  /** The tab stays mounted behind other tabs, so a book added while another
+   *  tab was in front only shows up when the library tab returns. */
+  useEffect(() => {
+    if (active) void loadBooks();
+  }, [active, loadBooks]);
+
+  /** Wakes for book writes performed outside this page (silent "Open with"
+   *  import, promotion, cover capture): the reload above would otherwise
+   *  happen only on a tab switch. */
+  useLibraryChanged(loadBooks);
 
   const handleConfirmDelete = async () => {
     if (!bookToDelete || !window.readlynx) return;
@@ -204,6 +226,7 @@ export function HomePage({
         onConfirm={(bookId) => {
           setTranslateOpen(false);
           onOpenBook?.(bookId);
+          void loadBooks();
         }}
       />
 
@@ -213,6 +236,7 @@ export function HomePage({
         onConfirm={(bookId) => {
           setReadOpen(false);
           onOpenReadingBook?.(bookId);
+          void loadBooks();
         }}
       />
 

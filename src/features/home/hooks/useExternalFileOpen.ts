@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { bookTitleFromPath, detectBookSourceType } from "../../../shared/bookFiles";
+import { notifyLibraryChanged } from "../../../shared/libraryChanged";
 import type { OpenModeAnswer } from "../../../components/ui/OpenModeDialog/OpenModeDialog";
 import type { AppSettingsEntity, BookSourceType } from "../../../infrastructure/db/entities";
 
@@ -112,6 +113,7 @@ export function useExternalFileOpen(handlers: ExternalOpenHandlers) {
             key: Date.now(),
           });
         }
+        if (promoted) notifyLibraryChanged();
       }
       if (byHash.originalPath !== sourcePath) {
         await bridge.db.updateBookOriginalPath(byHash.bookId, sourcePath).catch(() => false);
@@ -136,6 +138,7 @@ export function useExternalFileOpen(handlers: ExternalOpenHandlers) {
             key: Date.now(),
           });
         }
+        if (promoted) notifyLibraryChanged();
       }
       let storedPath = byOrigin.filePath;
       const replaced = await bridge.replaceSource({ storedPath, sourcePath }).catch(() => false);
@@ -196,6 +199,11 @@ export function useExternalFileOpen(handlers: ExternalOpenHandlers) {
       return;
     }
     await bridge.db.markReadingStateOpened(result.bookId).catch(() => false);
+    if (addToLibrary) {
+      // The shelf never learns about the import on its own — say it now so
+      // the tab in front (the library itself) shows the book right away.
+      notifyLibraryChanged();
+    }
     open(result.bookId);
     // A temporary book is never shown on the shelf, so its cover would only
     // be written to be deleted alongside it.

@@ -26,6 +26,7 @@ import { OpenModeDialog } from "../components/ui/OpenModeDialog/OpenModeDialog";
 import type { OpenModeAnswer } from "../components/ui/OpenModeDialog/OpenModeDialog";
 import { HOME_TAB, createTabId, readingTabId, useTabs } from "./tabs";
 import type { LibrarySection, Tab } from "./tabs";
+import { notifyLibraryChanged } from "../shared/libraryChanged";
 import { useReaderFullscreen } from "../shared/readerFullscreen";
 import styles from "./App.module.css";
 
@@ -295,6 +296,7 @@ export default function App() {
           <>
             <Header onSelectBook={handleOpenBookFromSearch} />
             <HomePage
+              active={tab.id === activeId}
               onCreateBook={(details) => openCreateBook(null, details)}
               onOpenBook={(bookId) => openCreateBook(bookId, null)}
               onOpenReadingBook={openReadingBook}
@@ -410,7 +412,16 @@ export default function App() {
             defaultAddToLibrary={openPrompt?.defaultAddToLibrary ?? true}
             onChoose={chooseOpenMode}
           />
-          {coverJob && <PdfCoverCapture job={coverJob} onDone={clearCoverJob} />}
+          {coverJob && (
+            <PdfCoverCapture
+              job={coverJob}
+              onDone={() => {
+                clearCoverJob();
+                // The cover just landed on the row; let the shelf repaint it.
+                notifyLibraryChanged();
+              }}
+            />
+          )}
           <ThemeColorResetGuard />
         </UpdaterProvider>
       </ToastProvider>
