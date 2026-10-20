@@ -23,6 +23,9 @@ interface ModalProps {
   /** Stacks above a dialog that is already open (e.g. an export dialog opened
    *  from the Manage translations dialog). */
   raised?: boolean;
+  /** Closes the dialog when the dimmed overlay outside it is clicked. Off by
+   *  default so a stray click never discards work. */
+  closeOnOverlayClick?: boolean;
 }
 
 export function Modal({
@@ -34,6 +37,7 @@ export function Modal({
   header,
   wide = false,
   raised = false,
+  closeOnOverlayClick = false,
 }: ModalProps) {
   useEffect(() => {
     if (!open) return;
@@ -63,7 +67,7 @@ export function Modal({
   return createPortal(
     <div
       className={raised ? `${styles.overlay} ${styles.overlayRaised}` : styles.overlay}
-      onClick={onClose}
+      onClick={closeOnOverlayClick ? onClose : undefined}
     >
       <div
         role="dialog"
