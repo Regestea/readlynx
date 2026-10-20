@@ -112,6 +112,10 @@ interface CleanupEventContext {
  *  launch) without blocking the others. Events meant for the renderer are
  *  left for the shell window to consume. */
 export function processCleanupEvents({ db, store }: CleanupEventContext): void {
+  // Another process instance (the main-process store saves translation
+  // images) may have written entries after this worker booted; replaying
+  // from a stale manifest would miss them.
+  store.refreshManifest();
   const rows = db
     .prepare("SELECT id, type, payload FROM CleanupEvents ORDER BY createdAt, id")
     .all() as PendingRow[];

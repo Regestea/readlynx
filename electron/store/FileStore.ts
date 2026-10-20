@@ -71,6 +71,16 @@ export class FileStore {
     this.reconcileManifestWithDisk();
   }
 
+  /** Reloads the manifest from disk and reconciles it with the buckets.
+   *  For journal replays: a session writes files through the main-process
+   *  store singleton (translation image saves), so the worker's snapshot
+   *  from boot is out of date the moment a replay must enumerate things it
+   *  did not know about. */
+  refreshManifest(): void {
+    this.loadManifest();
+    this.reconcileManifestWithDisk();
+  }
+
   /** Adds manifest entries for files that exist on disk but are untracked
    *  (legacy installs, manual copies) and drops orphans. Preserves
    *  `createdAt` for already-tracked files. */
