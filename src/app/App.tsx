@@ -13,7 +13,10 @@ import type { CreateBookDetails } from "../features/home/components/CreateBookDi
 import { PdfCoverCapture } from "../features/home/components/PdfCoverCapture";
 import { useExternalFileOpen } from "../features/home/hooks/useExternalFileOpen";
 import { ReadingPage } from "../features/reading/ReadingPage";
-import { sweepStaleScrollMemory } from "../features/reading/staleScrollSweep";
+import {
+  consumeRendererCleanupEvents,
+  sweepStaleScrollMemory,
+} from "../features/reading/staleScrollSweep";
 import type { BookListItem } from "../infrastructure/db/entities/types";
 import { ReadingProgress } from "../features/home/widgets/ReadingProgress/ReadingProgress";
 import { WeeklyStats } from "../features/home/widgets/WeeklyStats/WeeklyStats";
@@ -87,14 +90,15 @@ export default function App() {
     };
   }, []);
 
-  /** Startup hygiene for the shell: scroll-ratio localStorage entries of
-   *  books that no longer exist (deleted books, and session-only "Open with"
-   *  imports purged at launch) linger forever without this. Reader windows
-   *  skip the sweep — the shell, the only window with a library, runs it
-   *  once when the role lands. */
+  /** Startup hygiene for the shell: the cleanup journal hands this window
+   *  every book id deleted since the last boot (purged temporary imports
+   *  included) and the scroll-ratio entries of each are dropped; the sweep
+   *  after it only answers for ids older than the journal. Reader windows
+   *  skip this — the shell, the only window with a library, runs it once
+   *  when the role lands. */
   useEffect(() => {
     if (windowRole !== "main") return;
-    void sweepStaleScrollMemory();
+    void consumeRendererCleanupEvents().finally(() => void sweepStaleScrollMemory());
   }, [windowRole]);
 
   /** Opens a book in its own window. The main process focuses one already

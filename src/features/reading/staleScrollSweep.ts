@@ -1,9 +1,33 @@
-import { SCROLL_MEMORY_PREFIX } from "./scrollMemory";
+import { forgetBookScrollMemory, SCROLL_MEMORY_PREFIX } from "./scrollMemory";
 
 /** A version-4 uuid, as every book id and therefore every scroll key
  *  carries. Captured from the key rather than split on ":" — the unit part
  *  (EPUB chunks, chapter keys) may contain colons itself. */
 const BOOK_ID_PATTERN = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+
+/** Consumes the cleanup journal's renderer events: every deletion of a book
+ *  row (temporary purge or manual) recorded a `renderer-remove-scroll-keys`
+ *  event transactionally, and the shell window is the only place able to
+ *  act on it. Failed tells are retried next boot (dropping a key that no
+ *  longer exists is a no-op), and acknowledged event rows are dropped from
+ *  the journal entirely. */
+export async function consumeRendererCleanupEvents(): Promise<void> {
+  const db = window.readlynx?.db;
+  if (!db?.listRendererCleanupEvents) return;
+  const events = await db.listRendererCleanupEvents().catch(() => []);
+  if (events.length === 0) return;
+  for (const { bookId } of events) forgetBookScrollMemory(bookId);
+  await db.ackCleanupEvents?.(events.map((event) => event.id)).catch(() => false);
+}
+
+/** Journal events cover every deletion since the journal existed; this
+ *  sweep still walks the leftover keys from deletions performed before
+ *  then, and it answers book ids whose keys landed without a matching
+ *  event for any other reason. Runs once per shell boot, before any
+ *  temporary import of the session exists — and a key's first write
+ *  happens long after its book row landed, so `getBook` answers cover live
+ *  temporary books (the lookup has no temporary filter) while purged ids
+ *  come back null. Returns how many entries were dropped. */
 
 /** Deletes scroll-ratio localStorage entries whose book no longer has a row:
  *  deleted books, and session-only "Open with" imports purged at launch.

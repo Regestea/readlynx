@@ -59,6 +59,21 @@ export function saveScrollRatio(
   }
 }
 
+/** Drops every stored ratio of one book: the cleanup journal handed its id
+ *  over after the book row was deleted, desktop-wide. */
+export function forgetBookScrollMemory(bookId: string): void {
+  try {
+    const marker = `:${bookId}:`;
+    for (let index = localStorage.length - 1; index >= 0; index -= 1) {
+      const key = localStorage.key(index);
+      if (!key || !key.startsWith(`${PREFIX}:`) || !key.includes(marker)) continue;
+      localStorage.removeItem(key);
+    }
+  } catch {
+    // storage unavailable — nothing to forget.
+  }
+}
+
 /** Ratio from a scrollable element's current offset (null when not scrollable). */
 export function markdownRatio(element: HTMLElement | null): number | null {
   if (!element) return null;

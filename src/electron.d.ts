@@ -9,6 +9,7 @@ import type {
   ReadingProgressRow,
   ReadingWeekSummary,
   RefreshBookSourcePayload,
+  RendererCleanupEvent,
   SaveDocumentPayload,
   UpdateBookPayload,
 } from "./infrastructure/db/entities";
@@ -212,6 +213,12 @@ declare global {
           instruction: CustomInstructionEntity,
         ): Promise<boolean>;
         deleteCustomInstruction(id: string): Promise<boolean>;
+      /** Journal events addressed to the renderer: book ids whose scroll
+       *  keys were orphaned by a deletion performed while this window was
+       *  not around (purged temporary imports included). */
+      listRendererCleanupEvents(): Promise<RendererCleanupEvent[]>;
+      /** Confirms the events that were performed so their rows are dropped. */
+      ackCleanupEvents(ids: string[]): Promise<boolean>;
       };
       ai: {
         testConnection(input: {

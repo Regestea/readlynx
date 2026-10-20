@@ -1,6 +1,7 @@
 import { BrowserWindow, dialog, ipcMain } from "electron";
 import { randomUUID } from "node:crypto";
 import type { FileStore } from "../store/FileStore.ts";
+import type { CleanupEventType } from "../../src/infrastructure/db/entities/types.ts";
 
 /** Upper bound for an "Open with" file (2 GiB). Anything larger is rejected
  *  before hashing so a stray huge file can't stall the app or the store. */
@@ -17,9 +18,13 @@ const COVER_TARGET_WIDTH = 1240;
 
 interface FsIpcDeps {
   getStore: () => FileStore;
+  /** Records a cleanup-journal event through the db worker. Importing
+   *  journals the copy BEFORE writing it, so a crash can only leave the
+   *  event behind (replayed), never an untracked orphan file. */
+  emitCleanupEvent: (type: CleanupEventType, event: unknown) => Promise<unknown>;
 }
 
-export function registerFsIpc({ getStore }: FsIpcDeps) {
+export function registerFsIpc({ getStore, emitCleanupEvent }: FsIpcDeps) {
   ipcMain.handle("fs:read-bytes", async (_event, filePath: string) => {
     try {
       const store = getStore();
@@ -68,7 +73,11 @@ export function registerFsIpc({ getStore }: FsIpcDeps) {
   });
 
   /** Copies the chosen PDF/EPUB/Markdown into the books bucket and returns the
-   *  bucket-relative key (e.g. `"books/<uuid>.pdf"`), or null on error. */
+   *  bucket-relative key (e.g. `"books/<uuid>.pdf"`), or null on error. The
+   *  copy is journaled as an unclaimed `source-imported` event BEFORE the
+   *  file is written: the create-book handlers claim the event in the same
+   *  transaction as the row insert, and a replay deletes any copy whose
+   *  create never happened — so no import can leave an orphan behind. */
   ipcMain.handle("fs:import-source", async (_event, options: { sourcePath: string; sourceType: string }) => {
     try {
       const extension =
@@ -82,10 +91,14 @@ export function registerFsIpc({ getStore }: FsIpcDeps) {
       if (!extension) return null;
       const fs = await import("node:fs/promises");
       const sourceData = await fs.readFile(options.sourcePath);
-      const store = getStore();
+      if (sourceData.byteLength <= 0) return null;
       const key = `${randomUUID()}${extension}`;
+      const storedPath = `books/${key}`;
+      // Event first, committed before the file lands.
+      await emitCleanupEvent("source-imported", { key: storedPath });
+      const store = getStore();
       store.put("books", key, sourceData);
-      return `books/${key}`;
+      return storedPath;
     } catch {
       return null;
     }

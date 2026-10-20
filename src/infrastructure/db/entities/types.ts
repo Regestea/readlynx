@@ -68,6 +68,64 @@ export interface RefreshBookSourcePayload {
   originalPath: string | null;
 }
 
+/** Cleanup journal event kinds. Every event describes work outside this
+ *  database (store files, renderer localStorage) whose references were
+ *  removed in the same transaction that recorded the event; a replay pass
+ *  at each launch performs the work and deletes the row. Handlers treat
+ *  replay as possible at any time, so each one is idempotent: work that was
+ *  already done (or never became necessary) completes as a no-op.
+ *
+ *  - `source-imported`: the store copy was written before its book row
+ *    landed (recorded by `fs:import-source` before the copy); claimed by
+ *    the create handlers' transaction, otherwise the unclaimed copy is
+ *    deleted at replay.
+ *  - `remove-files`: store keys (e.g. `books/<name>`, `covers/<name>`) or
+ *    legacy absolute paths whose owning rows no longer exist.
+ *  - `remove-translation-images`: cached translation page images under
+ *    `translation-images/<bookId>/`, optionally narrowed to a chunk-key
+ *    prefix when single units are retranslated.
+ *  - `renderer-remove-scroll-keys`: scroll-ratio keys in the renderer's
+ *    localStorage, consumed by the shell at startup. */
+export type CleanupEventType =
+  | "source-imported"
+  | "remove-files"
+  | "remove-translation-images"
+  | "renderer-remove-scroll-keys";
+
+export interface SourceImportedPayload {
+  /** Store key of the copied file, e.g. `books/<uuid>.pdf`. */
+  key: string;
+}
+
+export interface RemoveFilesPayload {
+  paths: string[];
+}
+
+export interface RemoveTranslationImagesPayload {
+  bookId: string;
+  /** Slice to delete instead of the whole book — a translated chunk key
+   *  prefix (a chapter) or PDF page path (a page). */
+  prefix?: string;
+}
+
+export interface RemoveRendererScrollKeysPayload {
+  bookId: string;
+}
+
+/** A pending journal row. `payload` is the JSON-encoded payload shape above. */
+export interface CleanupEventEntity {
+  id: string;
+  type: CleanupEventType;
+  payload: string;
+  createdAt: string;
+}
+
+/** Row handed to the renderer for `renderer-remove-scroll-keys` events. */
+export interface RendererCleanupEvent {
+  id: string;
+  bookId: string;
+}
+
 /** Result of `db:create-reading-book`. There is no document. */
 export interface CreateReadingBookResult {
   bookId: string;

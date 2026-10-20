@@ -129,6 +129,8 @@ contextBridge.exposeInMainWorld("readlynx", {
       ipcRenderer.invoke("db:custom-instruction-update", instruction),
     deleteCustomInstruction: (id) =>
       ipcRenderer.invoke("db:custom-instruction-delete", id),
+    listRendererCleanupEvents: () => ipcRenderer.invoke("db:cleanup-list-renderer"),
+    ackCleanupEvents: (ids) => ipcRenderer.invoke("db:cleanup-ack", ids),
   },
   ai: {
     testConnection: (input) => ipcRenderer.invoke("ai:test", input),

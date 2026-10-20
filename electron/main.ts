@@ -237,7 +237,17 @@ app.whenReady().then(() => {
   dbPath = path.join(app.getPath("userData"), "readlynx.db");
   storeRoot = store.rootPath;
   openDb();
-  registerFsIpc({ getStore });
+  registerFsIpc({
+    getStore,
+    emitCleanupEvent: (type, event) => {
+      // `dbClient` is swapped by backup/restore; the closure reads whichever
+      // worker is live at the moment. No worker → no journal → the import
+      // aborts instead of writing an untracked file.
+      const client = dbClient;
+      if (!client) throw new Error("The database worker is not running.");
+      return client.emitCleanupEvent(type, event);
+    },
+  });
   registerOcrIpc({ getStore });
   registerAiIpc();
   registerSystemFontsIpc();

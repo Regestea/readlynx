@@ -176,6 +176,21 @@ CREATE TABLE IF NOT EXISTS ReadingGoals (
   id          INTEGER PRIMARY KEY CHECK (id = 1),
   goalMinutes INTEGER NOT NULL DEFAULT 30
 );
+
+-- Journal of deferred cleanup work whose effect lies outside this database
+-- (store files, renderer localStorage). Events are recorded in the same
+-- transaction as the row change that removes the references, replayed from
+-- here at every launch, and the completed row is deleted entirely — the
+-- table only ever holds pending work, so it cannot grow.
+CREATE TABLE IF NOT EXISTS CleanupEvents (
+  id        TEXT PRIMARY KEY,
+  type      TEXT NOT NULL,
+  payload   TEXT NOT NULL,
+  createdAt TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_cleanup_events_type
+  ON CleanupEvents (type);
 `;
 
 /** Runs `fn` with SQLite's foreign-key enforcement switched off, restoring it

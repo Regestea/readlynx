@@ -156,4 +156,8 @@ export function registerDbIpc(db: DbWorkerClient) {
   handle("db:custom-instruction-delete", (_event, id: string) =>
     db.deleteCustomInstruction(id),
   );
+
+  handle("db:cleanup-list-renderer", () => db.listRendererCleanupEvents());
+
+  handle("db:cleanup-ack", (_event, ids: string[]) => db.ackRendererCleanupEvents(ids));
 }

@@ -15,12 +15,14 @@ import type { ReadingStateInput, ReaderSettingsInput } from "../../src/infrastru
 import type {
   BookListItem,
   BookSourceLookupResult,
+  CleanupEventType,
   CreateBookResult,
   CreateReadingBookPayload,
   CreateReadingBookResult,
   CreateTranslatedBookPayload,
   GetBookResult,
   RefreshBookSourcePayload,
+  RendererCleanupEvent,
   SaveDocumentPayload,
   UpdateBookPayload,
 } from "../../src/infrastructure/db/entities/types.ts";
@@ -286,6 +288,23 @@ export class DbWorkerClient {
    *  (SQLite backup API — safe with an open WAL connection). */
   createBackup(destinationPath: string): Promise<boolean> {
     return this.exec("backup-db", destinationPath);
+  }
+
+  /** Records a cleanup-journal event. Used by the main process (which alone
+   *  talks to this method) before performing the journaled side effect. */
+  emitCleanupEvent(type: CleanupEventType, event: unknown): Promise<boolean> {
+    return this.exec("cleanup-emit", { type, event });
+  }
+
+  /** Pending cleanup events addressed to the renderer (the shell window
+   *  consumes them on mount). */
+  listRendererCleanupEvents(): Promise<RendererCleanupEvent[]> {
+    return this.exec("cleanup-list-renderer");
+  }
+
+  /** Acknowledges the renderer-performed cleanup events. */
+  ackRendererCleanupEvents(ids: string[]): Promise<boolean> {
+    return this.exec("cleanup-ack", ids);
   }
 
   /** Terminates the worker. Awaited by backup/restore so the SQLite file

@@ -5,7 +5,7 @@ import { parentPort, workerData } from "node:worker_threads";
 import { createConnection } from "../../src/infrastructure/db/connection.ts";
 import { applySchema } from "../../src/infrastructure/db/schema.ts";
 import { seedDatabase } from "../../src/infrastructure/db/seed/seedDatabase.ts";
-import type { CreateReadingBookPayload, CreateTranslatedBookPayload, SaveDocumentPayload, UpdateBookPayload } from "../../src/infrastructure/db/entities/types.ts";
+import type { CleanupEventType, CreateReadingBookPayload, CreateTranslatedBookPayload, SaveDocumentPayload, UpdateBookPayload } from "../../src/infrastructure/db/entities/types.ts";
 import type { AiModel, CustomInstructionEntity, TranslationEntity, TranslationMethod } from "../../src/infrastructure/db/entities/index.ts";
 import type { ReaderViewer } from "../../src/infrastructure/db/entities/index.ts";
 import type { ReadingStateInput, ReaderSettingsInput } from "../../src/infrastructure/db/repositories/index.ts";
@@ -24,9 +24,14 @@ import {
   TranslationRepository,
 } from "../../src/infrastructure/db/repositories/index.ts";
 import { EMPTY_DOCUMENT_STATE } from "../../src/infrastructure/db/repositories/DocumentRepository.ts";
-import { migrateLegacyCovers, persistCoverImage, removeCoverFile } from "./covers.ts";
-import { removeSourceFile } from "./sources.ts";
-import { deleteAllBookTranslationImages, deleteTranslationImages } from "../store/translationImageStore.ts";
+import { migrateLegacyCovers, persistCoverImage } from "./covers.ts";
+import {
+  ackRendererCleanupEvents,
+  claimSourceImportedEvent,
+  emitCleanupEvent,
+  listRendererCleanupEvents,
+  processCleanupEvents,
+} from "./cleanupEvents.ts";
 import { FileStore } from "../store/FileStore.ts";
 
 /** Migrates existing absolute `BookSources.filePath` values to relative
@@ -105,8 +110,12 @@ const customInstructions = new CustomInstructionRepository(db);
 
 /** Purges the session-only "Open with" imports (`Books.temporary = 1`),
  *  exactly like a manual delete would: the row (its document, reading state,
- *  translations and reading events all cascade), the stored source copy, the
- *  cover file and any cached translation images.
+ *  translations and reading events all cascade) plus journal events for
+ *  everything that lives outside the database — the stored source copy, the
+ *  cover file, cached translation images and the renderer's scroll-memory
+ *  keys. A replay pass processes the events right after this, so a clean
+ *  shutdown looks identical to before; replaying later (because THIS run
+ *  crashed mid-purge) performs the file work instead.
  *
  *  Runs once at startup, before any renderer mounts: a temporary book lives
  *  only as long as the session that opened it (it survives that session so
@@ -121,14 +130,34 @@ function purgeTemporaryBooks(): void {
     const source = bookSources.findByBookId(row.id);
     db.transaction(() => {
       books.remove(row.id);
+      emitBookRemovalEvents(row.id, row.coverImage, source?.filePath ?? null);
     })();
-    removeCoverFile(row.coverImage, store);
-    if (source) removeSourceFile(source.filePath, store);
-    deleteAllBookTranslationImages(store, row.id);
   }
 }
 
+/** Journals one book's out-of-database remains. Called inside the deletion
+ *  transaction, so the event survives even if the process dies before the
+ *  file-side work starts. */
+function emitBookRemovalEvents(
+  bookId: string,
+  coverImage: string | null,
+  sourceFilePath: string | null,
+): void {
+  const paths: string[] = [];
+  if (sourceFilePath) paths.push(sourceFilePath);
+  if (coverImage) paths.push(coverImage);
+  if (paths.length > 0) emitCleanupEvent(db, "remove-files", { paths });
+  emitCleanupEvent(db, "remove-translation-images", { bookId });
+  emitCleanupEvent(db, "renderer-remove-scroll-keys", { bookId });
+}
+
 purgeTemporaryBooks();
+
+/** Replays every pending journal event: pending file-side deletions from
+ *  this run's purge (and any crash leftovers with SQLite, files and
+ *  renderer events from previous sessions) are performed and their rows
+ *  deleted. A clean session leaves nothing pending at this point. */
+processCleanupEvents({ db, store });
 
 /** Sweeps store copies in the books bucket that no `BookSources` row points
  *  at: imports whose crash landed between the file copy (`fs:import-source`)
@@ -182,6 +211,7 @@ function handleCreateTranslatedBook(payload: CreateTranslatedBookPayload): {
     documentSettings.insert(documentId);
     if (storedCover) books.update(bookId, { title: payload.title, coverImage: storedCover });
     bookSources.insert(sourceId, bookId, payload.sourceType, payload.sourcePath);
+    claimSourceImportedEvent(db, payload.sourcePath);
   })();
   return { bookId, documentId };
 }
@@ -202,6 +232,7 @@ function handleCreateReadingBook(payload: CreateReadingBookPayload): { bookId: s
       fileSize: payload.fileSize ?? null,
       originalPath: payload.originalPath ?? null,
     });
+    claimSourceImportedEvent(db, payload.sourcePath);
   })();
   return { bookId };
 }
@@ -220,6 +251,7 @@ function handleRefreshBookSource(payload: {
 }): boolean {
   const book = books.findById(payload.bookId);
   if (!book) return false;
+  const previous = bookSources.findByBookId(payload.bookId);
   db.transaction(() => {
     bookSources.updateIdentity(payload.bookId, {
       filePath: payload.sourcePath,
@@ -227,7 +259,15 @@ function handleRefreshBookSource(payload: {
       fileSize: payload.fileSize,
       originalPath: payload.originalPath,
     });
+    // A re-import gives the book a fresh store key; the old copy it just
+    // stopped referencing goes through the journal too.
+    if (previous && previous.filePath !== payload.sourcePath) {
+      emitCleanupEvent(db, "remove-files", { paths: [previous.filePath] });
+    }
     db.prepare("DELETE FROM Translations WHERE bookId = ?").run(payload.bookId);
+    // The old images are unreferenced as soon as these rows die; the
+    // removal rides in the same transaction so a crash here replays it.
+    emitCleanupEvent(db, "remove-translation-images", { bookId: payload.bookId });
     db.prepare(
       `UPDATE ReadingState SET
          currentPage = 1,
@@ -242,7 +282,7 @@ function handleRefreshBookSource(payload: {
        WHERE bookId = ?`,
     ).run(payload.bookId);
   })();
-  deleteAllBookTranslationImages(store, payload.bookId);
+  processCleanupEvents({ db, store });
   return true;
 }
 
@@ -284,19 +324,20 @@ function handleGetBook(bookId: string) {
   return { book, document, settings, source };
 }
 
-/** Deletes a book and everything that cascades from it. The cover file and
- *  any imported source file are removed from disk too. Returns false when the
- *  book does not exist. */
+/** Deletes a book and everything that cascades from it, and journals the
+ *  out-of-database remains (stored source copy, cover file, cached
+ *  translation images, renderer scroll keys) inside the deletion
+ *  transaction before replaying them. Returns false when the book does not
+ *  exist. */
 function handleDeleteBook(bookId: string): boolean {
   const book = books.findById(bookId);
   if (!book) return false;
   const source = bookSources.findByBookId(bookId);
   db.transaction(() => {
     books.remove(bookId);
+    emitBookRemovalEvents(bookId, book.coverImage, source?.filePath ?? null);
   })();
-  removeCoverFile(book.coverImage, store);
-  if (source) removeSourceFile(source.filePath, store);
-  deleteAllBookTranslationImages(store, bookId);
+  processCleanupEvents({ db, store });
   return true;
 }
 
@@ -466,8 +507,11 @@ const handlers: Record<string, (payload: unknown) => unknown> = {
       chunkKeyPrefix?: string | null;
     };
     translations.deleteWhere(bookId, method ?? null, pageNumber ?? null, chunkKeyPrefix ?? null);
+    // Rows of the removed units are gone — journal their cached images in
+    // the same breath and replay right away so the disk follows the rows.
     if (chunkKeyPrefix) {
-      deleteTranslationImages(store, bookId, chunkKeyPrefix);
+      emitCleanupEvent(db, "remove-translation-images", { bookId, prefix: chunkKeyPrefix });
+      processCleanupEvents({ db, store });
     }
     return true;
   },
@@ -490,6 +534,20 @@ const handlers: Record<string, (payload: unknown) => unknown> = {
     await db.backup(payload as string);
     return true;
   },
+  /** Records a cleanup event before a side effect happens. Used by the
+   *  main-process import handler, which journals the copied file before the
+   *  copy starts so a crash can only ever leave the event behind, never an
+   *  untracked orphan copy. */
+  "cleanup-emit": (payload) => {
+    const { type, event } = payload as { type: CleanupEventType; event: unknown };
+    emitCleanupEvent(db, type, event);
+    return true;
+  },
+  /** Pending events addressed to the renderer (consumed by the shell
+   *  window, which alone can touch its localStorage). */
+  "cleanup-list-renderer": () => listRendererCleanupEvents(db),
+  /** Drops the event rows the renderer has performed. */
+  "cleanup-ack": (payload) => ackRendererCleanupEvents(db, (payload as string[]) ?? []),
 };
 
 port.on("message", (request: DbRequest) => {
