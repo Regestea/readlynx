@@ -130,6 +130,12 @@ export class DbWorkerClient {
     return this.exec("set-book-pinned", { bookId, pinned });
   }
 
+  /** Flips a book between a permanent library entry and a session-only
+   *  copy (the open dialog's keep choice for "Open with" duplicates). */
+  setBookTemporary(bookId: string, temporary: boolean): Promise<boolean> {
+    return this.exec("set-book-temporary", { bookId, temporary });
+  }
+
   getBook(bookId: string): Promise<GetBookResult | null> {
     return this.exec("get-book", bookId);
   }

@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS Books (
   kind       TEXT NOT NULL DEFAULT 'created',
   isPinned   INTEGER NOT NULL DEFAULT 0,
   pinnedAt   TEXT,
+  temporary  INTEGER NOT NULL DEFAULT 0,
   createdAt  TEXT NOT NULL DEFAULT (datetime('now')),
   updatedAt  TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -223,6 +224,8 @@ export function applySchema(db: Database.Database): void {
     ensureReaderDefaultsBlockColumns(db);
     ensureReaderSoftBookColorsColumn(db);
     ensureBookPinColumns(db);
+    ensureBookTemporaryColumn(db);
+    ensureAppSettingsOpenWithColumns(db);
   });
 }
 
@@ -763,6 +766,32 @@ function ensureBookPinColumns(db: Database.Database): void {
   db.transaction(() => {
     if (!has("isPinned")) db.exec("ALTER TABLE Books ADD COLUMN isPinned INTEGER NOT NULL DEFAULT 0");
     if (!has("pinnedAt")) db.exec("ALTER TABLE Books ADD COLUMN pinnedAt TEXT");
+  })();
+}
+
+/** Databases created before session-only "Open with" imports lack
+ *  `temporary` on `Books`. Adds it defaulting to off (0); existing rows stay
+ *  permanent library entries. */
+function ensureBookTemporaryColumn(db: Database.Database): void {
+  const columns = db.pragma("table_info(Books)") as Array<{ name: string }>;
+  if (columns.some((entry) => entry.name === "temporary")) return;
+  db.exec("ALTER TABLE Books ADD COLUMN temporary INTEGER NOT NULL DEFAULT 0");
+}
+
+/** Databases created before the per-file-type "add to library" switches
+ *  existed lack the `openWithAdd*` columns on `AppSettings`. Adds them
+ *  defaulting to on (1): as before, every external open joins the library
+ *  unless the user opted a file type into temporary sessions. */
+function ensureAppSettingsOpenWithColumns(db: Database.Database): void {
+  const columns = db.pragma("table_info(AppSettings)") as Array<{ name: string }>;
+  const has = (name: string) => columns.some((entry) => entry.name === name);
+  db.transaction(() => {
+    if (!has("openWithAddPdf"))
+      db.exec("ALTER TABLE AppSettings ADD COLUMN openWithAddPdf INTEGER NOT NULL DEFAULT 1");
+    if (!has("openWithAddEpub"))
+      db.exec("ALTER TABLE AppSettings ADD COLUMN openWithAddEpub INTEGER NOT NULL DEFAULT 1");
+    if (!has("openWithAddMarkdown"))
+      db.exec("ALTER TABLE AppSettings ADD COLUMN openWithAddMarkdown INTEGER NOT NULL DEFAULT 1");
   })();
 }
 

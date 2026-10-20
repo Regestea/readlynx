@@ -25,7 +25,9 @@ export interface CreateTranslatedBookPayload {
 /** Payload of `db:create-reading-book`: like `create-translated-book` but the
  *  book has no document — it opens in the read-only viewer instead of the
  *  editor. The optional identity lets "Open with" dedupe by content and
- *  remember where the file came from. */
+ *  remember where the file came from. `temporary` marks a session-only
+ *  import (its file type's add-to-library switch is off): the book is
+ *  hidden from the shelf and removed at the next launch. */
 export interface CreateReadingBookPayload {
   title: string;
   sourceType: BookSourceType;
@@ -37,9 +39,12 @@ export interface CreateReadingBookPayload {
   fileSize?: number | null;
   /** Absolute OS path the file was picked from. */
   originalPath?: string | null;
+  /** Session-only import — purge at the next app launch, skip the shelf. */
+  temporary?: boolean;
 }
 
-/** A `BookSources` row returned by the identity lookups. */
+/** A `BookSources` row returned by the identity lookups (joined with the
+ *  owning book's session flag). */
 export interface BookSourceLookupResult {
   id: string;
   bookId: string;
@@ -48,6 +53,9 @@ export interface BookSourceLookupResult {
   fileHash: string | null;
   fileSize: number | null;
   originalPath: string | null;
+  /** 1 = session-only copy (hidden from the shelf, removed at the next
+   *  launch); 0 = a permanent library entry. */
+  temporary: number;
 }
 
 /** Payload of `db:refresh-book-source`: the book keeps its id/title, but

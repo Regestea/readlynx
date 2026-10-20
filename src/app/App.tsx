@@ -19,7 +19,7 @@ import { WeeklyStats } from "../features/home/widgets/WeeklyStats/WeeklyStats";
 import { UpdaterProvider } from "../features/updater/UpdaterProvider";
 import { getCloseFlushes } from "../shared/closeFlush";
 import { OpenModeDialog } from "../components/ui/OpenModeDialog/OpenModeDialog";
-import type { OpenMode } from "../components/ui/OpenModeDialog/OpenModeDialog";
+import type { OpenModeAnswer } from "../components/ui/OpenModeDialog/OpenModeDialog";
 import { HOME_TAB, createTabId, readingTabId, useTabs } from "./tabs";
 import type { LibrarySection, Tab } from "./tabs";
 import { useReaderFullscreen } from "../shared/readerFullscreen";
@@ -56,12 +56,16 @@ export default function App() {
   /** Set by the editor when it goes split, which wants the sidebar out of the
    *  way. Every other tab derives its own width from its kind. */
   const [editorSplit, setEditorSplit] = useState(false);
-  /** The file an external open is waiting on an answer for. */
-  const [openPrompt, setOpenPrompt] = useState<string | null>(null);
+  /** The file an external open is waiting on an answer for: the name shown in
+   *  the dialog plus the checkbox's default (the type's settings switch). */
+  const [openPrompt, setOpenPrompt] = useState<{
+    fileName: string;
+    defaultAddToLibrary: boolean;
+  } | null>(null);
   /** Which section of the library tab the sidebar points at. Kept here rather
    *  than as tabs of its own — see `handleNavigate`. */
   const [section, setSection] = useState<LibrarySection>("library");
-  const openPromptAnswer = useRef<((mode: OpenMode) => void) | null>(null);
+  const openPromptAnswer = useRef<((answer: OpenModeAnswer) => void) | null>(null);
 
   useEffect(() => {
     const controls = window.readlynx?.windowControls;
@@ -89,21 +93,23 @@ export default function App() {
   }, []);
 
   /** Suspends `useExternalFileOpen` on a promise the dialog settles. Kept in a
-   *  ref so the handler object can change without re-registering the listener. */
+   *  ref so the handler object can change without re-registering the listener.
+   *  The checkbox (defaulted from the type's switch) rides along with the
+   *  placement answer. */
   const askOpenMode = useCallback(
-    (fileName: string) =>
-      new Promise<OpenMode>((resolve) => {
+    (fileName: string, defaultAddToLibrary: boolean) =>
+      new Promise<OpenModeAnswer>((resolve) => {
         openPromptAnswer.current = resolve;
-        setOpenPrompt(fileName);
+        setOpenPrompt({ fileName, defaultAddToLibrary });
       }),
     [],
   );
 
-  const chooseOpenMode = useCallback((mode: OpenMode) => {
+  const chooseOpenMode = useCallback((answer: OpenModeAnswer) => {
     setOpenPrompt(null);
-    const answer = openPromptAnswer.current;
+    const resolve = openPromptAnswer.current;
     openPromptAnswer.current = null;
-    answer?.(mode);
+    resolve?.(answer);
   }, []);
 
   const isHome = activeTab.kind === "home";
@@ -383,7 +389,12 @@ export default function App() {
           </div>
           )}
 
-          <OpenModeDialog fileName={openPrompt} onChoose={chooseOpenMode} />
+          <OpenModeDialog
+            key={openPrompt?.fileName ?? "open-mode-idle"}
+            fileName={openPrompt?.fileName ?? null}
+            defaultAddToLibrary={openPrompt?.defaultAddToLibrary ?? true}
+            onChoose={chooseOpenMode}
+          />
           {coverJob && <PdfCoverCapture job={coverJob} onDone={clearCoverJob} />}
           <ThemeColorResetGuard />
         </UpdaterProvider>

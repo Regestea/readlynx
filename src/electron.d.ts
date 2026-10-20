@@ -138,10 +138,17 @@ declare global {
         deleteBook(bookId: string): Promise<boolean>;
         updateBook(payload: UpdateBookPayload): Promise<BookListItem | null>;
         setBookPinned(bookId: string, pinned: boolean): Promise<BookListItem | null>;
+        /** Flips a book between a permanent library entry and a session-only
+         *  copy (the open dialog's keep choice for "Open with" duplicates). */
+        setBookTemporary(bookId: string, temporary: boolean): Promise<boolean>;
         getAppSettings(): Promise<AppSettingsEntity | null>;
         updateAppSettings(patch: {
           theme?: string;
           chatZoom?: number;
+          /** Whether externally opened files of that type join the library. */
+          openWithAddPdf?: boolean;
+          openWithAddEpub?: boolean;
+          openWithAddMarkdown?: boolean;
         }): Promise<AppSettingsEntity | null>;
         listAiModels(): Promise<AiModel[]>;
         createAiModel(model: AiModel): Promise<boolean>;

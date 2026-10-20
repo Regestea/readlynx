@@ -1,4 +1,5 @@
 import { AiModelsSection } from "./aiModels/AiModelsSection.tsx";
+import { FileImportCard } from "./fileImport/FileImportCard.tsx";
 import {
   EpubDefaultsCard,
   PdfDefaultsCard,
@@ -13,12 +14,14 @@ export function SettingsPage() {
       <div className={styles.intro}>
         <h1 className={styles.title}>Settings</h1>
         <p className={styles.subtitle}>
-          Configure the AI models ReadLynx uses for translation and chat, plus the default
-          reading appearance for newly added books.
+          Configure the AI models ReadLynx uses for translation and chat, how files opened from
+          the file explorer are imported, and the default reading appearance for newly added
+          books.
         </p>
       </div>
 
       <AiModelsSection />
+      <FileImportCard />
       <EpubDefaultsCard />
       <TranslationDefaultsCard />
       <PdfDefaultsCard />

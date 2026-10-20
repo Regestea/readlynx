@@ -61,6 +61,10 @@ export function registerDbIpc(db: DbWorkerClient) {
     db.setBookPinned(payload.bookId, payload.pinned),
   );
 
+  handle("db:set-book-temporary", (_event, payload: { bookId: string; temporary: boolean }) =>
+    db.setBookTemporary(payload.bookId, payload.temporary),
+  );
+
   handle("db:get-app-settings", () => db.getAppSettings());
 
   handle("db:update-app-settings", (_event, patch: AppSettingsInput) => db.updateAppSettings(patch));

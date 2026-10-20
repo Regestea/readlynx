@@ -9,11 +9,18 @@ export class BookRepository {
     this.db = db;
   }
 
-  /** Creates a new book row with default metadata. */
-  insert(bookId: string, title = "Untitled", kind: BookKind = "created"): void {
+  /** Creates a new book row with default metadata. `temporary` marks a
+   *  session-only import (its file type's add-to-library switch is off):
+   *  hidden from the shelf and purged at the next launch. */
+  insert(
+    bookId: string,
+    title = "Untitled",
+    kind: BookKind = "created",
+    temporary = false,
+  ): void {
     this.db
-      .prepare("INSERT INTO Books (id, title, kind) VALUES (?, ?, ?)")
-      .run(bookId, title, kind);
+      .prepare("INSERT INTO Books (id, title, kind, temporary) VALUES (?, ?, ?, ?)")
+      .run(bookId, title, kind, temporary ? 1 : 0);
   }
 
   /** Updates book metadata and bumps `updatedAt`. `coverImage` is a relative
@@ -30,6 +37,16 @@ export class BookRepository {
    *  state) are removed by their `ON DELETE CASCADE` constraints. */
   remove(bookId: string): void {
     this.db.prepare("DELETE FROM Books WHERE id = ?").run(bookId);
+  }
+
+  /** Flips a book between a permanent library entry and a session-only copy
+   *  (the open dialog's keep choice applies to "Open with" duplicates).
+   *  Returns false when the book does not exist. */
+  setTemporary(bookId: string, temporary: boolean): boolean {
+    const result = this.db
+      .prepare("UPDATE Books SET temporary = ? WHERE id = ?")
+      .run(temporary ? 1 : 0, bookId);
+    return result.changes > 0;
   }
 
   findById(bookId: string): BookEntity | undefined {
@@ -59,7 +76,8 @@ export class BookRepository {
   /** All books, most recently active first (shelf order). Reading books have
    *  no edit flow to bump `updatedAt`, so they sort by their last opened time
    *  instead (falling back to `updatedAt` if never opened). Pinned books
-   *  sort first by their pin time so the Pinned shelf stays stable. */
+   *  sort first by their pin time so the Pinned shelf stays stable. Session
+   *  imports (`temporary`) never appear on the shelf. */
   list(): BookListItem[] {
     return this.db
       .prepare(
@@ -67,6 +85,7 @@ export class BookRepository {
                 COALESCE(b.isPinned, 0) AS isPinned, b.pinnedAt
          FROM Books b
          LEFT JOIN ReadingState rs ON rs.bookId = b.id
+         WHERE COALESCE(b.temporary, 0) = 0
          ORDER BY
            COALESCE(b.isPinned, 0) DESC,
            b.pinnedAt DESC,

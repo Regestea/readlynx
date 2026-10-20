@@ -15,4 +15,7 @@ export interface BookEntity {
   isPinned: number;
   /** UTC timestamp of the last pin action (NULL when never pinned / unpinned). */
   pinnedAt: string | null;
+  /** 1 = session-only "Open with" import (its file type's add-to-library
+   *  switch is off): hidden from the shelf and removed at the next launch. */
+  temporary: number;
 }

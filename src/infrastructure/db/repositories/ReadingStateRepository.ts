@@ -330,9 +330,12 @@ export class ReadingStateRepository {
     const windowStartMs = new Date(`${days[0].day}T00:00:00`).getTime();
     const rows = this.db
       .prepare(
-        `SELECT startedAt, endedAt FROM ReadingEvents
-         WHERE endedAt >= ?
-         ORDER BY startedAt`,
+        `SELECT re.startedAt, re.endedAt
+         FROM ReadingEvents re
+         JOIN Books b ON b.id = re.bookId
+         WHERE re.endedAt >= ?
+           AND COALESCE(b.temporary, 0) = 0
+         ORDER BY re.startedAt`,
       )
       .all(windowStartMs) as Array<{ startedAt: number; endedAt: number }>;
     const byDay = new Map<string, number>();
@@ -353,7 +356,8 @@ export class ReadingStateRepository {
    *  recently opened first — the source for the home "Reading Progress"
    *  widget, which shows the four most recently studied books. Books
    *  without totals (never opened, or not reopened since the totals feature
-   *  landed) are excluded until their source is read once. */
+   *  landed) are excluded until their source is read once. Session-only
+   *  (`temporary`) books stay out of the widget too. */
   listReadingProgress(): ReadingProgressRow[] {
     return this.db
       .prepare(
@@ -363,6 +367,7 @@ export class ReadingStateRepository {
          FROM Books b
          JOIN ReadingState rs ON rs.bookId = b.id
          WHERE b.kind = 'reading'
+           AND COALESCE(b.temporary, 0) = 0
            AND (rs.totalPages > 0 OR rs.totalChapters > 0)
            AND rs.finished = 0
          ORDER BY rs.lastOpenedAt DESC`,

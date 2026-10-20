@@ -103,6 +103,33 @@ const readerDefaults = new ReaderDefaultsRepository(db);
 const translations = new TranslationRepository(db);
 const customInstructions = new CustomInstructionRepository(db);
 
+/** Purges the session-only "Open with" imports (`Books.temporary = 1`),
+ *  exactly like a manual delete would: the row (its document, reading state,
+ *  translations and reading events all cascade), the stored source copy, the
+ *  cover file and any cached translation images.
+ *
+ *  Runs once at startup, before any renderer mounts: a temporary book lives
+ *  only as long as the session that opened it (it survives that session so
+ *  reopening the same file dedupes rather than duplicating), and whatever a
+ *  crashed session left behind is cleaned here. */
+function purgeTemporaryBooks(): void {
+  const rows = db
+    .prepare("SELECT id, coverImage FROM Books WHERE temporary = 1")
+    .all() as Array<{ id: string; coverImage: string | null }>;
+  if (rows.length === 0) return;
+  for (const row of rows) {
+    const source = bookSources.findByBookId(row.id);
+    db.transaction(() => {
+      books.remove(row.id);
+    })();
+    removeCoverFile(row.coverImage, store);
+    if (source) removeSourceFile(source.filePath, store);
+    deleteAllBookTranslationImages(store, row.id);
+  }
+}
+
+purgeTemporaryBooks();
+
 function handleCreateBook(): { bookId: string; documentId: string } {
   const bookId = randomUUID();
   const documentId = randomUUID();
@@ -135,13 +162,15 @@ function handleCreateTranslatedBook(payload: CreateTranslatedBookPayload): {
 }
 
 /** Creates a reading book: a regular book (with title + cover, no document)
- *  plus a `BookSources` row. Reading books open in the read-only viewer. */
+ *  plus a `BookSources` row. Reading books open in the read-only viewer.
+ *  `temporary` marks a session-only "Open with" import: invisible on the
+ *  shelf and removed at the next launch. */
 function handleCreateReadingBook(payload: CreateReadingBookPayload): { bookId: string } {
   const bookId = randomUUID();
   const sourceId = randomUUID();
   const storedCover = persistCoverImage(payload.coverImage, store, null);
   db.transaction(() => {
-    books.insert(bookId, payload.title, "reading");
+    books.insert(bookId, payload.title, "reading", payload.temporary === true);
     if (storedCover) books.update(bookId, { title: payload.title, coverImage: storedCover });
     bookSources.insert(sourceId, bookId, payload.sourceType, payload.sourcePath, {
       fileHash: payload.fileHash ?? null,
@@ -300,6 +329,10 @@ const handlers: Record<string, (payload: unknown) => unknown> = {
   "update-book": (payload) => handleUpdateBook(payload as UpdateBookPayload),
   "set-book-pinned": (payload) =>
     handleSetBookPinned(payload as { bookId: string; pinned: boolean }),
+  "set-book-temporary": (payload) => {
+    const { bookId, temporary } = payload as { bookId: string; temporary: boolean };
+    return books.setTemporary(bookId, temporary);
+  },
   "get-app-settings": () => appSettings.get() ?? null,
   "update-app-settings": (payload) => {
     appSettings.update(payload as { theme?: string; chatZoom?: number });
