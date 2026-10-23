@@ -23,10 +23,37 @@
 }
 
 /* The same row inside the Manage dialog: left-aligned, full width, so the
- * controls start where the section label does. */
+   controls start where the section label does. */
 .controlsDialog {
   justify-content: flex-start;
   width: 100%;
+}
+
+/* Hidden measuring copy of the inline row, the input of the collapse
+   decision (see useToolbarCollapsed). `position: fixed` keeps it out of every
+   layout and creates no scrollbars; `visibility: hidden` means it neither
+   paints nor takes focus; `width: max-content` makes its width what the row
+   would need on a single line. The `!important` nowrap beats the row's own
+   `flex-wrap: wrap` — and every control inside it — regardless of CSS-module
+   emit order; without it the probe would wrap exactly like the row it
+   measures and always report a fit. */
+.fitProbe {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: -1;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: max-content;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.fitProbe,
+.fitProbe * {
+  flex-wrap: nowrap !important;
+  white-space: nowrap !important;
 }
 
 /* Anchor for the collapsed toolbar's settings dropdown. */

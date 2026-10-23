@@ -127,10 +127,11 @@ export function TranslationSettingsPanel({
 }: TranslationSettingsPanelProps) {
   const [rangeOpen, setRangeOpen] = useState(false);
   const [manageOpen, setManageOpen] = useState(false);
-  /** Whether the settings row is folded into the dropdown (narrow viewport).
-   *  Re-checked on resize, and the panel closes when the bar expands again so
-   *  the settings are never hidden behind a trigger that is gone. */
-  const collapsed = useToolbarCollapsed();
+  /** Whether the settings row is folded into the dropdown (no room on the
+   *  bar). Decided by measuring the real fit — see `useToolbarCollapsed` —
+   *  and the panel closes when the bar expands again so the settings are
+   *  never hidden behind a trigger that is gone. */
+  const { collapsed, toolbarRef, probeRef } = useToolbarCollapsed();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const settingsWrapRef = useRef<HTMLSpanElement>(null);
   const [manageChapters, setManageChapters] = useState<
@@ -158,12 +159,14 @@ export function TranslationSettingsPanel({
     : "app default";
   const manageSettingsSummary = `${rangeMethodLabel}, target ${rangeTargetLabel}, model ${rangeModelLabel}`;
 
-  /** The same settings row, mounted per host: the toolbar adds the
-   *  "current page / page range…" picker; the Manage dialog drops it because
-   *  it has its own scope and progress display. Run progress is shown by the
-   *  host (spinner in the toolbar, footer line in the dialog) while results
-   *  and failures arrive as toasts, so no status line is rendered here. */
-  const renderControls = (host: "toolbar" | "manage" | "popover") => (
+  /** The same settings row, mounted per host: the toolbar and the hidden
+   *  measuring probe add the "current page / page range…" picker; the Manage
+   *  dialog drops it because it has its own scope and progress display; the
+   *  popover host asks `TranslationControls` for its vertical-list layout.
+   *  Run progress is shown by the host (spinner in the toolbar, footer line
+   *  in the dialog) while results and failures arrive as toasts, so no
+   *  status line is rendered here. */
+  const renderControls = (host: "toolbar" | "manage" | "popover" | "probe") => (
     <TranslationControls
       sourceType={sourceType}
       models={models}
@@ -181,15 +184,12 @@ export function TranslationSettingsPanel({
       downloadProgress={downloadProgress}
       onDownload={onDownload}
       onDelete={onDelete}
-      showUnitPicker={host === "toolbar" || host === "popover"}
+      showUnitPicker={host !== "manage"}
+      popover={host === "popover"}
       onOpenRange={() => setRangeOpen(true)}
       onOpenScanRegion={onOpenScanRegion}
       className={
-        host === "toolbar"
-          ? styles.controlsToolbar
-          : host === "popover"
-            ? styles.controlsPopover
-            : styles.controlsDialog
+        host === "toolbar" ? styles.controlsToolbar : host === "manage" ? styles.controlsDialog : ""
       }
     />
   );
@@ -258,16 +258,44 @@ export function TranslationSettingsPanel({
     };
   }, [settingsOpen]);
 
-  // Growing past the breakpoint puts the settings back on the bar, so a panel
-  // left open over the collapsed trigger must not linger — and must not spring
-  // open again the moment the window shrinks. Adjusted during render, which is
-  // React's pattern for deriving state from a changed input.
+  // Room on the bar again puts the settings back inline, so a panel left
+  // open over the collapsed trigger must not linger — and must not spring
+  // open again the moment the room disappears. Adjusted during render, which
+  // is React's pattern for deriving state from a changed input.
   if (!collapsed && settingsOpen) {
     setSettingsOpen(false);
   }
 
+  /** The two always-visible actions, shared by the bar and the measuring
+   *  probe below so the fit check sees exactly the row that would render. */
+  const translateAction = (
+    <Button
+      variant="primary"
+      className={styles.action}
+      onClick={() => (hasTranslation ? onRegenerate() : onTranslate())}
+      disabled={models.length === 0}
+    >
+      {hasTranslation ? (
+        <RefreshCw size={14} strokeWidth={1.8} aria-hidden="true" />
+      ) : null}
+      {actionLabel}
+    </Button>
+  );
+  const manageAction = (
+    <Button
+      variant="secondary"
+      className={styles.action}
+      onClick={openManage}
+      disabled={models.length === 0 || !unitsReady}
+      title="Translation state of the whole book — translate the entire book or a selection of pages / chapters, and export"
+    >
+      <ListChecks size={14} strokeWidth={1.8} aria-hidden="true" />
+      Manage / Export
+    </Button>
+  );
+
   return (
-    <div className={styles.toolbar} role="toolbar" aria-label="Translation settings">
+    <div ref={toolbarRef} className={styles.toolbar} role="toolbar" aria-label="Translation settings">
       {busy ? (
         <>
           <span className={styles.busyWrap} role="status" title={status ?? "Working…"}>
@@ -315,30 +343,20 @@ export function TranslationSettingsPanel({
             renderControls("toolbar")
           )}
 
-          <Button
-            variant="primary"
-            className={styles.action}
-            onClick={() => (hasTranslation ? onRegenerate() : onTranslate())}
-            disabled={models.length === 0}
-          >
-            {hasTranslation ? (
-              <RefreshCw size={14} strokeWidth={1.8} aria-hidden="true" />
-            ) : null}
-            {actionLabel}
-          </Button>
-
-          <Button
-            variant="secondary"
-            className={styles.action}
-            onClick={openManage}
-            disabled={models.length === 0 || !unitsReady}
-            title="Translation state of the whole book — translate the entire book or a selection of pages / chapters, and export"
-          >
-            <ListChecks size={14} strokeWidth={1.8} aria-hidden="true" />
-            Manage / Export
-          </Button>
+          {translateAction}
+          {manageAction}
         </>
       )}
+
+      {/* The measuring copy the collapse decision reads: the full inline row
+          at its never-wrapping width, hidden and out of the layout (see
+          `useToolbarCollapsed`). It must render the same settings and actions
+          as the expanded bar, or the measurement stops predicting the fit. */}
+      <div ref={probeRef} className={styles.fitProbe} aria-hidden="true">
+        {renderControls("probe")}
+        {translateAction}
+        {manageAction}
+      </div>
 
       <PageRangeModal
         open={rangeOpen}

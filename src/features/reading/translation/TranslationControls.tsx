@@ -39,6 +39,10 @@ interface TranslationControlsProps {
   /** PDF only: opens the trim overlay on the page. Omitted when no PDF viewer is
    *  on screen. */
   onOpenScanRegion?: () => void;
+  /** Lays the row out as the vertical list of the collapsed toolbar's
+   *  dropdown, applying this module's `.controlsPopover` overrides — a class
+   *  a host cannot reach across CSS-module boundaries. */
+  popover?: boolean;
   /** Extra class on the container so each host can lay the row out. */
   className?: string;
 }
@@ -74,6 +78,7 @@ export function TranslationControls({
   showUnitPicker = false,
   onOpenRange,
   onOpenScanRegion,
+  popover = false,
   className = "",
 }: TranslationControlsProps) {
   const [ocrOpen, setOcrOpen] = useState(false);
@@ -117,7 +122,9 @@ export function TranslationControls({
   const isOcr = isPdf && pdfMethod === "ocr";
 
   return (
-    <div className={`${styles.controlsBar} ${className}`.trim()}>
+    <div
+      className={`${styles.controlsBar} ${popover ? styles.controlsPopover : ""} ${className}`.trim()}
+    >
       {models.length > 0 ? (
         <div className={styles.anchor} ref={modelAnchorRef}>
           <button
