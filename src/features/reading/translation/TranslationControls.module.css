@@ -140,13 +140,16 @@
 }
 
 /* Opens from the trigger's left edge and grows rightwards, matching the LTR
- * reading order of the control row it belongs to. */
+ * reading order of the control row it belongs to. The max-width guard keeps
+ * the panel inside the window when the trigger sits near the right edge of a
+ * narrow reader (same guard the settings panel next to it uses). */
 .modelPanel {
   position: absolute;
   top: calc(100% + 6px);
   left: 0;
   z-index: 30;
   width: 320px;
+  max-width: calc(100vw - 2 * var(--space-4));
   display: flex;
   flex-direction: column;
   border: 1px solid var(--color-border);

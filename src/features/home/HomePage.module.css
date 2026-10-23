@@ -6,6 +6,13 @@
   gap: var(--space-6);
   overflow-y: auto;
   padding: var(--space-1) var(--space-2) var(--space-1) var(--space-1);
+
+  /* On monitors wider than the comfortable reading column the page centers
+     inside the main track instead of letting rows and covers sprawl to the
+     window edge. */
+  max-width: 1560px;
+  margin-inline: auto;
+  width: 100%;
 }
 
 .intro {

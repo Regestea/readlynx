@@ -21,7 +21,7 @@ import type { BookListItem } from "../infrastructure/db/entities/types";
 import { ReadingProgress } from "../features/home/widgets/ReadingProgress/ReadingProgress";
 import { WeeklyStats } from "../features/home/widgets/WeeklyStats/WeeklyStats";
 import { UpdaterProvider } from "../features/updater/UpdaterProvider";
-import { getCloseFlushes } from "../shared/closeFlush";
+import { getCloseFlushes, getTabFlush } from "../shared/closeFlush";
 import { OpenModeDialog } from "../components/ui/OpenModeDialog/OpenModeDialog";
 import type { OpenModeAnswer } from "../components/ui/OpenModeDialog/OpenModeDialog";
 import { HOME_TAB, createTabId, readingTabId, useTabs } from "./tabs";
@@ -58,9 +58,6 @@ export default function App() {
   const [readerBookId, setReaderBookId] = useState<string | null>(null);
 
   const { tabs, activeTab, activeId, openTab, activateTab, closeTab, renameTab, moveTab } = useTabs();
-  /** Set by the editor when it goes split, which wants the sidebar out of the
-   *  way. Every other tab derives its own width from its kind. */
-  const [editorSplit, setEditorSplit] = useState(false);
   /** The file an external open is waiting on an answer for: the name shown in
    *  the dialog plus the checkbox's default (the type's settings switch). */
   const [openPrompt, setOpenPrompt] = useState<{
@@ -136,13 +133,14 @@ export default function App() {
   /** The sidebar highlights the section on show, not the tab hosting it —
    *  otherwise Settings would light up while the library tab is in front. */
   const sidebarActiveId = isHome ? (section === "library" ? "home" : section) : activeTab.id;
-  /** The reader always wants the whole width; the editor only gives up the
-   *  sidebar when it goes split, and reports that itself through
-   *  `onSplitChange`. Gating on the active kind makes the flag forget itself
-   *  when another tab is opened, rather than leaving the editor's last report
-   *  to collapse the sidebar on an unrelated page. */
+  /** The reader always wants the whole width, and so does the editor — every
+   *  view of a document is dense, and the shelf stays reachable in one click
+   *  through the sidebar's hidden state. Not split-conditional any more: the
+   *  slide mechanism parks the sidebar off-window reliably (see
+   *  `.sidebarSlide`), so leaving it on the page for single-pane reads served
+   *  nothing the page itself could not. */
   const sidebarCollapsed =
-    activeTab.kind === "reading" || (activeTab.kind === "create" && editorSplit);
+    activeTab.kind === "reading" || activeTab.kind === "create";
   /** A fullscreen reader takes the whole window: no title bar, no sidebar,
    *  no stats panel. The overlay alone is maximise with a bigger page — the
    *  chrome has to go for it to read as fullscreen. */
@@ -228,6 +226,26 @@ export default function App() {
     [activateTab, closeTab],
   );
 
+  /** Closing a tab through the title bar (or Ctrl+W) first gives the page the
+   *  save window-close would perform — while the page is still mounted and
+   *  its editor/viewer handles are alive. React detaches refs *before* running
+   *  a component's unmount cleanups, so a save written only on unmount cannot
+   *  reach the editor contents or the live viewer; the create page also has
+   *  no unmount save at all, costing the tail of the auto-save interval. The
+   *  tab closes even when a flush throws — the saves that matter surface
+   *  their own errors, and blocking the close would trap the user. */
+  const handleTabClose = useCallback(
+    async (id: string) => {
+      try {
+        await getTabFlush(id)?.();
+      } catch {
+        // Fall through to the close.
+      }
+      closeTab(id);
+    },
+    [closeTab],
+  );
+
   /** Tab keyboard shortcuts. `Ctrl+W` would close the window outright and
    *  `Ctrl+Tab` does nothing without a menu, so both are ours. `Ctrl+T` is the
    *  nearest thing this app has to a new tab: the library, where a book gets
@@ -244,12 +262,12 @@ export default function App() {
       }
       if (key === "w" && activeId !== HOME_TAB.id) {
         event.preventDefault();
-        closeTab(activeId);
+        void handleTabClose(activeId);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [activeId, activateTab, closeTab]);
+  }, [activeId, activateTab, handleTabClose]);
 
   /** When the window is closing, run the active page's save flush first (the
    *  same work its top-bar back button would do), then let the window close.
@@ -308,6 +326,7 @@ export default function App() {
         return (
           <ReadingPage
             bookId={tab.bookId}
+            tabId={tab.id}
             active={tab.id === activeId}
             onTitleChange={(title) => handleTabTitle(tab.id, title)}
             onBack={() => backToLibrary(tab.id)}
@@ -316,12 +335,12 @@ export default function App() {
       case "create":
         return (
           <CreateBookPage
+            tabId={tab.id}
             initialBookId={tab.bookId}
             initialTitle={tab.details?.title ?? ""}
             initialMarkdown=""
             initialCover={tab.details?.coverSrc ?? null}
             onBack={() => backToLibrary(tab.id)}
-            onSplitChange={setEditorSplit}
           />
         );
       default:
@@ -362,7 +381,7 @@ export default function App() {
               tabs={tabs}
               activeId={activeId}
               onActivate={activateTab}
-              onClose={closeTab}
+              onClose={handleTabClose}
               onMove={moveTab}
               onDetach={handleDetach}
             />

@@ -16,8 +16,6 @@
   flex: 1;
   min-height: 0;
   width: 100%;
-  max-width: 1920px;
-  margin: 0 auto;
   padding: var(--space-6);
 }
 
@@ -84,6 +82,12 @@
   z-index: 1;
   width: var(--sidebar-width-collapsed);
   flex-shrink: 0;
+
+  /* The slide-out parks the sidebar 104px off its own left edge, which only
+     clears the window while the shell touches it. Clipping the wrapper makes
+     the collapse independent of that arithmetic: whatever sits outside a
+     collapsed (width 0) wrapper simply never paints, at any resolution. */
+  overflow: clip;
   transition: width 180ms ease;
 }
 

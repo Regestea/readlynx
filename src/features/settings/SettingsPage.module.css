@@ -6,6 +6,12 @@
   gap: var(--space-6);
   overflow-y: auto;
   padding: var(--space-1) var(--space-2) var(--space-1) var(--space-1);
+
+  /* Settings takes the whole width today (`.shellFull`); the cap keeps form
+     rows at a readable length on monitors wider than that. */
+  max-width: 1600px;
+  margin-inline: auto;
+  width: 100%;
 }
 
 .intro {

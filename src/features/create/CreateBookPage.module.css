@@ -9,6 +9,7 @@
 
 .topBar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-3);
   padding: var(--space-2);
@@ -17,6 +18,11 @@
   background: var(--color-glass);
   box-shadow: var(--shadow-sm);
 }
+
+/* The fixed-width controls (search, zoom, view group, …) sum to roughly
+   1080px; below that they wrap to a second row rather than clipping at the
+   main column's edge. The title shrinks first: it is the least expensive
+   thing on the bar and its input is already `min-width: 0`. */
 
 .backButton {
   flex-shrink: 0;
@@ -64,7 +70,8 @@
   gap: var(--space-1);
   width: 260px;
   max-width: 100%;
-  flex-shrink: 0;
+  flex-shrink: 1;
+  min-width: 160px;
   padding: 0 var(--space-3);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-input);
@@ -343,7 +350,12 @@
   display: none;
 }
 
-@media (width <= 720px) {
+/* Narrow enough that the stats, layout switch and page size cannot fit along
+   the rest of the bar — 1080px is what the fixed-width controls need before
+   the title has any room left. Below 720 only zoom and the view group remain
+   visible, which is the minimum the editor stays operable at (the window's
+   own floor is 700px). */
+@media (width <= 1080px) {
   .stats,
   .layout,
   .pageSizeSelect {

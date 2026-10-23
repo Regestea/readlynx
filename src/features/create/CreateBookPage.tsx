@@ -15,7 +15,7 @@ import { DEFAULT_FONT_SIZE_VALUE, ZOOM_OPTIONS } from "./documentEditor/constant
 import { PAGE_MARGIN_MM, PAGE_FORMATS, uniformMargins } from "../../shared/document/pageGeometry";
 import type { PageFormat, PageMargins } from "../../shared/document/pageGeometry";
 import type { BookSourceType, SaveDocumentPayload } from "../../infrastructure/db/entities/types";
-import { useCloseFlush } from "../../shared/closeFlush";
+import { useCloseFlush, useTabFlush } from "../../shared/closeFlush";
 import styles from "./CreateBookPage.module.css";
 
 /** Auto-save cadence: while the toggle is on, the document is saved every
@@ -25,13 +25,14 @@ const AUTOSAVE_INTERVAL_MS = 5 * 60 * 1000;
 
 interface CreateBookPageProps {
   onBack?: () => void;
+  /** The tab hosting this page — lets it flush a pending save before the tab
+   *  closes. Undefined in a reader/standalone context where there is no tab. */
+  tabId?: string;
   /** When set, the page opens this existing book instead of creating a new one. */
   initialBookId?: string | null;
   initialTitle: string;
   initialMarkdown: string;
   initialCover: string | null;
-  /** Called when the split view (editor + source) opens or closes. */
-  onSplitChange?: (split: boolean) => void;
 }
 
 /** True when a stored `contentJson` is a Lexical editor state the editor can
@@ -49,11 +50,11 @@ function isValidEditorStateJson(content: string): boolean {
 
 export function CreateBookPage({
   onBack,
+  tabId,
   initialBookId,
   initialTitle,
   initialMarkdown,
   initialCover,
-  onSplitChange,
 }: CreateBookPageProps) {
   const apiRef = useRef<EditorAPI | null>(null);
   const { model: defaultAiModel } = useDefaultAiModel();
@@ -96,10 +97,6 @@ export function CreateBookPage({
   useEffect(() => {
     defaultAiModelRef.current = defaultAiModel;
   }, [defaultAiModel]);
-
-  useEffect(() => {
-    onSplitChange?.(source != null && sourceMode === "split");
-  }, [source, sourceMode, onSplitChange]);
 
   useEffect(() => {
     if (!initialBookId) return;
@@ -275,6 +272,13 @@ export function CreateBookPage({
 
   /** The app closing flushes the same pending save the back button would. */
   useCloseFlush(async () => {
+    await saveNow();
+  });
+
+  /** So does the tab closing, and *before* React unmounts the page — its
+   *  unmount cleanups run after the refs are detached, and an editor write
+   *  made there could not read the document at all. */
+  useTabFlush(tabId, async () => {
     await saveNow();
   });
 

@@ -6,6 +6,12 @@
   gap: var(--space-6);
   overflow-y: auto;
   padding: var(--space-1) var(--space-2) var(--space-1) var(--space-1);
+
+  /* Three cards never justify more than two columns; wider than this they
+     stretch instead of growing an unwanted third track. */
+  max-width: 1200px;
+  margin-inline: auto;
+  width: 100%;
 }
 
 .intro {

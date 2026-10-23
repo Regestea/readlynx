@@ -2,14 +2,12 @@ import { useCallback, useEffect, useState } from "react";
 import type { CSSProperties, KeyboardEvent, MouseEvent as ReactMouseEvent } from "react";
 import { BookOpen, ExternalLink, Pencil, Pin, PinOff, Trash2 } from "lucide-react";
 import type { Book, BookKind } from "../../../../shared/types";
-import { Progress } from "../../../../components/ui/Progress/Progress";
 import { BookCardMenu } from "./BookCardMenu";
 import type { BookCardMenuItem } from "./BookCardMenu";
 import styles from "./BookCard.module.css";
 
 interface BookCardProps {
   book: Book;
-  layout?: "vertical" | "horizontal";
   className?: string;
   style?: CSSProperties;
   onClick?: () => void;
@@ -67,7 +65,6 @@ function fullTitleProps(title: string): { "data-full-title"?: string } {
 
 export function BookCard({
   book,
-  layout = "vertical",
   className = "",
   style,
   onClick,
@@ -221,46 +218,6 @@ export function BookCard({
     menuAt && menuItems.length > 0 ? (
       <BookCardMenu at={menuAt} title={book.title} items={menuItems} onClose={closeMenu} />
     ) : null;
-
-  if (layout === "horizontal") {
-    return (
-      <>
-        <article
-          className={`${styles.horizontal} hover-lift ${className}${clickClass}`}
-          style={style}
-          aria-label={`${book.title} by ${book.author}`}
-          onContextMenu={handleContextMenu}
-          {...interactiveProps}
-        >
-        <div
-          className={`${styles.cover} ${styles.coverSmall} ${COVER_STYLES[book.cover]}`}
-          aria-hidden="true"
-        >
-{book.coverImage && (
-            <img
-              className={styles.coverImage}
-              src={book.coverImage}
-              alt=""
-              loading="lazy"
-              decoding="async"
-            />
-          )}
-        </div>
-        <div className={styles.hInfo} {...fullTitleProps(book.title)}>
-          <h3 className={styles.hTitle}>{book.title}</h3>
-          <p className={styles.hAuthor}>{book.author}</p>
-          {typeof book.progress === "number" && (
-            <div className={styles.hProgress}>
-              <Progress value={book.progress} thickness={6} />
-              <span className={styles.hPercent}>{Math.round(book.progress * 100)}%</span>
-            </div>
-          )}
-        </div>
-      </article>
-      {menu}
-    </>
-    );
-  }
 
   return (
     <>

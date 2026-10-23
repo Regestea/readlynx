@@ -20,7 +20,7 @@ import {
   unitToPage,
 } from "./translation/types";
 import type { PdfScanRegion } from "./translation/types";
-import { useCloseFlush } from "../../shared/closeFlush";
+import { useCloseFlush, useTabFlush } from "../../shared/closeFlush";
 import { useReaderFullscreen } from "../../shared/readerFullscreen";
 import { useAiModelList } from "../../infrastructure/ai/useAiModelList";
 import { resolveProviderBaseUrl } from "../../infrastructure/ai/modelResolver";
@@ -43,6 +43,9 @@ function decodeMarkdownBytes(data: ArrayBuffer): string {
 interface ReadingPageProps {
   bookId: string;
   onBack?: () => void;
+  /** The tab hosting this page — lets it flush its saves before the tab
+   *  closes. Undefined in a reader window, which flushes on window close. */
+  tabId?: string;
   /** False while another tab is in front. The page stays mounted so it keeps
    *  its page, scroll and translation; only the parts that read the keyboard or
    *  the clock stand down, so a background book is neither navigated by the
@@ -73,7 +76,7 @@ type PageState =
   | { status: "error"; message: string }
   | { status: "ready"; book: ReadingBook };
 
-export function ReadingPage({ bookId, onBack, active = true, onTitleChange }: ReadingPageProps) {
+export function ReadingPage({ bookId, tabId, onBack, active = true, onTitleChange }: ReadingPageProps) {
   const [state, setState] = useState<PageState>({ status: "loading" });
   /** Hides the page chrome (back button, title, translation settings) while a
    *  reader is fullscreen, with the rest of the shell. */
@@ -443,13 +446,19 @@ export function ReadingPage({ bookId, onBack, active = true, onTitleChange }: Re
     }
   }, [readyBook, bookId, translation.unitKey]);
 
-  /** Closing the app waits for the last position write and the session
-   *  flush, the same saves the back button's close performs. */
-  useCloseFlush(async () => {
+  /** Closing the app or this tab runs one shared save: the last position
+   *  write and the session flush, the same saves the back button's close
+   *  performs. On a tab close this runs *before* the unmount — the unmount
+   *  cleanup below already lost the viewer refs to React's detach order. */
+  const flushPending = useCallback(async () => {
     flushScrollMemory();
     await lastPositionWriteRef.current;
     await flushSession();
-  });
+  }, [flushScrollMemory, flushSession]);
+
+  useCloseFlush(flushPending);
+
+  useTabFlush(tabId, flushPending);
 
   /** Latest scroll saver, mirrored into a ref so the unmount cleanup below
    *  can stay unmount-only. `flushScrollMemory` gets a new identity on every
@@ -818,10 +827,11 @@ export function ReadingPage({ bookId, onBack, active = true, onTitleChange }: Re
       ? Number(unitToChapter(translation.unitKey ?? epubUnitKey("0")))
       : null;
   const isMarkdownBook = book?.sourceType === "markdown";
-  // Fall back to the viewer's live count when state hasn't been persisted yet
-  // (e.g. right after load) so the nav buttons are not stuck disabled.
-  const totalPages = pageCount || pdfRef.current?.getPageCount() || 0;
-  const totalChapters = chapterCount || epubRef.current?.getChapterCount() || 0;
+  // The totals land in state from `persistTotals` the moment each viewer
+  // reports ready — that state update is what re-enables the nav. Before
+  // that the toolbar shows "…" and the buttons stay disabled.
+  const totalPages = pageCount;
+  const totalChapters = chapterCount;
   const canPrev = isMarkdownBook
     ? false
     : book?.sourceType === "pdf"
