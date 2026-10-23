@@ -12,11 +12,12 @@ import { registerFsIpc } from "./ipc/fs.ts";
 import { registerOcrIpc, terminateOcrWorker } from "./ipc/ocr.ts";
 import { registerPdfExportIpc } from "./ipc/pdfExport.ts";
 import { registerSystemFontsIpc } from "./ipc/systemFonts.ts";
-import { registerUpdaterIpc } from "./ipc/updater.ts";
-import { registerWindowIpc, watchWindowState } from "./ipc/window.ts";
+import { registerUiScaleIpc, registerWindowIpc, watchWindowState } from "./ipc/window.ts";
 import type { WindowContext } from "./ipc/window.ts";
+import { registerUpdaterIpc } from "./ipc/updater.ts";
 import { getStore } from "./store/storage.ts";
 import { pruneUpdateCache } from "./updater.ts";
+import { clampUiScale } from "../src/shared/uiScale.ts";
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -93,7 +94,7 @@ if (!gotSingleLock) {
   });
 }
 
-function createWindow(role: WindowContext["role"] = "main", bookId: string | null = null) {
+async function createWindow(role: WindowContext["role"] = "main", bookId: string | null = null) {
   const win = new BrowserWindow({
     width: role === "reader" ? 1080 : 1440,
     height: role === "reader" ? 860 : 900,
@@ -195,6 +196,16 @@ function createWindow(role: WindowContext["role"] = "main", bookId: string | nul
     win.webContents.send("app:prepare-close");
   });
 
+  // One stored interface scale for every window: the shell and its readers
+  // must not diverge. Applied before the first paint the page can produce, so
+  // opening with a changed scale never flashes at 100%. A DB hiccup falls
+  // back to unscaled (the clamp returns the default for non-finite values).
+  const storedScale = await dbClient
+    ?.getAppSettings()
+    .then((settings) => settings?.uiScale)
+    .catch(() => undefined);
+  win.webContents.setZoomFactor(clampUiScale(storedScale) / 100);
+
   if (!app.isPackaged) {
     win.loadURL("http://localhost:5173");
   } else {
@@ -295,6 +306,7 @@ app.whenReady().then(() => {
     readerBooks,
     openReader: openReaderWindow,
   });
+  registerUiScaleIpc();
   registerPdfExportIpc({ getStore });
   registerCoversIpc({ getStore });
   registerBackupIpc({

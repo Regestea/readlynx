@@ -47,6 +47,9 @@ declare global {
         /** Fires on state changes the user did not ask for (taskbar
          *  double-click, Win+Up, snap layouts, a restored size). */
         onMaximizedChanged(callback: (maximized: boolean) => void): () => void;
+        /** Applies one interface scale (percent) to every open window —
+         *  the shell and all readers zoom together. */
+        setUiScale(percent: number): Promise<void>;
       };
       exportPdf(options: {
         defaultPath: string;
@@ -149,6 +152,8 @@ declare global {
         updateAppSettings(patch: {
           theme?: string;
           chatZoom?: number;
+          /** Whole-interface zoom in percent (applied page-side on boot). */
+          uiScale?: number;
           /** Whether externally opened files of that type join the library. */
           openWithAddPdf?: boolean;
           openWithAddEpub?: boolean;

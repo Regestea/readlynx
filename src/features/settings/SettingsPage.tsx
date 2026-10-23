@@ -1,4 +1,5 @@
 import { AiModelsSection } from "./aiModels/AiModelsSection.tsx";
+import { DisplayCard } from "./display/DisplayCard.tsx";
 import { FileImportCard } from "./fileImport/FileImportCard.tsx";
 import {
   EpubDefaultsCard,
@@ -20,6 +21,7 @@ export function SettingsPage() {
         </p>
       </div>
 
+      <DisplayCard />
       <AiModelsSection />
       <FileImportCard />
       <EpubDefaultsCard />

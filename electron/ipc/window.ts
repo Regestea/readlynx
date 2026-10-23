@@ -1,4 +1,5 @@
 import { BrowserWindow, ipcMain } from "electron";
+import { clampUiScale } from "../../src/shared/uiScale.ts";
 
 /** What a window is for. The main window is the shell — sidebar, tabs and
  *  everything else. A reader window shows exactly one book and nothing else,
@@ -77,4 +78,18 @@ export function watchWindowState(win: BrowserWindow) {
   };
   win.on("maximize", () => send(true));
   win.on("unmaximize", () => send(false));
+}
+
+/** Applies the interface scale to every window that is open, not just the one
+ *  that asked: the shell and its readers cannot be allowed to diverge. New
+ *  windows pick the stored value up at creation instead — see `createWindow`.
+ *  Persisting happens renderer-side through `db:update-app-settings`, the same
+ *  route theme and chat zoom use; this call only paints. */
+export function registerUiScaleIpc() {
+  ipcMain.handle("ui:set-scale", (_event, percent: number) => {
+    const factor = clampUiScale(percent) / 100;
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed()) win.webContents.setZoomFactor(factor);
+    }
+  });
 }

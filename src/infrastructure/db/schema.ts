@@ -133,7 +133,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_translations_lookup
 
 CREATE TABLE IF NOT EXISTS AppSettings (
   theme    TEXT NOT NULL DEFAULT 'light',
-  chatZoom INTEGER NOT NULL DEFAULT 100
+  chatZoom INTEGER NOT NULL DEFAULT 100,
+  uiScale  INTEGER NOT NULL DEFAULT 100
 );
 
 CREATE TABLE IF NOT EXISTS CustomInstructions (
@@ -233,6 +234,7 @@ export function applySchema(db: Database.Database): void {
     ensureAiModelDefaultColumn(db);
     ensureTranslationLookupIndex(db);
     ensureAppSettingsChatZoomColumn(db);
+    ensureAppSettingsUiScaleColumn(db);
     ensureReaderSettingsHardOverrideColumn(db);
     ensureReaderDefaultsTable(db);
     ensureReaderSettingsBlockColumns(db);
@@ -697,6 +699,15 @@ function ensureAppSettingsChatZoomColumn(db: Database.Database): void {
   const columns = db.pragma("table_info(AppSettings)") as Array<{ name: string }>;
   if (columns.some((entry) => entry.name === "chatZoom")) return;
   db.exec("ALTER TABLE AppSettings ADD COLUMN chatZoom INTEGER NOT NULL DEFAULT 100");
+}
+
+/** Databases created before the global UI scale existed lack `uiScale` on
+ *  `AppSettings`. Adds it with the default (100% = no scaling); the single
+ *  settings row keeps everything else. */
+function ensureAppSettingsUiScaleColumn(db: Database.Database): void {
+  const columns = db.pragma("table_info(AppSettings)") as Array<{ name: string }>;
+  if (columns.some((entry) => entry.name === "uiScale")) return;
+  db.exec("ALTER TABLE AppSettings ADD COLUMN uiScale INTEGER NOT NULL DEFAULT 100");
 }
 
 /** Databases created before the EPUB hard text-color override existed lack

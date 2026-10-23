@@ -18,6 +18,9 @@ contextBridge.exposeInMainWorld("readlynx", {
       ipcRenderer.on("window:maximized-changed", listener);
       return () => ipcRenderer.removeListener("window:maximized-changed", listener);
     },
+    /** Applies one interface scale (percent) to every open window — the shell
+     *  and all readers zoom together. Persistence rides `db.updateAppSettings`. */
+    setUiScale: (percent) => ipcRenderer.invoke("ui:set-scale", percent),
   },
   exportPdf: (options) => ipcRenderer.invoke("export-pdf", options),
   onPrepareClose: (callback) => {
