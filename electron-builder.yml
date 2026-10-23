@@ -13,7 +13,7 @@ directories:
 # and `${firstExt}.icns` on macOS (pdf/epub/md files above).
 # Linux has no per-extension hook: icons go by MIME type instead — the deb
 # installs `application-pdf` / `application-epub+zip` / `text-markdown` into
-# the system hicolor tree via `linux.fpm`, and the AppImage copies the same
+# the system hicolor tree via `deb.fpm`, and the AppImage copies the same
 # set into `~/.local/share/icons` on first run (electron/main.ts).
 fileAssociations:
   - ext: pdf
@@ -77,11 +77,15 @@ linux:
     - deb
   category: Office
   synopsis: A modern reading app
-  # Per-file-type icons for file managers. Icon names derive from the MIME
-  # types handled above (application/pdf → application-pdf, etc.) and land in
-  # the standard hicolor `mimetypes` sizes. These mappings only apply to the
-  # deb target; the AppImage relies on the first-run copy in electron/main.ts
-  # because a file manager reads the host's icon dirs, never the mounted image.
+
+# Per-file-type icons for file managers. Icon names derive from the MIME
+# types handled above (application/pdf → application-pdf, etc.) and land in
+# the standard hicolor `mimetypes` sizes. These mappings only apply to the
+# deb target; the AppImage relies on the first-run copy in electron/main.ts
+# because a file manager reads the host's icon dirs, never the mounted image.
+# electron-builder 26 only accepts `fpm` on target-level configs (deb/rpm/
+# pacman), not under `linux`; the deb target merges this block over `linux`.
+deb:
   fpm:
     - src/assets/icon/mime/application-pdf.128.png=/usr/share/icons/hicolor/128x128/mimetypes/application-pdf.png
     - src/assets/icon/mime/application-pdf.256.png=/usr/share/icons/hicolor/256x256/mimetypes/application-pdf.png
