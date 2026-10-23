@@ -1,4 +1,5 @@
 import { app, BrowserWindow, ipcMain, protocol, session } from "electron";
+import { copyFile, mkdir } from "node:fs/promises";
 import path from "node:path";
 import { DbWorkerClient } from "./db/client.ts";
 import { registerAiIpc } from "./ipc/ai.ts";
@@ -221,11 +222,40 @@ async function closeDb() {
   if (client) await client.close();
 }
 
+/** Hicolor sizes and MIME-derived icon names — kept in sync with the PNGs
+ *  under `src/assets/icon/mime` and the deb `fpm` mappings in
+ *  electron-builder.yml. */
+const mimeIconSizes = [128, 256, 512] as const;
+const mimeIconNames = ["application-pdf", "application-epub+zip", "text-markdown"] as const;
+
+/** Installing the per-file-type icons for AppImage builds. A file manager
+ *  resolves MIME icons from the host's own icon dirs, never from inside the
+ *  mounted image — and, unlike the deb, nothing ships them system-wide — so
+ *  the app mirrors the same assets into the user's hicolor tree. Idempotent
+ *  and best-effort: failures (e.g. a read-only home) must not break startup. */
+async function installMimeIcons() {
+  const srcDir = path.join(import.meta.dirname, "../src/assets/icon/mime");
+  const dataHome = process.env.XDG_DATA_HOME || path.join(app.getPath("home"), ".local", "share");
+  for (const size of mimeIconSizes) {
+    const dir = path.join(dataHome, "icons", "hicolor", `${size}x${size}`, "mimetypes");
+    for (const name of mimeIconNames) {
+      await mkdir(dir, { recursive: true });
+      await copyFile(path.join(srcDir, `${name}.${size}.png`), path.join(dir, `${name}.png`));
+    }
+  }
+}
+
 app.whenReady().then(() => {
   // Dev builds only — a packaged mac app gets its dock icon from the .app
   // bundle (set via `mac.icon` in electron-builder.yml).
   if (process.platform === "darwin" && !app.isPackaged) {
     app.dock?.setIcon(path.join(import.meta.dirname, "../src/assets/icon/app-icon.png"));
+  }
+
+  // AppImage only — the deb already installs per-file-type icons system-wide
+  // (via `linux.fpm`), and dev runs need no icon registration either.
+  if (process.platform === "linux" && process.env.APPIMAGE) {
+    void installMimeIcons().catch(() => {});
   }
 
   // Initialize the file store singleton

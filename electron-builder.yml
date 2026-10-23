@@ -11,7 +11,10 @@ directories:
 # "Open with ReadLynx" (double-click). Association icons are picked
 # automatically by extension basename: `${firstExt}.ico` on Windows (NSIS)
 # and `${firstExt}.icns` on macOS (pdf/epub/md files above).
-# Not supported on Linux (falls back to the generic document icon).
+# Linux has no per-extension hook: icons go by MIME type instead — the deb
+# installs `application-pdf` / `application-epub+zip` / `text-markdown` into
+# the system hicolor tree via `linux.fpm`, and the AppImage copies the same
+# set into `~/.local/share/icons` on first run (electron/main.ts).
 fileAssociations:
   - ext: pdf
     name: com.readlynx.app.pdf
@@ -74,3 +77,18 @@ linux:
     - deb
   category: Office
   synopsis: A modern reading app
+  # Per-file-type icons for file managers. Icon names derive from the MIME
+  # types handled above (application/pdf → application-pdf, etc.) and land in
+  # the standard hicolor `mimetypes` sizes. These mappings only apply to the
+  # deb target; the AppImage relies on the first-run copy in electron/main.ts
+  # because a file manager reads the host's icon dirs, never the mounted image.
+  fpm:
+    - src/assets/icon/mime/application-pdf.128.png=/usr/share/icons/hicolor/128x128/mimetypes/application-pdf.png
+    - src/assets/icon/mime/application-pdf.256.png=/usr/share/icons/hicolor/256x256/mimetypes/application-pdf.png
+    - src/assets/icon/mime/application-pdf.512.png=/usr/share/icons/hicolor/512x512/mimetypes/application-pdf.png
+    - src/assets/icon/mime/application-epub+zip.128.png=/usr/share/icons/hicolor/128x128/mimetypes/application-epub+zip.png
+    - src/assets/icon/mime/application-epub+zip.256.png=/usr/share/icons/hicolor/256x256/mimetypes/application-epub+zip.png
+    - src/assets/icon/mime/application-epub+zip.512.png=/usr/share/icons/hicolor/512x512/mimetypes/application-epub+zip.png
+    - src/assets/icon/mime/text-markdown.128.png=/usr/share/icons/hicolor/128x128/mimetypes/text-markdown.png
+    - src/assets/icon/mime/text-markdown.256.png=/usr/share/icons/hicolor/256x256/mimetypes/text-markdown.png
+    - src/assets/icon/mime/text-markdown.512.png=/usr/share/icons/hicolor/512x512/mimetypes/text-markdown.png
