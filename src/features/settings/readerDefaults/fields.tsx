@@ -1,6 +1,7 @@
-import { Check, Minus, Plus } from "lucide-react";
+import { Check, FileText, Minus, Plus, GalleryVertical } from "lucide-react";
 import { READING_BACKGROUNDS } from "../../../components/ui/ColorPickerPanel/colors";
 import { ColorSelect } from "../../../components/ui/ColorSelect/ColorSelect";
+import type { PdfDisplayMode } from "../../../components/pdfViewer/pdfDisplayMode";
 import styles from "./readerDefaults.module.css";
 
 const ZOOM_MIN = 60;
@@ -61,8 +62,7 @@ export function ZoomField({
 
 /** Inline color picker: curated reading swatches + the full custom picker
  *  (saturation/value square, hue bar, hex field) + a "follow theme" reset.
- *  `null` means "follow the app theme" (no override). */
-export function DefaultColorField({
+ *  `null` means "follow the app theme" (no override). */export function DefaultColorField({
   label,
   hint,
   value,
@@ -123,6 +123,59 @@ export function DefaultColorField({
           </>
         )}
       </span>
+    </div>
+  );
+}
+
+const DISPLAY_MODE_OPTIONS: Array<{ value: PdfDisplayMode; label: string; title: string }> = [
+  {
+    value: "scroll",
+    label: "Scroll",
+    title: "All pages in one continuous column, like a web page",
+  },
+  {
+    value: "paged",
+    label: "Page",
+    title: "One page at a time, the classic PDF reader",
+  },
+];
+
+/** Two-choice page-layout field for the PDF defaults card. The icons are the
+ *  same ones the reader toolbar's toggle uses, so the two ends of the setting
+ *  read as one thing. */
+export function DisplayModeField({
+  value,
+  onChange,
+}: {
+  value: PdfDisplayMode;
+  onChange: (next: PdfDisplayMode) => void;
+}) {
+  return (
+    <div className={styles.field}>
+      <span className={styles.fieldLabel}>Default view</span>
+      <span className={styles.fieldHint}>
+        How new PDF books open. The toolbar toggle inside a book keeps winning over this.
+      </span>
+      <div className={styles.modeSwitch} role="radiogroup" aria-label="Default view">
+        {DISPLAY_MODE_OPTIONS.map((option) => (
+          <button
+            key={option.value}
+            type="button"
+            role="radio"
+            aria-checked={value === option.value}
+            title={option.title}
+            className={`${styles.modeButton} ${value === option.value ? styles.modeButtonActive : ""}`}
+            onClick={() => onChange(option.value)}
+          >
+            {option.value === "scroll" ? (
+              <GalleryVertical size={13} strokeWidth={1.8} aria-hidden="true" />
+            ) : (
+              <FileText size={13} strokeWidth={1.8} aria-hidden="true" />
+            )}
+            {option.label}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

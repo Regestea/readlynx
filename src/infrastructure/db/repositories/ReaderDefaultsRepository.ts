@@ -31,7 +31,7 @@ export class ReaderDefaultsRepository {
       .prepare(
         `INSERT INTO ReaderDefaults (
            viewer, zoomPct, fontFamily, customBg, customText,
-           textHardOverride, softBookColors, pdfBackground,
+           textHardOverride, softBookColors, pdfBackground, pdfDisplayMode,
            codeTheme, diagramTheme, codeBackground, diagramBackground,
            updatedAt
          ) VALUES (
@@ -41,7 +41,7 @@ export class ReaderDefaultsRepository {
            @customBg, @customText,
            COALESCE(@textHardOverride, 0),
            COALESCE(@softBookColors, 1),
-           @pdfBackground,
+           @pdfBackground, @pdfDisplayMode,
            @codeTheme, @diagramTheme, @codeBackground, @diagramBackground,
            datetime('now')
          )
@@ -53,6 +53,7 @@ export class ReaderDefaultsRepository {
            textHardOverride  = COALESCE(@textHardOverride, ReaderDefaults.textHardOverride, 0),
            softBookColors    = COALESCE(@softBookColors,   ReaderDefaults.softBookColors, 0),
            pdfBackground     = @pdfBackground,
+           pdfDisplayMode    = COALESCE(@pdfDisplayMode,   ReaderDefaults.pdfDisplayMode),
            codeTheme         = @codeTheme,
            diagramTheme      = @diagramTheme,
            codeBackground    = @codeBackground,
@@ -68,6 +69,7 @@ export class ReaderDefaultsRepository {
         textHardOverride: toFlag(settings.textHardOverride),
         softBookColors: toFlag(settings.softBookColors),
         pdfBackground: settings.pdfBackground ?? null,
+        pdfDisplayMode: settings.pdfDisplayMode ?? null,
         codeTheme: settings.codeTheme ?? null,
         diagramTheme: settings.diagramTheme ?? null,
         codeBackground: settings.codeBackground ?? null,

@@ -70,9 +70,9 @@ CREATE TABLE IF NOT EXISTS ReadingState (
 -- Per-book, per-viewer reader settings (zoom, font, colors) that used to
 -- live in localStorage. One row per (book, viewer) pair; the same table
 -- serves the EPUB viewer ('epub'), the translation Markdown view ('markdown'),
--- the PDF viewer's page zoom and reading theme ('pdf', zoomPct and
--- pdfBackground) and the per-book global image zoom ('image', only its
--- zoomPct column is used).
+-- the PDF viewer's page zoom, reading theme and page display mode ('pdf',
+-- zoomPct, pdfBackground and pdfDisplayMode) and the per-book global image
+-- zoom ('image', only its zoomPct column is used).
 CREATE TABLE IF NOT EXISTS ReaderSettings (
   bookId            TEXT NOT NULL REFERENCES Books(id) ON DELETE CASCADE,
   viewer            TEXT NOT NULL,
@@ -83,6 +83,7 @@ CREATE TABLE IF NOT EXISTS ReaderSettings (
   textHardOverride  INTEGER NOT NULL DEFAULT 0,
   softBookColors    INTEGER NOT NULL DEFAULT 1,
   pdfBackground     TEXT,
+  pdfDisplayMode    TEXT,
   codeTheme         TEXT,
   diagramTheme      TEXT,
   codeBackground    TEXT,
@@ -103,6 +104,7 @@ CREATE TABLE IF NOT EXISTS ReaderDefaults (
   textHardOverride  INTEGER NOT NULL DEFAULT 0,
   softBookColors    INTEGER NOT NULL DEFAULT 1,
   pdfBackground     TEXT,
+  pdfDisplayMode    TEXT,
   codeTheme         TEXT,
   diagramTheme      TEXT,
   codeBackground    TEXT,
@@ -243,6 +245,7 @@ export function applySchema(db: Database.Database): void {
     ensureBookPinColumns(db);
     ensureBookTemporaryColumn(db);
     ensureAppSettingsOpenWithColumns(db);
+    ensureReaderPdfDisplayModeColumns(db);
   });
 }
 
@@ -780,6 +783,18 @@ function ensureReaderSoftBookColorsColumn(db: Database.Database): void {
     const columns = db.pragma(`table_info(${table})`) as Array<{ name: string }>;
     if (columns.some((entry) => entry.name === "softBookColors")) continue;
     db.exec(`ALTER TABLE ${table} ADD COLUMN softBookColors INTEGER NOT NULL DEFAULT 1`);
+  }
+}
+
+/** Databases created before the PDF scroll/page display mode existed lack
+ *  `pdfDisplayMode` on both reader stores. Adds it as nullable (null = the
+ *  global default applies, or the built-in one when no default was ever set);
+ *  existing books keep reading in whatever mode they open in. */
+function ensureReaderPdfDisplayModeColumns(db: Database.Database): void {
+  for (const table of ["ReaderSettings", "ReaderDefaults"]) {
+    const columns = db.pragma(`table_info(${table})`) as Array<{ name: string }>;
+    if (columns.some((entry) => entry.name === "pdfDisplayMode")) continue;
+    db.exec(`ALTER TABLE ${table} ADD COLUMN pdfDisplayMode TEXT`);
   }
 }
 

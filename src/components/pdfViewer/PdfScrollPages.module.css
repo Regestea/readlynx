@@ -1,0 +1,85 @@
+/* Continuous-scroll PDF layout: every page is a fixed-size slot in one tall
+   column; only the slots near the viewport hold a real canvas (virtualized in
+   PdfScrollPages.tsx). Theme classes (`pdf-page`, `pdf-canvas`,
+   `pdf-text-layer`, `pdf-annotation-layer`) come from theme/pdf-theme.css and
+   are shared with the paged layout. */
+
+.scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  align-items: flex-start;
+  background: var(--pdf-background-color);
+}
+
+/* The single flex child of `.scroll`: centered by auto margins while it is
+   narrower than the pane, flush with the scroll origin once a zoomed-in page
+   makes it wider (auto margins collapse to zero) — the same contract as the
+   paged `.page`, so horizontal overflow always stays reachable.
+   `position: relative` makes the column the wrappers' offsetParent, which the
+   scroll math (page offsets, most-visible page) reads instead of duplicating
+   the paddings and gaps of this stylesheet in TypeScript. */
+.column {
+  position: relative;
+  flex: 0 0 auto;
+  margin-inline: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-6);
+  padding: var(--space-6);
+}
+
+.page {
+  position: relative;
+  flex: 0 0 auto;
+  box-shadow: 0 6px 24px rgb(0 0 0 / 16%);
+}
+
+.canvas {
+  display: block;
+  background: var(--pdf-background-color, #fff);
+  border-radius: 2px;
+}
+
+/* While the page's bitmap is being rendered off the placeholder. */
+.rendering {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: grid;
+  place-items: center;
+  background: rgb(255 255 255 / 50%);
+}
+
+/* Reminder of what is scanned, on every page — same as the paged layout. */
+.regionHint {
+  position: absolute;
+  z-index: 3;
+  border: 1px dashed var(--color-primary);
+  border-radius: 2px;
+  pointer-events: none;
+  opacity: 0.55;
+}
+
+.loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  align-self: center;
+  margin: auto;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.spinner {
+  animation: pdf-scroll-spin 0.9s linear infinite;
+}
+
+@keyframes pdf-scroll-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

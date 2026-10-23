@@ -1,5 +1,6 @@
 import { createContext, useContext } from "react";
 import type { PdfThemeState } from "./PdfThemeManager";
+import type { PdfDisplayMode } from "../pdfDisplayMode";
 
 export interface PdfThemeContextValue {
   /** Current reader background color. */
@@ -14,6 +15,15 @@ export interface PdfThemeContextValue {
   setZoomPct: (zoomPct: number) => void;
   /** False until the stored zoom has been read from the database. */
   zoomLoaded: boolean;
+  /** How the pages are laid out: one continuous column or one page at a
+   *  time. Persisted per book like the zoom. */
+  displayMode: PdfDisplayMode;
+  /** Switches the page layout; persisted per book. */
+  setDisplayMode: (mode: PdfDisplayMode) => void;
+  /** False until the stored display mode has been read — the viewer holds
+   *  off mounting either layout until this is true, so a paged book never
+   *  flickers through a scroll column (or the reverse). */
+  displayModeLoaded: boolean;
 }
 
 export const PdfThemeContext = createContext<PdfThemeContextValue | null>(null);

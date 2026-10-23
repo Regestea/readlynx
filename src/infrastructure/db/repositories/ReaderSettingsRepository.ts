@@ -19,6 +19,9 @@ export interface ReaderSettingsInput {
   softBookColors?: number | boolean | null;
   /** PDF viewer background (null = app default paper). */
   pdfBackground?: string | null;
+  /** PDF page display mode ("scroll" / "paged"). Omitted/null = keep the
+   *  stored value (null = follow the global default). */
+  pdfDisplayMode?: string | null;
   /** Markdown-only code-block syntax theme ("light"/"dark", null = follow). */
   codeTheme?: string | null;
   /** Markdown-only Mermaid diagram theme ("light"/"dark", null = follow). */
@@ -59,7 +62,7 @@ export class ReaderSettingsRepository {
       .prepare(
         `INSERT INTO ReaderSettings (
            bookId, viewer, zoomPct, fontFamily, customBg, customText,
-           textHardOverride, softBookColors, pdfBackground,
+           textHardOverride, softBookColors, pdfBackground, pdfDisplayMode,
            codeTheme, diagramTheme, codeBackground, diagramBackground,
            updatedAt
          ) VALUES (
@@ -69,7 +72,7 @@ export class ReaderSettingsRepository {
            @customBg, @customText,
            COALESCE(@textHardOverride, 0),
            COALESCE(@softBookColors, 1),
-           @pdfBackground,
+           @pdfBackground, @pdfDisplayMode,
            @codeTheme, @diagramTheme, @codeBackground, @diagramBackground,
            datetime('now')
          )
@@ -81,6 +84,7 @@ export class ReaderSettingsRepository {
            textHardOverride  = COALESCE(@textHardOverride, ReaderSettings.textHardOverride, 0),
            softBookColors    = COALESCE(@softBookColors,   ReaderSettings.softBookColors, 0),
            pdfBackground     = @pdfBackground,
+           pdfDisplayMode    = COALESCE(@pdfDisplayMode,   ReaderSettings.pdfDisplayMode),
            codeTheme         = @codeTheme,
            diagramTheme      = @diagramTheme,
            codeBackground    = @codeBackground,
@@ -97,6 +101,7 @@ export class ReaderSettingsRepository {
         textHardOverride: toFlag(settings.textHardOverride),
         softBookColors: toFlag(settings.softBookColors),
         pdfBackground: settings.pdfBackground ?? null,
+        pdfDisplayMode: settings.pdfDisplayMode ?? null,
         codeTheme: settings.codeTheme ?? null,
         diagramTheme: settings.diagramTheme ?? null,
         codeBackground: settings.codeBackground ?? null,

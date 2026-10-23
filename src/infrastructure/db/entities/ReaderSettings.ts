@@ -36,6 +36,9 @@ export interface ReaderSettingsEntity {
   softBookColors: number;
   /** PDF viewer background ("" / null = app default paper). */
   pdfBackground: string | null;
+  /** PDF page display mode ("scroll" = continuous column, "paged" = one page
+   *  at a time; null = follow the global default). */
+  pdfDisplayMode: string | null;
   /** Markdown-only code-block syntax theme ("light"/"dark", null = follow). */
   codeTheme: string | null;
   /** Markdown-only Mermaid diagram theme ("light"/"dark", null = follow). */

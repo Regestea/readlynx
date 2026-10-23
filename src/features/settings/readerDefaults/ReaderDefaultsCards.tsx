@@ -11,7 +11,7 @@ import {
   PDF_ZOOM_STEP_PCT,
 } from "../../../components/pdfViewer/pdfZoom";
 import { useReaderDefaults } from "../../../hooks/useReaderDefaults.ts";
-import { DefaultColorField, ZoomField } from "./fields.tsx";
+import { DefaultColorField, DisplayModeField, ZoomField } from "./fields.tsx";
 import styles from "./readerDefaults.module.css";
 
 const CODE_PREVIEW = `function greet(name: string) {
@@ -219,8 +219,8 @@ export function TranslationDefaultsCard() {
   );
 }
 
-/** Global PDF defaults: starting zoom and reading background for books whose
- *  PDF settings were never customized per book. */
+/** Global PDF defaults: starting zoom, page layout and reading background for
+ *  books whose PDF settings were never customized per book. */
 export function PdfDefaultsCard() {
   const defaults = useReaderDefaults("pdf");
 
@@ -234,8 +234,8 @@ export function PdfDefaultsCard() {
           <h2 className={styles.sectionTitle}>PDF defaults</h2>
         </div>
         <p className={styles.sectionDesc}>
-          Starting zoom and reading background for newly added PDF books. Changing a book inside
-          its reader keeps winning over this default.
+          Starting zoom, page layout and reading background for newly added PDF books. Changing a
+          book inside its reader keeps winning over these defaults.
         </p>
       </div>
 
@@ -255,6 +255,13 @@ export function PdfDefaultsCard() {
           />
         </div>
 
+        <DisplayModeField
+          value={defaults.pdfDisplayMode}
+          onChange={(pdfDisplayMode) => defaults.setValues({ pdfDisplayMode })}
+        />
+      </div>
+
+      <div className={styles.grid}>
         <DefaultColorField
           label="Reading background"
           hint="Empty = the default warm paper."

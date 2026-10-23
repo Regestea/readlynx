@@ -1,4 +1,5 @@
-/** Independent scroll memory for long documents (EPUB + Markdown).
+/** Independent scroll memory for long documents (EPUB + Markdown, and PDF
+ *  books read in the continuous-scroll layout).
  *
  *  Each view keeps its own position — switching between original and
  *  translation never transfers an offset to the other view (that pixel copy
@@ -8,10 +9,12 @@
  *  Positions are stored as a 0..1 ratio (scrollTop / scrollable range) rather
  *  than pixels, so they stay valid across zoom / font / window-size changes.
  *  Persisted in localStorage per (book, view, unit) so they survive app
- *  restarts. PDF books are excluded on purpose (page-based, not scrolled).
+ *  restarts. Paged PDF books stay excluded (their position is the page number
+ *  in the database); a PDF read as one continuous column saves its
+ *  whole-document ratio under "pdf-scroll".
  */
 
-export type ScrollViewKind = "epub-orig" | "md-orig" | "trans";
+export type ScrollViewKind = "epub-orig" | "md-orig" | "trans" | "pdf-scroll";
 
 /** Namespace of every scroll key in localStorage. Also used by the startup
  *  sweep that drops entries whose book is gone. */

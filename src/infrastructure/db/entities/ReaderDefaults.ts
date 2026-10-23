@@ -18,6 +18,8 @@ export interface ReaderDefaultsEntity {
   softBookColors: number;
   /** PDF viewer background ("" / null = app default paper). */
   pdfBackground: string | null;
+  /** PDF page display mode ("scroll" / "paged"; null = the built-in default). */
+  pdfDisplayMode: string | null;
   /** Markdown-only code-block syntax theme ("light"/"dark", null = follow). */
   codeTheme: string | null;
   /** Markdown-only Mermaid diagram theme ("light"/"dark", null = follow). */

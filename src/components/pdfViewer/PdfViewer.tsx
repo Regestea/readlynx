@@ -1,6 +1,21 @@
 import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import type { CSSProperties, MouseEvent as ReactMouseEvent, Ref } from "react";
-import { ChevronLeft, ChevronRight, ClipboardCopy, Crop, FileWarning, Loader2, Maximize2, Minimize2, Palette, ScanText, ZoomIn, ZoomOut } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  ClipboardCopy,
+  Crop,
+  FileWarning,
+  GalleryVertical,
+  Loader2,
+  Maximize2,
+  Minimize2,
+  Palette,
+  RectangleVertical,
+  ScanText,
+  ZoomIn,
+  ZoomOut,
+} from "lucide-react";
 import * as pdfjsLib from "pdfjs-dist";
 import { AnnotationLayer, TextLayer } from "pdfjs-dist";
 import type {
@@ -15,6 +30,8 @@ import { OcrPanel } from "./OcrPanel";
 import { CopyPageTextMenu } from "./CopyPageTextMenu";
 import type { CopyPageTextMode } from "./CopyPageTextMenu";
 import { PdfScanRegionOverlay } from "./PdfScanRegionOverlay";
+import { PdfScrollPages } from "./PdfScrollPages";
+import type { PdfScrollPagesHandle } from "./PdfScrollPages";
 import { AiSelectionBubble } from "../AiSelectionBubble/AiSelectionBubble";
 import { useToast } from "../ui/Toast/ToastContext";
 import { enterReaderFullscreen, exitReaderFullscreen, popoverOpen } from "../../shared/readerFullscreen";
@@ -63,10 +80,15 @@ export interface PdfViewerHandle {
     page: number,
     region?: PdfScanRegion | null,
   ): Promise<PdfRegionSnapshot | null>;
-  /** Jumps to a page (clamped to the document bounds). */
+  /** Jumps to a page (clamped to the document bounds). In scroll mode the
+   *  page's top is scrolled to the viewport; in paged mode it turns to it. */
   goToPage(page: number): void;
   /** Total page count of the loaded document (0 before it loads). */
   getPageCount(): number;
+  /** Whole-document scroll position as a 0..1 ratio — scroll layout only,
+   *  null in paged mode or before the column can scroll. The host reads this
+   *  when it persists the reading position. */
+  getScrollRatio(): number | null;
   /** Opens the scan-region trim overlay. No-op without `onScanRegionChange`. */
   startScanRegionSelection(): void;
 }
@@ -131,6 +153,13 @@ interface PdfViewerProps {
   /** Page to display once the document loads — used to resume reading where
    *  the user left off. */
   initialPage?: number;
+  /** Whole-document scroll position (0..1) to restore when the book opens in
+   *  scroll mode — the finer-grained resume alongside `initialPage`. Only
+   *  applied to the first scroll layout of the document. */
+  initialScrollRatio?: number | null;
+  /** Pinged (throttled) while the reader scrolls the continuous layout, so
+   *  the host can schedule position saves and dismiss floating UI. */
+  onScrollChange?: () => void;
 }
 
 export function PdfViewer(props: PdfViewerProps & { ref?: Ref<PdfViewerHandle> }) {
@@ -160,6 +189,8 @@ function PdfViewerInner({
   scanRegion = null,
   onScanRegionChange,
   initialPage,
+  initialScrollRatio = null,
+  onScrollChange,
   ref,
 }: PdfViewerProps & { ref?: Ref<PdfViewerHandle> }) {
   const [doc, setDoc] = useState<PDFDocumentProxy | null>(null);
@@ -193,9 +224,12 @@ function PdfViewerInner({
   const [downloadProgress, setDownloadProgress] = useState<number | null>(null);
   const [extracting, setExtracting] = useState(false);
   const [ocrStatus, setOcrStatus] = useState<string | null>(null);
-  const [aiSelection, setAiSelection] = useState<{ x: number; y: number } | null>(null);
-  /** True while the scan-region trim overlay is open. */
-  const [regionEditing, setRegionEditing] = useState(false);
+  const [aiSelection, setAiSelection] = useState<{ x: number; y: number; page: number } | null>(null);
+  /** The page hosting the open scan-region trim overlay; null when closed.
+   *  (Paged mode hosts it on the current page; scroll mode pins it to the
+   *  page it was opened on.) */
+  const [regionEditPage, setRegionEditPage] = useState<number | null>(null);
+  const regionEditing = regionEditPage !== null;
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [spacerHeight, setSpacerHeight] = useState(0);
   const [themeOpen, setThemeOpen] = useState(false);
@@ -212,11 +246,16 @@ function PdfViewerInner({
   const annotationLayerTaskRef = useRef<AnnotationLayer | null>(null);
   const themeWrapRef = useRef<HTMLSpanElement>(null);
   const copyWrapRef = useRef<HTMLSpanElement>(null);
+  /** The continuous-scroll layout's imperative surface (jump to page, scroll
+   *  ratio, per-page canvases); null while the paged layout is on screen. */
+  const scrollPagesRef = useRef<PdfScrollPagesHandle | null>(null);
   /** Latest scan region and change handler, read through refs because the
    *  imperative handle is built once and an async render must not work from
    *  the values it started with. */
   const scanRegionRef = useRef<PdfScanRegion | null>(scanRegion);
   const onScanRegionChangeRef = useRef(onScanRegionChange);
+  const onScrollChangeRef = useRef(onScrollChange);
+  const initialScrollRatioRef = useRef(initialScrollRatio);
 
   useEffect(() => {
     scanRegionRef.current = scanRegion;
@@ -225,6 +264,11 @@ function PdfViewerInner({
   useEffect(() => {
     onScanRegionChangeRef.current = onScanRegionChange;
   }, [onScanRegionChange]);
+
+  useEffect(() => {
+    onScrollChangeRef.current = onScrollChange;
+    initialScrollRatioRef.current = initialScrollRatio;
+  }, [onScrollChange, initialScrollRatio]);
 
   /** Renders a page offscreen at the scan resolution, cut to the scan region.
    *  The single entry point behind every capture, so OCR and AI vision see the
@@ -275,7 +319,27 @@ function PdfViewerInner({
   }, [renderScanPage, pageNumber]);
 
   const showOcr = ocrEnabled || Boolean(onOcrText) || Boolean(onAiVision);
-  const { state: pdfTheme, zoomPct, setZoomPct, zoomLoaded } = usePdfTheme();
+  const {
+    state: pdfTheme,
+    zoomPct,
+    setZoomPct,
+    zoomLoaded,
+    displayMode,
+    setDisplayMode,
+    displayModeLoaded,
+  } = usePdfTheme();
+  /** Whole-document scroll ratio to hand to the next scroll layout, valid
+   *  only until that layout has mounted once. Later toggles (paged ⇄ scroll)
+   *  re-anchor to the current page instead — a ratio saved before reading on
+   *  in the other mode would be stale. */
+  const [scrollRestoreRatio, setScrollRestoreRatio] = useState<number | null>(null);
+  /** False until the restore inputs for this document have been decided, so
+   *  the scroll layout never mounts with the ratio still in flight. */
+  const [scrollRestoreSettled, setScrollRestoreSettled] = useState(false);
+  /** Whether this document opened in scroll mode (so its saved ratio may be
+   *  restored at all) and whether a scroll layout has already mounted. */
+  const openedInScrollRef = useRef(false);
+  const scrollEverMountedRef = useRef(false);
   /** Scale the automatic fit produced for the current pane (1 when the host
    *  asked for no fit). The rendered scale is this multiplied by the stored
    *  zoom, which is why the reader's zoom survives a resize instead of being
@@ -312,7 +376,15 @@ function PdfViewerInner({
   );
 
   useImperativeHandle(ref, () => ({
-    getCurrentPageImage: () => canvasRef.current?.toDataURL("image/png") ?? null,
+    getCurrentPageImage: () => {
+      // The scroll layout paints into per-page canvases; the current page's
+      // slot may legitimately be empty (zoomed past the render window).
+      const canvas =
+        displayMode === "scroll"
+          ? scrollPagesRef.current?.getPageCanvas(pageNumber)
+          : canvasRef.current;
+      return canvas ? canvas.toDataURL("image/png") : null;
+    },
     getPageImage: async (page: number, region?: PdfScanRegion | null) => {
       const rendered = await renderScanPage(page, region);
       return rendered ? rendered.canvas.toDataURL("image/png") : null;
@@ -338,20 +410,25 @@ function PdfViewerInner({
     goToPage: (page: number) => {
       const pdf = docRef.current;
       if (!pdf) return;
-      setRegionEditing(false);
-      setPageNumber(Math.min(Math.max(1, page), pdf.numPages));
+      const target = Math.min(Math.max(1, page), pdf.numPages);
+      setRegionEditPage(null);
+      if (displayMode === "scroll") scrollPagesRef.current?.scrollToPage(target);
+      setPageNumber(target);
+    },
+    getScrollRatio: () => {
+      if (displayMode !== "scroll") return null;
+      return scrollPagesRef.current?.getScrollRatio() ?? null;
     },
     startScanRegionSelection: () => {
       if (!onScanRegionChangeRef.current) return;
-      const canvas = canvasRef.current;
-      if (!canvas || canvas.width <= 0 || canvas.height <= 0) {
-        // Nothing to trim on yet (page still painting); clearing the region
-        // back to the whole page is always valid.
+      if (!docRef.current) {
+        // Nothing to trim on yet (still loading); clearing the region back to
+        // the whole page is always valid.
         onScanRegionChangeRef.current(null);
         return;
       }
       setAiSelection(null);
-      setRegionEditing(true);
+      setRegionEditPage(pageNumber);
     },
   }));
 
@@ -519,8 +596,9 @@ function PdfViewerInner({
   );
 
   const handleExtract = useCallback(async () => {
-    const canvas = canvasRef.current;
-    if (!canvas) {
+    // The capture renders offscreen (independent of zoom and layout), so the
+    // only real prerequisite is the loaded document.
+    if (!docRef.current) {
       toast.error("The page is still loading.");
       return;
     }
@@ -558,8 +636,7 @@ function PdfViewerInner({
    *  the editor itself; this handler only drives the panel's busy state and
    *  the notification that reports the result. */
   const handleVisionExtract = useCallback(async () => {
-    const canvas = canvasRef.current;
-    if (!canvas) {
+    if (!docRef.current) {
       toast.error("The page is still loading.");
       return;
     }
@@ -654,14 +731,14 @@ function PdfViewerInner({
   };
 
   /** Click-to-ask: floats the "Ask AI" bubble at the cursor. The bubble's
-   *  click hands a PNG of the current page to the host, which picks
-   *  OCR or AI vision from its top setting. */
+   *  click hands a PNG of `page` to the host, which picks OCR or AI vision
+   *  from its top setting. Shared by both layouts — in paged mode the canvas
+   *  is the current page, in scroll mode every page wrapper reports its own
+   *  number. */
   const handlePageClick = useCallback(
-    (event: ReactMouseEvent<HTMLCanvasElement>) => {
-      const canvas = canvasRef.current;
-      if (!canvas || !onAskAi) return;
-      if (regionEditing) return;
-      const rect = canvas.getBoundingClientRect();
+    (page: number, event: ReactMouseEvent<HTMLElement>) => {
+      if (!onAskAi || regionEditing) return;
+      const rect = event.currentTarget.getBoundingClientRect();
       const relX = event.clientX - rect.left;
       const relY = event.clientY - rect.top;
       const bubbleWidth = 40;
@@ -670,41 +747,114 @@ function PdfViewerInner({
           ? relX + rect.left + 12
           : Math.max(8, relX + rect.left - bubbleWidth - 12);
       const y = Math.max(8, Math.min(relY + rect.top - 52, window.innerHeight - bubbleWidth));
-      setAiSelection({ x, y });
+      setAiSelection({ x, y, page });
     },
     [onAskAi, regionEditing],
   );
 
-  /** Hands a PNG of the current page to the host, which decides between OCR
+  /** Scroll layout page click: the same bubble as paged, except clicks on the
+   *  text layer are ignored — there they belong to text selection, exactly as
+   *  in paged mode, where the layer sits above the canvas and the canvas
+   *  never sees those clicks. */
+  const handleScrollPageClick = useCallback(
+    (page: number, event: ReactMouseEvent<HTMLDivElement>) => {
+      const target = event.target as HTMLElement | null;
+      if (target && target.closest(".textLayer")) return;
+      handlePageClick(page, event);
+    },
+    [handlePageClick],
+  );
+
+  /** Hands a PNG of `page` to the host, which decides between OCR
    *  (recognized text seeded into the chat) and AI vision (the page image) from
    *  its top setting. Shared by the click bubble and the right-click shortcut.
    *  Rendered at the scan resolution and cut to the scan region, so what the
    *  user asks about is what the translation pipeline would have read. */
-  const askAboutPage = useCallback(() => {
-    void capturePageForScan()
-      .then((image) => {
-        if (image) onAskAi?.({ image });
-      })
-      .catch(() => {
-        // The page could not be re-rendered; the chat panel stays closed.
-      });
-  }, [onAskAi, capturePageForScan]);
+  const askAboutPage = useCallback(
+    (page: number) => {
+      void renderScanPage(page, scanRegionRef.current)
+        .then((rendered) => {
+          const image = rendered ? rendered.canvas.toDataURL("image/png") : null;
+          if (image) onAskAi?.({ image });
+        })
+        .catch(() => {
+          // The page could not be re-rendered; the chat panel stays closed.
+        });
+    },
+    [onAskAi, renderScanPage],
+  );
 
-  /** Right-clicking the page with no text selection asks the AI about the
+  /** Right-clicking the page with no text selection asks the AI about that
    *  page instead of opening the native menu — the same as the click
    *  bubble, minus the extra step. A text selection is left alone so the
    *  native copy menu still works (same rule as the Markdown/EPUB views). */
   const handlePageContextMenu = useCallback(
-    (event: ReactMouseEvent<HTMLDivElement>) => {
+    (page: number, event: ReactMouseEvent<HTMLDivElement>) => {
       if (!onAskAi || regionEditing) return;
       const selection = window.getSelection();
       if (selection && !selection.isCollapsed && selection.toString().trim()) return;
       event.preventDefault();
       setAiSelection(null);
-      askAboutPage();
+      askAboutPage(page);
     },
     [onAskAi, askAboutPage, regionEditing],
   );
+
+  /** Scroll layout: the mostly-visible page (reported debounced at scroll
+   *  idle) becomes the current page — the same signal the paged layout gets
+   *  from a turn, so the toolbar, the position write and the translation unit
+   *  all follow the reader through a continuous document. */
+  const handleMostVisiblePage = useCallback((page: number) => {
+    setAiSelection(null);
+    setPageNumber(page);
+  }, []);
+
+  /** The scroll column mounted: its restore inputs are consumed, so they
+   *  must not replay on the next toggle. */
+  const handleScrollPagesMounted = useCallback(() => {
+    setScrollRestoreRatio(null);
+  }, []);
+
+  const handleRegionCommit = useCallback(
+    (region: PdfScanRegion | null) => {
+      onScanRegionChange?.(region);
+      setRegionEditPage(null);
+    },
+    [onScanRegionChange],
+  );
+
+  /** Toggling closes the overlays: the bubble is anchored to a page's pixels
+   *  and the trim overlay to one page, and both layouts re-anchor on switch. */
+  const handleToggleDisplayMode = useCallback(() => {
+    setRegionEditPage(null);
+    setAiSelection(null);
+    setDisplayMode(displayMode === "scroll" ? "paged" : "scroll");
+  }, [displayMode, setDisplayMode]);
+
+  /** Which scroll ratio the next scroll layout may restore: only the
+   *  document's first scroll layout, and only when the book actually opened
+   *  in scroll mode — a ratio saved before reading on in paged mode would
+   *  jump the reader backwards. */
+  useEffect(() => {
+    if (!doc || !displayModeLoaded) return;
+    if (!openedInScrollRef.current) {
+      openedInScrollRef.current = displayMode === "scroll";
+    }
+    if (displayMode === "scroll" && !scrollEverMountedRef.current) {
+      scrollEverMountedRef.current = true;
+      if (openedInScrollRef.current) {
+        setScrollRestoreRatio(initialScrollRatioRef.current);
+      }
+    }
+    setScrollRestoreSettled(true);
+  }, [doc, displayMode, displayModeLoaded]);
+
+  /** First paint of the scroll layout — the scroll mode's `onReady`. */
+  const handleScrollFirstPaint = useCallback(() => {
+    if (readyRef.current) return;
+    readyRef.current = true;
+    onReadyRef.current?.();
+  }, []);
 
   useEffect(() => {
     onReadyRef.current = onReady;
@@ -753,7 +903,13 @@ function PdfViewerInner({
         setRendering(true);
         snapshottedRef.current = false;
         readyRef.current = false;
-        setRegionEditing(false);
+        setRegionEditPage(null);
+        // The new document's resume state starts over: no scroll restore, no
+        // knowledge of which layout it opened in.
+        openedInScrollRef.current = false;
+        scrollEverMountedRef.current = false;
+        setScrollRestoreRatio(null);
+        setScrollRestoreSettled(false);
 
         const data = await window.readlynx?.readFileBytes(filePath);
         if (!data) {
@@ -782,6 +938,34 @@ function PdfViewerInner({
           // No automatic fit to wait for, so the baseline is the PDF's own
           // size and the zoom alone decides how big the page renders.
           setFitScale(1);
+        }
+        // Cover capture: page 1 rendered offscreen at a fixed width,
+        // independent of the on-screen layout — a continuous column resumed
+        // at page 50 may never paint page 1, so this can't ride a page render.
+        const report = onPageSnapshotRef.current;
+        if (report && !snapshottedRef.current) {
+          snapshottedRef.current = true;
+          void (async () => {
+            try {
+              const pageProxy = await nextDoc.getPage(1);
+              if (cancelled) return;
+              const baseViewport = pageProxy.getViewport({ scale: 1 });
+              const snapshotScale = 1240 / baseViewport.width;
+              const snapViewport = pageProxy.getViewport({ scale: snapshotScale });
+              const snap = document.createElement("canvas");
+              snap.width = Math.floor(snapViewport.width);
+              snap.height = Math.floor(snapViewport.height);
+              const snapCtx = snap.getContext("2d");
+              if (!snapCtx) {
+                report(null);
+                return;
+              }
+              await pageProxy.render({ canvas: snap, viewport: snapViewport }).promise;
+              report(snap.toDataURL("image/png"));
+            } catch {
+              report(null);
+            }
+          })();
         }
       } catch (err: unknown) {
         if (!cancelled) {
@@ -833,7 +1017,9 @@ function PdfViewerInner({
       cancelAnimationFrame(frame);
       observer.disconnect();
     };
-  }, [doc, fit, fitWidth, applyFit]);
+    // `displayMode` swaps the scroll element (each layout owns its own), so
+    // the observer must re-attach when it changes.
+  }, [doc, fit, fitWidth, displayMode, applyFit]);
 
   const renderPage = useCallback(async (pdf: PDFDocumentProxy, page: number, s: number) => {
     const canvas = canvasRef.current;
@@ -865,36 +1051,12 @@ function PdfViewerInner({
       canvas.style.width = `${Math.floor(viewport.width)}px`;
       canvas.style.height = `${Math.floor(viewport.height)}px`;
       const transform: number[] | undefined = outputScale !== 1 ? [outputScale, 0, 0, outputScale, 0, 0] : undefined;
-const task = pageProxy.render({ canvas, viewport, transform });
+        const task = pageProxy.render({ canvas, viewport, transform });
         renderTaskRef.current = task;
         await task.promise;
         if (!readyRef.current) {
           readyRef.current = true;
           onReadyRef.current?.();
-        }
-        if (page === 1 && !snapshottedRef.current) {
-          snapshottedRef.current = true;
-          const report = onPageSnapshotRef.current;
-          if (report) {
-            try {
-              const base = pageProxy.getViewport({ scale: 1 });
-              const snapshotScale = 1240 / base.width;
-              const snapViewport = pageProxy.getViewport({ scale: snapshotScale });
-              const snap = document.createElement("canvas");
-              snap.width = Math.floor(snapViewport.width);
-              snap.height = Math.floor(snapViewport.height);
-              const snapCtx = snap.getContext("2d");
-              if (snapCtx) {
-                await pageProxy.render({ canvas: snap, viewport: snapViewport }).promise;
-                report(snap.toDataURL("image/png"));
-              } else {
-                report(null);
-              }
-            } catch (err: unknown) {
-              if (err instanceof Error && err.name === "RenderingCancelledException") return;
-              report(null);
-            }
-          }
         }
         const textContainer = textLayerRef.current;
         if (textContainer) {
@@ -949,10 +1111,12 @@ const task = pageProxy.render({ canvas, viewport, transform });
   }, [pdfLinkService]);
 
   useEffect(() => {
-    // Nothing is painted until the stored zoom has been read: rendering first
-    // and re-rendering after would show the reader a page jumping out of
-    // itself every time a book opens away from 100%.
-    if (!doc || !zoomLoaded) return;
+    // Nothing is painted until the stored zoom and display mode have been
+    // read: rendering first and re-rendering after would show the reader a
+    // page jumping out of itself every time a book opens away from 100%.
+    // The scroll layout renders itself (PdfScrollPages); this drives paged.
+    if (!doc || !zoomLoaded || !displayModeLoaded) return;
+    if (displayMode !== "paged") return;
     let cancelled = false;
     const run = async () => {
       await Promise.resolve();
@@ -964,14 +1128,18 @@ const task = pageProxy.render({ canvas, viewport, transform });
     return () => {
       cancelled = true;
     };
-  }, [doc, pageNumber, scale, zoomLoaded, renderPage]);
+  }, [doc, pageNumber, scale, zoomLoaded, displayModeLoaded, displayMode, renderPage]);
 
   const goTo = (page: number) => {
     if (!doc) return;
+    const target = Math.min(Math.max(1, page), numPages || 1);
     // The overlay is anchored to the pixels of the page it was drawn on, so a
     // turn would leave it hovering over unrelated content.
-    if (page !== pageNumber) setRegionEditing(false);
-    setPageNumber(Math.min(Math.max(1, page), numPages));
+    if (target !== pageNumber) setRegionEditPage(null);
+    // In scroll mode the jump is a scroll; the debounced most-visible report
+    // would confirm the page anyway, but the toolbar should not wait for it.
+    if (displayMode === "scroll") scrollPagesRef.current?.scrollToPage(target);
+    setPageNumber(target);
   };
 
   const classes = [
@@ -1057,6 +1225,27 @@ const task = pageProxy.render({ canvas, viewport, transform });
           <ZoomIn size={16} strokeWidth={2} aria-hidden="true" />
         </button>
         <span className={styles.divider} aria-hidden="true" />
+        <button
+          type="button"
+          className={`${styles.toolButton} ${displayMode === "paged" ? styles.toolButtonActive : ""}`}
+          onClick={handleToggleDisplayMode}
+          disabled={!doc}
+          aria-label={
+            displayMode === "scroll" ? "Switch to page-by-page view" : "Switch to continuous scrolling"
+          }
+          aria-pressed={displayMode === "paged"}
+          title={
+            displayMode === "scroll"
+              ? "Switch to page-by-page view"
+              : "Switch to continuous scrolling (all pages in one column)"
+          }
+        >
+          {displayMode === "scroll" ? (
+            <GalleryVertical size={16} strokeWidth={2} aria-hidden="true" />
+          ) : (
+            <RectangleVertical size={16} strokeWidth={2} aria-hidden="true" />
+          )}
+        </button>
         <span className={styles.themeWrap} ref={themeWrapRef}>
           <button
             type="button"
@@ -1103,7 +1292,7 @@ const task = pageProxy.render({ canvas, viewport, transform });
             <button
               type="button"
               className={`${styles.toolButton} ${regionEditing || !isWholePageScanRegion(scanRegion) ? styles.toolButtonActive : ""}`}
-              onClick={() => setRegionEditing((open) => !open)}
+              onClick={() => setRegionEditPage((current) => (current === null ? pageNumber : null))}
               disabled={!doc}
               aria-label="Scan region"
               title={
@@ -1171,74 +1360,107 @@ const task = pageProxy.render({ canvas, viewport, transform });
       </div>
       )}
 
-      <div
-        className={styles.scroll}
-        ref={scrollRef}
-        style={{ background: "var(--pdf-background-color)" }}
-        onClick={(event) => {
-          if (event.target !== canvasRef.current) setAiSelection(null);
-        }}
-      >
-        {error ? (
-          <div className={styles.error} role="alert">
-            <FileWarning size={28} strokeWidth={1.8} aria-hidden="true" />
-            <p className={styles.errorText}>{error}</p>
-          </div>
-        ) : showCanvas ? (
-          <div
-            className={`${styles.page} pdf-page`}
-            style={{ "--scale-factor": String(scale) } as CSSProperties}
-            onContextMenu={handlePageContextMenu}
-          >
-            <canvas ref={canvasRef} className={`${styles.canvas} pdf-canvas`} onClick={handlePageClick} />
-            <div className="pdf-canvas-tint" aria-hidden="true" />
-            <div ref={textLayerRef} className="pdf-text-layer textLayer" />
-            <div ref={annotationLayerRef} className="pdf-annotation-layer annotationLayer" />
-            {/* Reminder of what is scanned, so a region set once is not
-                forgotten a hundred pages later. */}
-            {!regionEditing && !isWholePageScanRegion(scanRegion) && (
-              <div
-                className={styles.regionHint}
-                aria-hidden="true"
-                style={{
-                  left: `${(scanRegion?.x ?? 0) * 100}%`,
-                  top: `${(scanRegion?.y ?? 0) * 100}%`,
-                  width: `${(scanRegion?.w ?? 1) * 100}%`,
-                  height: `${(scanRegion?.h ?? 1) * 100}%`,
-                }}
+      {/* Scroll area. The continuous layout owns its own scroll container
+          (registered into scrollRef so the fit logic measures it); the paged
+          layout, loading and error states keep the original one. The stored
+          display mode decides which mounts — never both, never a flash of the
+          wrong one (displayModeLoaded gates the first layout). */}
+      {doc && !error && displayModeLoaded && scrollRestoreSettled && displayMode === "scroll" ? (
+        <PdfScrollPages
+          ref={scrollPagesRef}
+          scrollRef={scrollRef}
+          doc={doc}
+          scale={scale}
+          linkService={pdfLinkService}
+          scanRegion={scanRegion}
+          regionEditPage={regionEditPage}
+          onRegionCommit={handleRegionCommit}
+          onRegionCancel={() => setRegionEditPage(null)}
+          initialPage={pageNumber}
+          initialScrollRatio={scrollRestoreRatio}
+          onMostVisiblePage={handleMostVisiblePage}
+          onScrollActivity={() => {
+            setAiSelection(null);
+            onScrollChangeRef.current?.();
+          }}
+          onPageClick={handleScrollPageClick}
+          onPageContextMenu={handlePageContextMenu}
+          onBackgroundClick={() => setAiSelection(null)}
+          onFirstPaint={handleScrollFirstPaint}
+          onMounted={handleScrollPagesMounted}
+        />
+      ) : (
+        <div
+          className={styles.scroll}
+          ref={scrollRef}
+          style={{ background: "var(--pdf-background-color)" }}
+          onClick={(event) => {
+            if (event.target !== canvasRef.current) setAiSelection(null);
+          }}
+        >
+          {error ? (
+            <div className={styles.error} role="alert">
+              <FileWarning size={28} strokeWidth={1.8} aria-hidden="true" />
+              <p className={styles.errorText}>{error}</p>
+            </div>
+          ) : showCanvas && displayMode === "paged" ? (
+            <div
+              className={`${styles.page} pdf-page`}
+              style={{ "--scale-factor": String(scale) } as CSSProperties}
+              onContextMenu={(event) => handlePageContextMenu(pageNumber, event)}
+            >
+              <canvas
+                ref={canvasRef}
+                className={`${styles.canvas} pdf-canvas`}
+                onClick={(event) => handlePageClick(pageNumber, event)}
               />
-            )}
-            {regionEditing && onScanRegionChange && (
-              <PdfScanRegionOverlay
-                region={scanRegion}
-                onCommit={(next) => {
-                  onScanRegionChange(next);
-                  setRegionEditing(false);
-                }}
-                onClose={() => setRegionEditing(false)}
-              />
-            )}
-            {rendering && (
-              <div className={styles.renderingOverlay} aria-hidden="true">
-                <Loader2 className={styles.spinner} size={20} strokeWidth={2} />
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className={styles.loading} aria-label="Loading PDF">
-            <Loader2 className={styles.spinner} size={24} strokeWidth={2} />
-            <span>Loading PDF…</span>
-          </div>
-        )}
-      </div>
+              <div className="pdf-canvas-tint" aria-hidden="true" />
+              <div ref={textLayerRef} className="pdf-text-layer textLayer" />
+              <div ref={annotationLayerRef} className="pdf-annotation-layer annotationLayer" />
+              {/* Reminder of what is scanned, so a region set once is not
+                  forgotten a hundred pages later. */}
+              {!regionEditing && !isWholePageScanRegion(scanRegion) && (
+                <div
+                  className={styles.regionHint}
+                  aria-hidden="true"
+                  style={{
+                    left: `${(scanRegion?.x ?? 0) * 100}%`,
+                    top: `${(scanRegion?.y ?? 0) * 100}%`,
+                    width: `${(scanRegion?.w ?? 1) * 100}%`,
+                    height: `${(scanRegion?.h ?? 1) * 100}%`,
+                  }}
+                />
+              )}
+              {regionEditing && onScanRegionChange && (
+                <PdfScanRegionOverlay
+                  region={scanRegion}
+                  onCommit={handleRegionCommit}
+                  onClose={() => setRegionEditPage(null)}
+                />
+              )}
+              {rendering && (
+                <div className={styles.renderingOverlay} aria-hidden="true">
+                  <Loader2 className={styles.spinner} size={20} strokeWidth={2} />
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className={styles.loading} aria-label="Loading PDF">
+              <Loader2 className={styles.spinner} size={24} strokeWidth={2} />
+              <span>Loading PDF…</span>
+            </div>
+          )}
+        </div>
+      )}
       {aiSelection && onAskAi && !regionEditing && (
         <AiSelectionBubble
           x={aiSelection.x}
           y={aiSelection.y}
           text=""
           onAsk={() => {
+            const page = aiSelection.page;
             setAiSelection(null);
-            askAboutPage();
+            askAboutPage(page);
           }}
         />
       )}

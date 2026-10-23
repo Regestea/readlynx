@@ -4,6 +4,11 @@ import type {
   ReaderViewer,
 } from "../infrastructure/db/entities/ReaderSettings.ts";
 import { normalizeBlockTheme } from "../infrastructure/db/entities/ReaderSettings.ts";
+import {
+  normalizePdfDisplayMode,
+  PDF_DISPLAY_MODE_DEFAULT,
+} from "../components/pdfViewer/pdfDisplayMode";
+import type { PdfDisplayMode } from "../components/pdfViewer/pdfDisplayMode";
 import { subscribeReaderColorsReset } from "./readerDefaultsColors.ts";
 
 /** Global fallback for one viewer, edited in Settings. Books without a
@@ -17,6 +22,8 @@ export interface ReaderDefaults {
   /** EPUB-only soft colors (replace loud author colours with the reading inks). */
   softBookColors: boolean;
   pdfBackground: string | null;
+  /** PDF-only page layout (continuous scroll vs one page at a time). */
+  pdfDisplayMode: PdfDisplayMode;
   codeTheme: MarkdownBlockTheme | null;
   diagramTheme: MarkdownBlockTheme | null;
   codeBackground: string | null;
@@ -31,6 +38,7 @@ const DEFAULTS: ReaderDefaults = {
   hardOverrideText: false,
   softBookColors: true,
   pdfBackground: null,
+  pdfDisplayMode: PDF_DISPLAY_MODE_DEFAULT,
   codeTheme: null,
   diagramTheme: null,
   codeBackground: null,
@@ -46,6 +54,7 @@ function same(a: ReaderDefaults, b: ReaderDefaults): boolean {
     a.hardOverrideText === b.hardOverrideText &&
     a.softBookColors === b.softBookColors &&
     a.pdfBackground === b.pdfBackground &&
+    a.pdfDisplayMode === b.pdfDisplayMode &&
     a.codeTheme === b.codeTheme &&
     a.diagramTheme === b.diagramTheme &&
     a.codeBackground === b.codeBackground &&
@@ -79,6 +88,7 @@ export function useReaderDefaults(viewer: ReaderViewer) {
             hardOverrideText: Number(row.textHardOverride ?? 0) === 1,
             softBookColors: Number(row.softBookColors ?? 1) === 1,
             pdfBackground: row.pdfBackground ?? null,
+            pdfDisplayMode: normalizePdfDisplayMode(row.pdfDisplayMode) ?? DEFAULTS.pdfDisplayMode,
             codeTheme: normalizeBlockTheme(row.codeTheme),
             diagramTheme: normalizeBlockTheme(row.diagramTheme),
             codeBackground: row.codeBackground ?? null,
@@ -130,6 +140,9 @@ export function useReaderDefaults(viewer: ReaderViewer) {
         textHardOverride: values.hardOverrideText ? 1 : 0,
         softBookColors: values.softBookColors ? 1 : 0,
         pdfBackground: values.pdfBackground,
+        // The layout is a PDF-only column; the other viewers' rows never
+        // store it (an omitted value leaves whatever is stored untouched).
+        pdfDisplayMode: viewer === "pdf" ? values.pdfDisplayMode : undefined,
         codeTheme: values.codeTheme,
         diagramTheme: values.diagramTheme,
         codeBackground: values.codeBackground,

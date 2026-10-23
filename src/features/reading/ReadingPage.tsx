@@ -83,6 +83,9 @@ export function ReadingPage({ bookId, tabId, onBack, active = true, onTitleChang
   const readerFullscreen = useReaderFullscreen();
   const [savedPage, setSavedPage] = useState(1);
   const [savedChapter, setSavedChapter] = useState<string | null>(null);
+  /** Whole-document scroll ratio saved the last time this book was read in
+   *  the PDF continuous-scroll layout (null = read paged, or never scrolled). */
+  const [savedPdfScrollRatio, setSavedPdfScrollRatio] = useState<number | null>(null);
   /** Total pages of the loaded PDF (0 until the viewer reports it). */
   const [pageCount, setPageCount] = useState(0);
   /** Total chapters of the loaded EPUB (0 until the viewer reports it). */
@@ -296,6 +299,7 @@ export function ReadingPage({ bookId, tabId, onBack, active = true, onTitleChang
       }
       setSavedPage(reading?.currentPage ?? 1);
       setSavedChapter(reading?.currentChapter || null);
+      setSavedPdfScrollRatio(loadScrollRatio("pdf-scroll", bookId, "doc"));
       prevEpubChapterRef.current = reading?.currentChapter || null;
       prevTransUnitRef.current = null;
       restoredUnitsRef.current.clear();
@@ -354,6 +358,26 @@ export function ReadingPage({ bookId, tabId, onBack, active = true, onTitleChang
     },
     [bookId, setTranslationUnit],
   );
+
+  /** Saves the continuous-scroll PDF position (whole-document 0..1 ratio) the
+   *  viewer reports. localStorage is synchronous, so this is also safe to run
+   *  inside the close/unmount flushes. */
+  const savePdfScrollNow = useCallback(() => {
+    if (readyBook?.sourceType !== "pdf") return;
+    const ratio = pdfRef.current?.getScrollRatio();
+    if (ratio === null || ratio === undefined || ratio <= 0) return;
+    saveScrollRatio("pdf-scroll", bookId, "doc", ratio);
+  }, [readyBook?.sourceType, bookId]);
+
+  /** Debounced position save for the scroll layout's activity pings — the
+   *  same shape as the Markdown viewers' scroll saves. */
+  const schedulePdfScrollSave = useCallback(() => {
+    if (saveTimerRef.current !== null) window.clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = window.setTimeout(() => {
+      saveTimerRef.current = null;
+      savePdfScrollNow();
+    }, 300);
+  }, [savePdfScrollNow]);
 
   const handleChapterChange = useCallback(
     (chapterKey: string) => {
@@ -435,6 +459,14 @@ export function ReadingPage({ bookId, tabId, onBack, active = true, onTitleChang
         if (unitKey) {
           const ratio = markdownRatio(translationScrollRef.current);
           if (ratio !== null) saveScrollRatio("trans", bookId, unitKey, ratio);
+        }
+      } else if (sourceType === "pdf") {
+        // Continuous-scroll layout: the whole-document ratio is read straight
+        // from the viewer while it is still mounted. Paged books have no
+        // scroll to save (their page is the position).
+        const ratio = pdfRef.current?.getScrollRatio();
+        if (ratio !== null && ratio !== undefined && ratio > 0) {
+          saveScrollRatio("pdf-scroll", bookId, "doc", ratio);
         }
       }
     } catch {
@@ -1060,8 +1092,10 @@ export function ReadingPage({ bookId, tabId, onBack, active = true, onTitleChang
                   className={styles.viewer}
                   themeBookId={bookId}
                   initialPage={savedPage}
+                  initialScrollRatio={savedPdfScrollRatio}
                   onReady={persistTotals}
                   onPageChange={handlePageChange}
+                  onScrollChange={schedulePdfScrollSave}
                   onAskAi={handleAskPdfRegion}
                   onCopyPageText={handleCopyPdfText}
                   scanRegion={translation.settings.pdfScanRegion}
