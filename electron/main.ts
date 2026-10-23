@@ -222,6 +222,12 @@ async function closeDb() {
 }
 
 app.whenReady().then(() => {
+  // Dev builds only — a packaged mac app gets its dock icon from the .app
+  // bundle (set via `mac.icon` in electron-builder.yml).
+  if (process.platform === "darwin" && !app.isPackaged) {
+    app.dock?.setIcon(path.join(import.meta.dirname, "../src/assets/icon/app-icon.png"));
+  }
+
   // Initialize the file store singleton
   const store = getStore();
 

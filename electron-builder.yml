@@ -61,6 +61,7 @@ nsis:
   shortcutName: ReadLynx
 
 mac:
+  icon: src/assets/icon/app-icon.png
   target:
     - dmg
     - zip
