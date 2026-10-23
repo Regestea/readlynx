@@ -4,6 +4,7 @@
   "version": "0.0.0",
   "description": "ReadLynx - a modern reading app",
   "license": "BUSL-1.1",
+  "desktopName": "ReadLynx.desktop",
   "author": {
     "name": "Regestea",
     "email": "readlynx@users.noreply.github.com"

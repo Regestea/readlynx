@@ -43,6 +43,7 @@ files:
   # electron-builder itself) — no need to ship them inside the app.
   - "!src/assets/icon/*.ico"
   - "!src/assets/icon/*.icns"
+  - "!src/assets/icon/icons"
 
 # Native modules (better-sqlite3) and the worker threads that use them
 # must live outside the asar archive.
@@ -71,7 +72,16 @@ mac:
   category: public.app-category.productivity
 
 linux:
-  icon: src/assets/icon/app-icon.png
+  # A directory of pre-sized PNGs (not the single 1024px source): the deb and
+  # AppImage embed every size into the hicolor tree, so taskbars and app
+  # menus get a crisp icon instead of a runtime downscale of one 1024px image.
+  icon: src/assets/icon/icons
+  # Electron reports the app id / WM_CLASS from `desktopName` in package.json
+  # ("ReadLynx.desktop"). Desktop environments match that against the INSTALLED
+  # .desktop file NAME — on Wayland (GNOME/KDE default) a mismatch means a
+  # generic taskbar icon for the running app even though the icon files are
+  # installed. `syncDesktopName` names the .desktop file accordingly.
+  syncDesktopName: true
   target:
     - AppImage
     - deb
