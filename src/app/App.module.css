@@ -17,6 +17,9 @@
   min-height: 0;
   width: 100%;
   padding: var(--space-6);
+  padding-top: 0.5rem !important;
+  padding-left: 1rem;
+  padding-right: 1rem;
 }
 
 .main {
