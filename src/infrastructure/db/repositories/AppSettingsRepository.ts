@@ -26,9 +26,9 @@ interface AppSettingsRow {
   openWithAddMarkdown?: number | null;
 }
 
-/** SQLite `0`/`1` → boolean, treating `NULL` (legacy row) as "on". */
+/** SQLite `0`/`1` → boolean, treating `NULL` (legacy row) as "off". */
 function toFlag(value: number | null | undefined): boolean {
-  return value === null || value === undefined ? true : value !== 0;
+  return value === null || value === undefined ? false : value !== 0;
 }
 
 /** Single-row `AppSettings` table (implicit `rowid` 1). */
@@ -62,7 +62,7 @@ export class AppSettingsRepository {
       .prepare(
         `INSERT INTO AppSettings (rowid, theme, chatZoom, uiScale, openWithAddPdf, openWithAddEpub, openWithAddMarkdown)
          VALUES (1, COALESCE(@theme, 'light'), COALESCE(@chatZoom, 100), COALESCE(@uiScale, ${UI_SCALE_DEFAULT}),
-                 COALESCE(@openWithAddPdf, 1), COALESCE(@openWithAddEpub, 1), COALESCE(@openWithAddMarkdown, 1))
+                 COALESCE(@openWithAddPdf, 0), COALESCE(@openWithAddEpub, 0), COALESCE(@openWithAddMarkdown, 0))
          ON CONFLICT(rowid) DO UPDATE SET
            theme              = COALESCE(@theme,             AppSettings.theme),
            chatZoom           = COALESCE(@chatZoom,          AppSettings.chatZoom),

@@ -245,6 +245,7 @@ export function applySchema(db: Database.Database): void {
     ensureBookPinColumns(db);
     ensureBookTemporaryColumn(db);
     ensureAppSettingsOpenWithColumns(db);
+    resetOpenWithAddDefaults(db);
     ensureReaderPdfDisplayModeColumns(db);
   });
 }
@@ -821,18 +822,35 @@ function ensureBookTemporaryColumn(db: Database.Database): void {
 
 /** Databases created before the per-file-type "add to library" switches
  *  existed lack the `openWithAdd*` columns on `AppSettings`. Adds them
- *  defaulting to on (1): as before, every external open joins the library
- *  unless the user opted a file type into temporary sessions. */
+ *  defaulting to off (0): a file type with no stored choice opens as a
+ *  temporary session — kept in the library only when the user opts in
+ *  from the open prompt. */
 function ensureAppSettingsOpenWithColumns(db: Database.Database): void {
   const columns = db.pragma("table_info(AppSettings)") as Array<{ name: string }>;
   const has = (name: string) => columns.some((entry) => entry.name === name);
   db.transaction(() => {
     if (!has("openWithAddPdf"))
-      db.exec("ALTER TABLE AppSettings ADD COLUMN openWithAddPdf INTEGER NOT NULL DEFAULT 1");
+      db.exec("ALTER TABLE AppSettings ADD COLUMN openWithAddPdf INTEGER NOT NULL DEFAULT 0");
     if (!has("openWithAddEpub"))
-      db.exec("ALTER TABLE AppSettings ADD COLUMN openWithAddEpub INTEGER NOT NULL DEFAULT 1");
+      db.exec("ALTER TABLE AppSettings ADD COLUMN openWithAddEpub INTEGER NOT NULL DEFAULT 0");
     if (!has("openWithAddMarkdown"))
-      db.exec("ALTER TABLE AppSettings ADD COLUMN openWithAddMarkdown INTEGER NOT NULL DEFAULT 1");
+      db.exec("ALTER TABLE AppSettings ADD COLUMN openWithAddMarkdown INTEGER NOT NULL DEFAULT 0");
+  })();
+}
+
+/** v0.1.7–v0.1.9 shipped the `openWithAdd*` switches defaulting to on, so
+ *  every database that ran those releases stores 1 for all three —
+ *  indistinguishable from a deliberate choice. Resets them to the new
+ *  off-by-default policy exactly once (marked via `user_version`); a user
+ *  who wants a type back in the library re-enables its switch. */
+function resetOpenWithAddDefaults(db: Database.Database): void {
+  const version = db.pragma("user_version", { simple: true }) as number;
+  if (version >= 1) return;
+  db.transaction(() => {
+    db.exec(
+      "UPDATE AppSettings SET openWithAddPdf = 0, openWithAddEpub = 0, openWithAddMarkdown = 0",
+    );
+    db.pragma("user_version = 1");
   })();
 }
 

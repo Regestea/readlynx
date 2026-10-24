@@ -36,10 +36,11 @@ const OPTIONS: OptionRow[] = [
   },
 ];
 
-const OFF: Record<AddKey, boolean> = {
-  openWithAddPdf: true,
-  openWithAddEpub: true,
-  openWithAddMarkdown: true,
+/** Shown before the stored settings load — matches the database defaults. */
+const DEFAULTS: Record<AddKey, boolean> = {
+  openWithAddPdf: false,
+  openWithAddEpub: false,
+  openWithAddMarkdown: false,
 };
 
 /** How externally opened books are placed: one switch per file type. When a
@@ -47,7 +48,7 @@ const OFF: Record<AddKey, boolean> = {
  *  like any other book but never appear on the shelf and the background
  *  worker removes them at the next launch. */
 export function FileImportCard() {
-  const [toggles, setToggles] = useState<Record<AddKey, boolean>>(OFF);
+  const [toggles, setToggles] = useState<Record<AddKey, boolean>>(DEFAULTS);
 
   useEffect(() => {
     let cancelled = false;

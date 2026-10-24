@@ -77,10 +77,10 @@ export function useExternalFileOpen(handlers: ExternalOpenHandlers) {
     const sourceType = detectBookSourceType(sourcePath);
 
     // The file type's switch seeds the dialog's keep checkbox (a failed read
-    // keeps the old always-add behavior). Reads before the dialog — cancelling
-    // must still not import, hash or write anything.
+    // falls back to the off default: a temporary session). Reads before the
+    // dialog — cancelling must still not import, hash or write anything.
     const settings = await bridge.db.getAppSettings().catch(() => null);
-    const defaultAddToLibrary = !settings || addToLibrarySwitch(settings, sourceType);
+    const defaultAddToLibrary = settings ? addToLibrarySwitch(settings, sourceType) : false;
 
     // Asked first: cancelling must not import, hash or write anything.
     const answer = await handlersRef.current.askOpenMode(
