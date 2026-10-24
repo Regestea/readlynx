@@ -1,0 +1,4 @@
+# Shell scripts must stay LF-only: a CRLF postinst breaks bash on Linux CI
+# ("command not found\r"), and Windows checkouts with core.autocrlf=true
+# would otherwise rewrite build/after-install.sh.
+*.sh text eol=lf
