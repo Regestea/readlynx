@@ -96,6 +96,28 @@ linux:
 # electron-builder 26 only accepts `fpm` on target-level configs (deb/rpm/
 # pacman), not under `linux`; the deb target merges this block over `linux`.
 deb:
+  # Stock defaults plus libasound2 + libgbm1, which Electron loads at startup
+  # but electron-builder's default depends list omits — on a minimal Ubuntu a
+  # clean install would otherwise leave the app dying with
+  # "error while loading shared libraries". The t64-renamed packages on
+  # 24.04+ provide these legacy names, so one list covers all releases.
+  depends:
+    - libgtk-3-0
+    - libnotify4
+    - libnss3
+    - libxss1
+    - libxtst6
+    - xdg-utils
+    - libatspi2.0-0
+    - libuuid1
+    - libsecret-1-0
+    - libasound2
+    - libgbm1
+  # Postinst override: force chrome-sandbox to SUID 4755. See the header of
+  # build/after-install.sh — on Ubuntu 23.10+ the stock conditional chmod
+  # leaves it 0755 and leans on the AppArmor profile, which can silently fail
+  # to install; the SUID helper works under every userns policy.
+  afterInstall: build/after-install.sh
   fpm:
     - src/assets/icon/mime/application-pdf.128.png=/usr/share/icons/hicolor/128x128/mimetypes/application-pdf.png
     - src/assets/icon/mime/application-pdf.256.png=/usr/share/icons/hicolor/256x256/mimetypes/application-pdf.png
