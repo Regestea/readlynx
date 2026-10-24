@@ -1,4 +1,5 @@
 import { app, BrowserWindow, ipcMain, protocol, session } from "electron";
+import { existsSync, writeFileSync } from "node:fs";
 import { copyFile, mkdir } from "node:fs/promises";
 import path from "node:path";
 import { DbWorkerClient } from "./db/client.ts";
@@ -93,6 +94,45 @@ if (!gotSingleLock) {
     }
   });
 }
+
+/** Profile marker recording that this machine last ran without GPU
+ *  acceleration and should keep doing so — see the fallback below. Deleting
+ *  the file (or fixing the drivers) restores hardware acceleration. */
+const gpuFallbackMarker = path.join(app.getPath("userData"), "gpu-fallback");
+
+// Hardware-acceleration fallback: on machines where the compositor cannot
+// bring up a GPU process at all (VMs, WSL, remote sessions, missing or
+// blocklisted drivers) Chromium keeps retrying the launch while the renderer
+// loses its compositor — the window dies and the app quits, which from the
+// outside reads as "installed but never opens". The first session that sees
+// repeated GPU-process failures writes the marker and relaunches once; every
+// later start calls `disableHardwareAcceleration()` before ready, so Chromium
+// composites in software (SwiftShader) instead — for a document reader that
+// is indistinguishable. A single failure is tolerated (Chromium also restarts
+// a healthy GPU process for power management with reasons like "killed" or
+// "clean-exit", which are not counted); only "crashed" / "launch-failed"
+// twice in one session trips the fallback.
+const gpuFallbackActive =
+  existsSync(gpuFallbackMarker) || process.argv.includes("--disable-gpu");
+if (gpuFallbackActive) app.disableHardwareAcceleration();
+
+let gpuProcessFailures = 0;
+app.on("child-process-gone", (_event, details) => {
+  if (gpuFallbackActive || details.type !== "GPU") return;
+  if (details.reason !== "crashed" && details.reason !== "launch-failed") return;
+  gpuProcessFailures += 1;
+  if (gpuProcessFailures < 2) return;
+  try {
+    writeFileSync(gpuFallbackMarker, "");
+  } catch {
+    // A profile that cannot be written just means the next launch retries
+    // with the GPU enabled.
+  }
+  console.error("[gpu] hardware acceleration unavailable — restarting in software rendering mode");
+  app.relaunch();
+  // `quit` (not `exit`) so `before-quit` still flushes the DB worker.
+  app.quit();
+});
 
 async function createWindow(role: WindowContext["role"] = "main", bookId: string | null = null) {
   const win = new BrowserWindow({
