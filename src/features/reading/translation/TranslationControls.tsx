@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import { ChevronDown, Crop, X } from "lucide-react";
 import type { AiModel } from "../../../infrastructure/db/entities/AiModel.ts";
 import type { BookSourceType } from "../../../infrastructure/db/entities/types.ts";
@@ -121,122 +122,145 @@ export function TranslationControls({
   const isEpub = sourceType === "epub";
   const isOcr = isPdf && pdfMethod === "ocr";
 
+  /** Popover mode only: a small caption above each control, so the compact
+   *  triggers — which show only their current value — stay readable without
+   *  the tooltips. The inline hosts keep the bare controls. */
+  const field = (label: string, node: ReactNode) =>
+    popover ? (
+      <div className={styles.popoverField}>
+        <span className={styles.popoverFieldLabel}>{label}</span>
+        {node}
+      </div>
+    ) : (
+      node
+    );
+
   return (
     <div
       className={`${styles.controlsBar} ${popover ? styles.controlsPopover : ""} ${className}`.trim()}
     >
       {models.length > 0 ? (
-        <div className={styles.anchor} ref={modelAnchorRef}>
-          <button
-            type="button"
-            className={`${styles.ocrTrigger} ${modelOpen ? styles.ocrTriggerActive : ""}`}
-            onClick={() => setModelOpen((current) => !current)}
-            aria-expanded={modelOpen}
-            aria-haspopup="dialog"
-            title="AI models, in failover order — when one fails the next one retries the request"
-          >
-            <span className={styles.ocrSummary}>
-              {modelIds.length
-                ? modelIds
-                    .map((id) => models.find((row) => row.Id === id)?.DisplayName ?? id)
-                    .join(", ")
-                : "App default"}
-            </span>
-            <ChevronDown size={14} strokeWidth={1.8} aria-hidden="true" />
-          </button>
+        field(
+          "AI models",
+          <div className={styles.anchor} ref={modelAnchorRef}>
+            <button
+              type="button"
+              className={`${styles.ocrTrigger} ${modelOpen ? styles.ocrTriggerActive : ""}`}
+              onClick={() => setModelOpen((current) => !current)}
+              aria-expanded={modelOpen}
+              aria-haspopup="dialog"
+              title="AI models, in failover order — when one fails the next one retries the request"
+            >
+              <span className={styles.ocrSummary}>
+                {modelIds.length
+                  ? modelIds
+                      .map((id) => models.find((row) => row.Id === id)?.DisplayName ?? id)
+                      .join(", ")
+                  : "App default"}
+              </span>
+              <ChevronDown size={14} strokeWidth={1.8} aria-hidden="true" />
+            </button>
 
-          {modelOpen && (
-            <div className={styles.modelPanel} role="dialog" aria-label="AI models">
-              <div className={styles.modelPanelHeader}>
-                <span className={styles.modelPanelTitle}>AI models</span>
-                <Button
-                  variant="ghost"
-                  className={styles.modelClose}
-                  onClick={() => setModelOpen(false)}
-                  aria-label="Close"
-                >
-                  <X size={14} strokeWidth={1.8} aria-hidden="true" />
-                </Button>
+            {modelOpen && (
+              <div className={styles.modelPanel} role="dialog" aria-label="AI models">
+                <div className={styles.modelPanelHeader}>
+                  <span className={styles.modelPanelTitle}>AI models</span>
+                  <Button
+                    variant="ghost"
+                    className={styles.modelClose}
+                    onClick={() => setModelOpen(false)}
+                    aria-label="Close"
+                  >
+                    <X size={14} strokeWidth={1.8} aria-hidden="true" />
+                  </Button>
+                </div>
+                <p className={styles.modelHint}>
+                  Pick one or more models — the order is the failover order:
+                  when a request fails, it is retried with the next model
+                  automatically. Leave empty to use the app default.
+                </p>
+                <ul className={styles.modelList}>
+                  {models.map((row) => {
+                    const index = modelIds.indexOf(row.Id);
+                    const label = row.DisplayName ?? row.ModelName ?? row.Id;
+                    return (
+                      <li key={row.Id}>
+                        <label className={styles.modelRow}>
+                          <input
+                            type="checkbox"
+                            checked={index !== -1}
+                            onChange={() =>
+                              onModelIdsChange(
+                                index !== -1
+                                  ? modelIds.filter((id) => id !== row.Id)
+                                  : [...modelIds, row.Id],
+                              )
+                            }
+                          />
+                          {index !== -1 && (
+                            <span className={styles.modelBadge}>{index + 1}</span>
+                          )}
+                          <span className={styles.modelName}>{label}</span>
+                          {row.IsDefault ? <span className={styles.modelTag}>default</span> : null}
+                        </label>
+                      </li>
+                    );
+                  })}
+                </ul>
               </div>
-              <p className={styles.modelHint}>
-                Pick one or more models — the order is the failover order:
-                when a request fails, it is retried with the next model
-                automatically. Leave empty to use the app default.
-              </p>
-              <ul className={styles.modelList}>
-                {models.map((row) => {
-                  const index = modelIds.indexOf(row.Id);
-                  const label = row.DisplayName ?? row.ModelName ?? row.Id;
-                  return (
-                    <li key={row.Id}>
-                      <label className={styles.modelRow}>
-                        <input
-                          type="checkbox"
-                          checked={index !== -1}
-                          onChange={() =>
-                            onModelIdsChange(
-                              index !== -1
-                                ? modelIds.filter((id) => id !== row.Id)
-                                : [...modelIds, row.Id],
-                            )
-                          }
-                        />
-                        {index !== -1 && (
-                          <span className={styles.modelBadge}>{index + 1}</span>
-                        )}
-                        <span className={styles.modelName}>{label}</span>
-                        {row.IsDefault ? <span className={styles.modelTag}>default</span> : null}
-                      </label>
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
-          )}
-        </div>
+            )}
+          </div>,
+        )
       ) : (
         <span className={styles.modelWarning} role="status" title={modelsError ?? "No AI model configured"}>
           No AI model
         </span>
       )}
 
-      {isPdf && (
-        <Select
-          compact
-          className={styles.control}
-          value={pdfMethod}
-          onChange={(event) => onPdfMethodChange(event.target.value as TranslationMethod)}
-          options={[
-            { value: "ocr", label: "OCR" },
-            { value: "vision", label: "AI Vision" },
-          ]}
-          disabled={busy}
-          aria-label="Translation method"
-          title="How the page text is collected: local OCR or AI vision"
-        />
-      )}
+      {isPdf &&
+        field(
+          "Translation method",
+          <Select
+            compact
+            className={styles.control}
+            value={pdfMethod}
+            onChange={(event) => onPdfMethodChange(event.target.value as TranslationMethod)}
+            options={[
+              { value: "ocr", label: "OCR" },
+              { value: "vision", label: "AI Vision" },
+            ]}
+            disabled={busy}
+            aria-label="Translation method"
+            title="How the page text is collected: local OCR or AI vision"
+          />,
+        )}
 
-      {isPdf && showUnitPicker && (
-        <Select
-          compact
-          className={styles.control}
-          value={unitPicker}
-          onChange={(event) => {
-            setUnitPicker("current");
-            if (event.target.value === "range") onOpenRange?.();
-          }}
-          options={[
-            { value: "current", label: "Current page" },
-            { value: "range", label: "Page range…" },
-          ]}
-          disabled={busy}
-          aria-label="Pages to translate"
-          title="Translate the current page, or a range of pages with the settings above"
-        />
-      )}
+      {isPdf &&
+        showUnitPicker &&
+        field(
+          "Pages to translate",
+          <Select
+            compact
+            className={styles.control}
+            value={unitPicker}
+            onChange={(event) => {
+              setUnitPicker("current");
+              if (event.target.value === "range") onOpenRange?.();
+            }}
+            options={[
+              { value: "current", label: "Current page" },
+              { value: "range", label: "Page range…" },
+            ]}
+            disabled={busy}
+            aria-label="Pages to translate"
+            title="Translate the current page, or a range of pages with the settings above"
+          />,
+        )}
 
-      {isOcr && (
-        <div className={styles.anchor} ref={ocrAnchorRef}>
+      {isOcr &&
+        field(
+          "OCR languages",
+          <div className={styles.anchor} ref={ocrAnchorRef}>
           <button
             type="button"
             className={`${styles.ocrTrigger} ${ocrOpen ? styles.ocrTriggerActive : ""}`}
@@ -265,43 +289,52 @@ export function TranslationControls({
               onClose={() => setOcrOpen(false)}
             />
           )}
-        </div>
+          </div>,
+        )}
+
+      {isPdf &&
+        onOpenScanRegion &&
+        field(
+          "Scan region",
+          <button
+            type="button"
+            className={`${styles.ocrTrigger} ${styles.scanRegionTrigger}`}
+            onClick={onOpenScanRegion}
+            aria-label="Scan region"
+            title="Only the area you keep on the page is scanned with OCR or sent to AI vision — useful for cutting off the repeating header and page numbers"
+          >
+            <Crop size={14} strokeWidth={1.8} aria-hidden="true" />
+            <span className={styles.ocrSummary}>{scanRegionLabel(settings.pdfScanRegion)}</span>
+          </button>,
+        )}
+
+      {field(
+        "Translation output language",
+        <Select
+          compact
+          className={styles.control}
+          value={settings.targetLang}
+          onChange={(event) => onSettingsChange({ targetLang: event.target.value })}
+          options={[{ value: NO_LANGUAGE, label: "None" }, ...TRANSLATION_LANGUAGES]}
+          disabled={busy}
+          aria-label="Target language"
+          title="Target language"
+        />,
       )}
 
-      {isPdf && onOpenScanRegion && (
-        <button
-          type="button"
-          className={`${styles.ocrTrigger} ${styles.scanRegionTrigger}`}
-          onClick={onOpenScanRegion}
-          aria-label="Scan region"
-          title="Only the area you keep on the page is scanned with OCR or sent to AI vision — useful for cutting off the repeating header and page numbers"
-        >
-          <Crop size={14} strokeWidth={1.8} aria-hidden="true" />
-          <span className={styles.ocrSummary}>{scanRegionLabel(settings.pdfScanRegion)}</span>
-        </button>
+      {field(
+        "Custom instruction",
+        <CustomInstructionSelect
+          compact
+          className={styles.control}
+          value={settings.customPromptId}
+          onChange={(id) => onSettingsChange({ customPromptId: id })}
+          onInstructionEdited={() => onInstructionEdited()}
+          disabled={busy}
+          ariaLabel="Custom instruction"
+          title="Custom instruction layered on the translation"
+        />,
       )}
-
-      <Select
-        compact
-        className={styles.control}
-        value={settings.targetLang}
-        onChange={(event) => onSettingsChange({ targetLang: event.target.value })}
-        options={[{ value: NO_LANGUAGE, label: "None" }, ...TRANSLATION_LANGUAGES]}
-        disabled={busy}
-        aria-label="Target language"
-        title="Target language"
-      />
-
-      <CustomInstructionSelect
-        compact
-        className={styles.control}
-        value={settings.customPromptId}
-        onChange={(id) => onSettingsChange({ customPromptId: id })}
-        onInstructionEdited={() => onInstructionEdited()}
-        disabled={busy}
-        ariaLabel="Custom instruction"
-        title="Custom instruction layered on the translation"
-      />
 
       {isEpub && (
         <label

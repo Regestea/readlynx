@@ -31,6 +31,21 @@
   max-width: none;
 }
 
+/* Dropdown rows get a caption above each control: the compact triggers show
+   only their current value, and a hover tooltip is no way to learn what a
+   control is for. */
+.popoverField {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.popoverFieldLabel {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+}
+
 /* Anchors the two dropdown panels below their trigger. */
 .anchor {
   position: relative;
