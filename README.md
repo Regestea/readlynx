@@ -2,6 +2,18 @@
 
 **Create, translate, and read — all in one place.**
 
+<div align="center">
+
+## 🌐 [ReadLynx Website](https://regestea.github.io/readlynx-website/en/)
+
+# [**Read anything. Translate everything.**](https://regestea.github.io/readlynx-website/en/)
+
+Downloads for Windows, macOS, and Linux · video tutorial · full feature tour · translation guide · FAQ
+
+[Download](https://regestea.github.io/readlynx-website/en/#download) · [Tutorial](https://regestea.github.io/readlynx-website/en/#tutorial) · [Features](https://regestea.github.io/readlynx-website/en/#features) · [Guide](https://regestea.github.io/readlynx-website/en/#guide) · [FAQ](https://regestea.github.io/readlynx-website/en/#faq) · [فارسی](https://regestea.github.io/readlynx-website/fa/)
+
+</div>
+
 ReadLynx is a free, source-available desktop reading and writing app for Windows, macOS, and Linux. It brings your library, a distraction-free reader, a long-form editor, and AI-powered translation together in a single offline-first window.
 
 ## Why ReadLynx?
@@ -67,7 +79,7 @@ Export both your original books and their translations to **PDF**, **DOCX**, **E
 
 ## Getting Started
 
-1. Download the installer for your platform from the [Releases page](https://github.com/Regestea/readlynx/releases).
+1. Download the installer for your platform from the [website's download section](https://regestea.github.io/readlynx-website/en/#download) or straight from the [Releases page](https://github.com/Regestea/readlynx/releases).
 2. Install and launch ReadLynx.
 3. Pick a starting point on the home screen:
    - **Read Book** — import a PDF, EPUB, or Markdown file
