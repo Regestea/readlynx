@@ -579,13 +579,14 @@ export function ReadingPage({ bookId, tabId, onBack, active = true, onTitleChang
     [readyBook?.sourceType, translation.pdfMethod, translation.settings, translation.installed],
   );
 
-  /** PDF page-text copy. OCR follows the translate panel's language choice —
-   *  the same one click-to-ask uses — so the reader never has to pick a
-   *  language a second time; AI vision hands the page to the model the reader
-   *  picked in the copy menu (the app default when they left it alone) and
-   *  returns Markdown. The viewer has already captured the page at scan
-   *  resolution with the scan region applied, so the region the reader set is
-   *  the region that gets copied. */
+  /** PDF page-text copy. OCR follows the shared OCR language setting — the
+   *  one the copy menu's "OCR languages" picker, the translate panel and
+   *  click-to-ask all read and write — so a language picked in any of them is
+   *  the language every one of them uses. AI vision hands the page to the
+   *  model the reader picked in the copy menu (the app default when they left
+   *  it alone) and returns Markdown. The viewer has already captured the page
+   *  at scan resolution with the scan region applied, so the region the
+   *  reader set is the region that gets copied. */
   const handleCopyPdfText = useCallback(
     async ({
       mode,
@@ -600,7 +601,7 @@ export function ReadingPage({ bookId, tabId, onBack, active = true, onTitleChang
         const langs = translation.settings.ocrLangs;
         if (langs.length === 0) {
           throw new Error(
-            "No OCR language is selected. Pick the page language in the Translate panel first.",
+            "No OCR language is selected. Open “OCR languages” in this menu and pick the page language first.",
           );
         }
         // Tesseract only works with models on disk, so a missing one can never
@@ -611,8 +612,8 @@ export function ReadingPage({ bookId, tabId, onBack, active = true, onTitleChang
         if (missing.length > 0) {
           const label = ocrLanguagesLabel(missing);
           throw new Error(
-            `The OCR model for ${label} is not downloaded yet. Open the Translate panel, ` +
-              `click “${label}” in OCR languages and press Download, then copy again.`,
+            `The OCR model for ${label} is not downloaded yet. Open “OCR languages” in this menu, ` +
+              `press Download next to “${label}”, then copy again.`,
           );
         }
         const result = await window.readlynx?.ocr.recognize({ dataUrl: image, langs });
@@ -1098,6 +1099,15 @@ export function ReadingPage({ bookId, tabId, onBack, active = true, onTitleChang
                   onScrollChange={schedulePdfScrollSave}
                   onAskAi={handleAskPdfRegion}
                   onCopyPageText={handleCopyPdfText}
+                  ocrLanguages={{
+                    installed: translation.installed,
+                    selected: translation.settings.ocrLangs,
+                    onSelectedChange: (langs) => translation.updateSettings({ ocrLangs: langs }),
+                    downloading: translation.downloading,
+                    downloadProgress: translation.downloadProgress,
+                    onDownload: translation.downloadModel,
+                    onDelete: translation.deleteModel,
+                  }}
                   scanRegion={translation.settings.pdfScanRegion}
                   onScanRegionChange={handleScanRegionChange}
                 />

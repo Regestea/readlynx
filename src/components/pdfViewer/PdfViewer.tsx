@@ -28,7 +28,7 @@ import type {
 import type { PDFLinkService } from "pdfjs-dist/types/web/pdf_link_service";
 import { OcrPanel } from "./OcrPanel";
 import { CopyPageTextMenu } from "./CopyPageTextMenu";
-import type { CopyPageTextMode } from "./CopyPageTextMenu";
+import type { CopyMenuOcrLanguages, CopyPageTextMode } from "./CopyPageTextMenu";
 import { PdfScanRegionOverlay } from "./PdfScanRegionOverlay";
 import { PdfScrollPages } from "./PdfScrollPages";
 import type { PdfScrollPagesHandle } from "./PdfScrollPages";
@@ -140,6 +140,10 @@ interface PdfViewerProps {
     image: string;
     modelId: string;
   }) => Promise<string>;
+  /** OCR language state for the copy menu's "OCR languages" picker, owned by
+   *  the host (the same settings the translate panel uses). When omitted, the
+   *  copy menu hides its OCR languages button. */
+  ocrLanguages?: CopyMenuOcrLanguages;
   /** Page area that is scanned (OCR) or sent to AI vision, as page fractions;
    *  null = the whole page. Applies to every capture this viewer hands out. */
   scanRegion?: PdfScanRegion | null;
@@ -186,6 +190,7 @@ function PdfViewerInner({
   onAiVision,
   onAskAi,
   onCopyPageText,
+  ocrLanguages,
   scanRegion = null,
   onScanRegionChange,
   initialPage,
@@ -1283,6 +1288,7 @@ function PdfViewerInner({
               onCopy={handleCopyPageText}
               busyMode={copyBusyMode}
               regionSet={!isWholePageScanRegion(scanRegion)}
+              ocrLanguages={ocrLanguages}
             />
           </span>
         )}

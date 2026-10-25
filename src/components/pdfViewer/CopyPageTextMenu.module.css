@@ -1,6 +1,7 @@
 /* Toolbar dropdown for "Copy page text". Anchored to the button that opens
    it and marked `pdf-toolbar-popover` so it keeps its own colors on a dark
-   reading background (see pdf-theme.css). */
+   reading background (see pdf-theme.css). The menu body is two boxed
+   sections — Vision and OCR — so each method keeps its own controls. */
 
 .menu {
   position: absolute;
@@ -20,6 +21,23 @@
   padding: var(--space-2);
   font-size: var(--font-size-xs);
   line-height: 1.45;
+  color: var(--color-text-muted);
+}
+
+.section {
+  margin: 0 var(--space-1) var(--space-1);
+  padding: var(--space-1);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-medium);
+}
+
+.sectionLabel {
+  margin: 0;
+  padding: 2px var(--space-2) var(--space-1);
+  font-size: 10px;
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
   color: var(--color-text-muted);
 }
 
@@ -85,14 +103,64 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
-  padding: var(--space-2);
-  border-top: 1px solid var(--color-border);
+  padding: 0 var(--space-2) var(--space-2);
 }
 
 .modelLabel {
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-semibold);
   color: var(--color-text-muted);
+}
+
+.langAnchor {
+  position: relative;
+  z-index: 40;
+  padding: 0 var(--space-2) var(--space-2);
+}
+
+/* Opens the language picker right in the menu, in the shape of the trigger
+   the translate panel uses for the same setting. */
+.langTrigger {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  height: 30px;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-small);
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  font-size: var(--font-size-xs);
+  cursor: pointer;
+  transition:
+    border-color var(--transition-base) ease,
+    box-shadow var(--transition-base) ease;
+}
+
+.langTrigger:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.langTrigger:hover:not(:disabled) {
+  border-color: var(--color-primary);
+}
+
+.langTriggerActive,
+.langTriggerActive:hover:not(:disabled) {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-glow);
+}
+
+.langSummary {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
 }
 
 .spinner {
