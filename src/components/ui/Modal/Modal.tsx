@@ -67,6 +67,13 @@ export function Modal({
   return createPortal(
     <div
       className={raised ? `${styles.overlay} ${styles.overlayRaised}` : styles.overlay}
+      // The dialog is portaled to document.body, so its events bubble past
+      // every popover beneath it — a color dialog opened from a reader toolbar
+      // would otherwise look like an "outside click" to the toolbar's own
+      // close-on-outside-click listener, which unmounts the panel and this
+      // dialog with it. Keep modal-layer clicks invisible below the overlay.
+      onMouseDown={(event) => event.stopPropagation()}
+      onPointerDown={(event) => event.stopPropagation()}
       onClick={closeOnOverlayClick ? onClose : undefined}
     >
       <div
