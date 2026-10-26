@@ -10,7 +10,9 @@
 
 Downloads for Windows, macOS, and Linux · video tutorial · full feature tour · translation guide · FAQ
 
-[Download](https://regestea.github.io/readlynx-web/en/#download) · [Tutorial](https://regestea.github.io/readlynx-web/en/#tutorial) · [Features](https://regestea.github.io/readlynx-web/en/#features) · [Guide](https://regestea.github.io/readlynx-web/en/#guide) · [FAQ](https://regestea.github.io/readlynx-web/en/#faq) · [فارسی](https://regestea.github.io/readlynx-web/fa/) · [❤️ Donate](https://donofa.com/regestea)
+[Download](https://regestea.github.io/readlynx-web/en/#download) · [Tutorial](https://regestea.github.io/readlynx-web/en/#tutorial) · [Features](https://regestea.github.io/readlynx-web/en/#features) · [Guide](https://regestea.github.io/readlynx-web/en/#guide) · [FAQ](https://regestea.github.io/readlynx-web/en/#faq) · [فارسی](https://regestea.github.io/readlynx-web/fa/)
+
+[![Donate](https://img.shields.io/badge/❤️%20Donate-Support%20ReadLynx-ff69b4?style=for-the-badge)](https://donofa.com/regestea)
 
 </div>
 
