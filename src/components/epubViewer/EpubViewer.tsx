@@ -9,11 +9,16 @@ import { epubHtmlToCleanedHtmlWithImages, epubHtmlToMarkdown, epubHtmlToPlainTex
 import { sanitizeEpubArchive } from "../../shared/document/epubSanitize";
 import type { EpubHtmlExtraction } from "../../shared/document/epubToMarkdown";
 import type { EpubImageRef } from "../../shared/document/epubToMarkdown";
-import { getSelectionEndRect } from "../../shared/selection";
+import type { SelectionTranslationResult } from "../../shared/selectionTranslation";
+import { getSelectionEndRect, getSelectionStartRect } from "../../shared/selection";
 import { enterReaderFullscreen, exitReaderFullscreen, popoverOpen } from "../../shared/readerFullscreen";
 import { FontFamilySelect } from "../FontFamilySelect/FontFamilySelect";
 import { ColorPickerPanel } from "../ui/ColorPickerPanel/ColorPickerPanel";
 import { AiSelectionBubble } from "../AiSelectionBubble/AiSelectionBubble";
+import {
+  SelectionTranslationAction,
+  SelectionTranslationPanel,
+} from "../SelectionTranslation/SelectionTranslation";
 import hljs from "highlight.js/lib/common";
 import powershell from "highlight.js/lib/languages/powershell";
 import dockerfile from "highlight.js/lib/languages/dockerfile";
@@ -398,6 +403,11 @@ interface EpubViewerProps {
   /** When provided, a floating "Ask AI" bubble appears next to text
    *  selections inside the book and hands the selected text to the host. */
   onAskAi?: (text: string) => void;
+  /** When provided, a translation circle appears at the start of a text
+   *  selection and opens a small result popover. */
+  onTranslateSelection?: (text: string) => Promise<SelectionTranslationResult>;
+  /** Human-readable output language shown in the translation popover. */
+  selectionTranslationLabel?: string;
   /** False while the reader sits in a background tab. epubjs builds the
    *  chapter iframe at whatever size the host happens to be when
    *  `display()` runs, so a book that is opened behind another tab would get
@@ -513,6 +523,8 @@ export function EpubViewer({
   onProgressChange,
   onExtractPage,
   onAskAi,
+  onTranslateSelection,
+  selectionTranslationLabel = "",
   active = true,
   ref,
 }: EpubViewerProps & { ref?: Ref<EpubViewerHandle> }) {
@@ -542,6 +554,19 @@ export function EpubViewer({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [spacerHeight, setSpacerHeight] = useState(0);
   const [aiSelection, setAiSelection] = useState<{ x: number; y: number; text: string } | null>(null);
+  /** Circle at the start of the selection (opens the translation popover). */
+  const [translateSelection, setTranslateSelection] = useState<{
+    x: number;
+    y: number;
+    text: string;
+  } | null>(null);
+  /** Popover state lives apart from the selection bubble: selecting/copying
+   *  text inside the popover must not unmount it. */
+  const [translationPanel, setTranslationPanel] = useState<{
+    x: number;
+    y: number;
+    text: string;
+  } | null>(null);
   /** EPUB image zoom is intentionally ephemeral: kept only in memory, never
    *  persisted anywhere, and reset to 100% on every open — so it can never
    *  leak into (or read from) the Markdown viewer's per-book image zoom. */
@@ -1136,6 +1161,7 @@ export function EpubViewer({
         onChapterChangeRef.current?.(chapterKey);
       }
       setAiSelection(null);
+      setTranslateSelection(null);
     };
 
     /** Hides the bubble the moment the selection in this contents document is
@@ -1147,6 +1173,7 @@ export function EpubViewer({
         const sel = contents.window.getSelection();
         if (!sel || sel.isCollapsed || sel.toString().trim().length < 2) {
           setAiSelection(null);
+          setTranslateSelection(null);
         }
       };
       contents.document.addEventListener("selectionchange", onSelectionChange);
@@ -1155,28 +1182,33 @@ export function EpubViewer({
     };
 
     /** Floating "Ask AI" bubble next to the end of the reader's text
-     *  selection. epubjs fires `selected` ~250ms after the selection stops
-     *  changing (never during a drag). The range rect is in the iframe's
-     *  internal viewport — offset it by the *iframe element's* position so
-     *  the fixed-position bubble lands at the right spot on the app viewport,
-     *  no matter how far the scrolled container has scrolled. */
+     *  selection, plus the translation circle at its start. epubjs fires
+     *  `selected` ~250ms after the selection stops changing (never during a
+     *  drag). The range rect is in the iframe's internal viewport — offset it
+     *  by the *iframe element's* position so the fixed-position bubble lands at
+     *  the right spot on the app viewport, no matter how far the scrolled
+     *  container has scrolled. */
     const handleSelected = (_cfiRange: string, contents: Contents) => {
       watchDeselect(contents);
       const sel = contents.window.getSelection();
       const text = sel?.toString().trim() ?? "";
       if (!sel || sel.isCollapsed || !text || text.length < 2) {
         setAiSelection(null);
+        setTranslateSelection(null);
         return;
       }
       const iframe = hostRef.current?.querySelector("iframe");
       const iframeRect = iframe?.getBoundingClientRect();
       if (!iframeRect) {
         setAiSelection(null);
+        setTranslateSelection(null);
         return;
       }
       const endRect = getSelectionEndRect(sel);
-      if (!endRect) {
+      const startRect = getSelectionStartRect(sel);
+      if (!endRect || !startRect) {
         setAiSelection(null);
+        setTranslateSelection(null);
         return;
       }
       const bubbleWidth = 48;
@@ -1190,6 +1222,20 @@ export function EpubViewer({
         Math.min(endRect.top + iframeRect.top - 20, window.innerHeight - bubbleWidth),
       );
       setAiSelection({ x, y, text });
+
+      // The translation circle sits just before the first character; it flips
+      // to the right of that character when the selection starts at the
+      // viewport edge.
+      const startLeft = startRect.left + iframeRect.left - bubbleWidth;
+      const startX = Math.min(
+        Math.max(8, startLeft >= 8 ? startLeft : startRect.right + iframeRect.left + 8),
+        window.innerWidth - bubbleWidth,
+      );
+      const startY = Math.max(
+        8,
+        Math.min(startRect.top + iframeRect.top - 20, window.innerHeight - bubbleWidth),
+      );
+      setTranslateSelection({ x: startX, y: startY, text });
     };
 
     void load();
@@ -1602,6 +1648,24 @@ export function EpubViewer({
         y={aiSelection.y}
         text={aiSelection.text}
         onAsk={onAskAi}
+      />
+    )}
+    {translateSelection && onTranslateSelection && (
+      <SelectionTranslationAction
+        x={translateSelection.x}
+        y={translateSelection.y}
+        label={selectionTranslationLabel}
+        onOpen={() => setTranslationPanel(translateSelection)}
+      />
+    )}
+    {translationPanel && onTranslateSelection && (
+      <SelectionTranslationPanel
+        x={translationPanel.x}
+        y={translationPanel.y}
+        text={translationPanel.text}
+        label={selectionTranslationLabel}
+        onTranslate={onTranslateSelection}
+        onClose={() => setTranslationPanel(null)}
       />
     )}
     {imageOverlay && (

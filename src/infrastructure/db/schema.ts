@@ -136,7 +136,9 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_translations_lookup
 CREATE TABLE IF NOT EXISTS AppSettings (
   theme    TEXT NOT NULL DEFAULT 'light',
   chatZoom INTEGER NOT NULL DEFAULT 100,
-  uiScale  INTEGER NOT NULL DEFAULT 100
+  uiScale  INTEGER NOT NULL DEFAULT 100,
+  selectionTranslationProvider TEXT NOT NULL DEFAULT 'google',
+  selectionTranslationModelId  TEXT NOT NULL DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS CustomInstructions (
@@ -237,6 +239,7 @@ export function applySchema(db: Database.Database): void {
     ensureTranslationLookupIndex(db);
     ensureAppSettingsChatZoomColumn(db);
     ensureAppSettingsUiScaleColumn(db);
+    ensureAppSettingsSelectionTranslationColumn(db);
     ensureReaderSettingsHardOverrideColumn(db);
     ensureReaderDefaultsTable(db);
     ensureReaderSettingsBlockColumns(db);
@@ -246,6 +249,7 @@ export function applySchema(db: Database.Database): void {
     ensureBookTemporaryColumn(db);
     ensureAppSettingsOpenWithColumns(db);
     resetOpenWithAddDefaults(db);
+    resetSelectionTranslationProviderDefault(db);
     ensureReaderPdfDisplayModeColumns(db);
   });
 }
@@ -714,6 +718,23 @@ function ensureAppSettingsUiScaleColumn(db: Database.Database): void {
   db.exec("ALTER TABLE AppSettings ADD COLUMN uiScale INTEGER NOT NULL DEFAULT 100");
 }
 
+/** Databases created before selection translation existed lack the provider
+ *  and model columns on `AppSettings`. Adds them: Google Translate is the
+ *  app-wide default, and an empty model id means "use the app default AI
+ *  model" when the provider is switched to AI. */
+function ensureAppSettingsSelectionTranslationColumn(db: Database.Database): void {
+  const columns = db.pragma("table_info(AppSettings)") as Array<{ name: string }>;
+  const has = (name: string) => columns.some((entry) => entry.name === name);
+  db.transaction(() => {
+    if (!has("selectionTranslationProvider"))
+      db.exec(
+        "ALTER TABLE AppSettings ADD COLUMN selectionTranslationProvider TEXT NOT NULL DEFAULT 'google'",
+      );
+    if (!has("selectionTranslationModelId"))
+      db.exec("ALTER TABLE AppSettings ADD COLUMN selectionTranslationModelId TEXT NOT NULL DEFAULT ''");
+  })();
+}
+
 /** Databases created before the EPUB hard text-color override existed lack
  *  `textHardOverride` on `ReaderSettings`. Adds it defaulting to off (0);
  *  existing books keep their saved colors. */
@@ -851,6 +872,20 @@ function resetOpenWithAddDefaults(db: Database.Database): void {
       "UPDATE AppSettings SET openWithAddPdf = 0, openWithAddEpub = 0, openWithAddMarkdown = 0",
     );
     db.pragma("user_version = 1");
+  })();
+}
+
+/** The first build that shipped selection translation stored `'ai'` as the
+ *  provider default, so every database that ran it holds `'ai'` — even when
+ *  the reader never touched the setting. Google Translate is now the default;
+ *  reset those rows once (marked via `user_version`), and keep any choice the
+ *  reader makes afterwards. */
+function resetSelectionTranslationProviderDefault(db: Database.Database): void {
+  const version = db.pragma("user_version", { simple: true }) as number;
+  if (version >= 2) return;
+  db.transaction(() => {
+    db.exec("UPDATE AppSettings SET selectionTranslationProvider = 'google'");
+    db.pragma("user_version = 2");
   })();
 }
 

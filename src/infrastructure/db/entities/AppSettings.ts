@@ -1,3 +1,5 @@
+import type { SelectionTranslationProvider } from "../../../shared/selectionTranslation.ts";
+
 /** Row of the `AppSettings` table. */
 export interface AppSettingsEntity {
   theme: string;
@@ -13,4 +15,8 @@ export interface AppSettingsEntity {
   openWithAddEpub: boolean;
   /** Same switch for Markdown files. */
   openWithAddMarkdown: boolean;
+  /** Provider used by the selection-translation circle in the readers. */
+  selectionTranslationProvider: SelectionTranslationProvider;
+  /** Saved AI model used when the provider is AI; empty = the app default. */
+  selectionTranslationModelId: string;
 }

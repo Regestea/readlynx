@@ -23,6 +23,7 @@ import type { ReadingStateInput } from "./infrastructure/db/repositories";
 import type { ReaderSettingsInput } from "./infrastructure/db/repositories";
 import type { TranslationEntity, TranslationMethod } from "./infrastructure/db/entities";
 import type { UpdateCheckResult, UpdateInstallResult, UpdateProgress } from "./shared/updater";
+import type { SelectionTranslationProvider } from "./shared/selectionTranslation";
 
 export {};
 
@@ -158,6 +159,10 @@ declare global {
           openWithAddPdf?: boolean;
           openWithAddEpub?: boolean;
           openWithAddMarkdown?: boolean;
+          /** Provider for the reader's selection-translation circle. */
+          selectionTranslationProvider?: SelectionTranslationProvider;
+          /** Saved AI model used when the provider is AI (empty = app default). */
+          selectionTranslationModelId?: string;
         }): Promise<AppSettingsEntity | null>;
         listAiModels(): Promise<AiModel[]>;
         createAiModel(model: AiModel): Promise<boolean>;
@@ -255,6 +260,11 @@ declare global {
         onRateLimitRetry(
           callback: (data: { attempt: number }) => void,
         ): () => void;
+      };
+      translate: {
+        /** Free Google Translate web endpoint. Runs in the main process so
+         *  CORS and browser preflights never apply. */
+        google(payload: { text: string; targetLang: string }): Promise<{ text: string }>;
       };
       systemFonts: {
         /** All font families installed on the OS (queried from the main

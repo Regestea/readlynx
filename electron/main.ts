@@ -13,6 +13,7 @@ import { registerFsIpc } from "./ipc/fs.ts";
 import { registerOcrIpc, terminateOcrWorker } from "./ipc/ocr.ts";
 import { registerPdfExportIpc } from "./ipc/pdfExport.ts";
 import { registerSystemFontsIpc } from "./ipc/systemFonts.ts";
+import { registerTranslateIpc } from "./ipc/translate.ts";
 import { registerUiScaleIpc, registerWindowIpc, watchWindowState } from "./ipc/window.ts";
 import type { WindowContext } from "./ipc/window.ts";
 import { registerUpdaterIpc } from "./ipc/updater.ts";
@@ -337,6 +338,7 @@ app.whenReady().then(() => {
   });
   registerOcrIpc({ getStore });
   registerAiIpc();
+  registerTranslateIpc();
   registerSystemFontsIpc();
   registerClipboardIpc();
   registerUpdaterIpc();

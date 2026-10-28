@@ -47,8 +47,10 @@ export function useAiModelList(): AiModelListState {
       }
     };
     void load();
+    window.addEventListener("readlynx:ai-models-changed", load);
     return () => {
       cancelled = true;
+      window.removeEventListener("readlynx:ai-models-changed", load);
     };
   }, []);
 

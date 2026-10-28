@@ -147,6 +147,11 @@ contextBridge.exposeInMainWorld("readlynx", {
       return () => ipcRenderer.removeListener("ai:rate-limit-retry", listener);
     },
   },
+  translate: {
+    /** Free Google Translate web endpoint (no API key). Runs in the main
+     *  process so the renderer never hits Google directly (no CORS). */
+    google: (payload) => ipcRenderer.invoke("translate:google", payload),
+  },
   systemFonts: {
     list: () => ipcRenderer.invoke("fonts:list"),
   },

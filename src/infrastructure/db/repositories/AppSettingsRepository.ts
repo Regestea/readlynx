@@ -1,5 +1,6 @@
 import type Database from "better-sqlite3";
 import type { AppSettingsEntity } from "../entities/index.ts";
+import type { SelectionTranslationProvider } from "../../../shared/selectionTranslation.ts";
 import { UI_SCALE_DEFAULT } from "../../../shared/uiScale.ts";
 
 /** Partial patch over the single-row `AppSettings` table; missing fields
@@ -12,6 +13,8 @@ export interface AppSettingsInput {
   openWithAddPdf?: boolean;
   openWithAddEpub?: boolean;
   openWithAddMarkdown?: boolean;
+  selectionTranslationProvider?: SelectionTranslationProvider;
+  selectionTranslationModelId?: string;
 }
 
 interface AppSettingsRow {
@@ -24,6 +27,16 @@ interface AppSettingsRow {
   openWithAddPdf?: number | null;
   openWithAddEpub?: number | null;
   openWithAddMarkdown?: number | null;
+  /** Missing on rows written before the column existed; `get` supplies the
+   *  default instead of forcing every SELECT to know it. */
+  selectionTranslationProvider?: string | null;
+  selectionTranslationModelId?: string | null;
+}
+
+/** Normalizes a stored provider value, falling back to Google Translate for
+ *  legacy or unknown rows (the app-wide default). */
+function toProvider(value: string | null | undefined): SelectionTranslationProvider {
+  return value === "ai" ? "ai" : "google";
 }
 
 /** SQLite `0`/`1` → boolean, treating `NULL` (legacy row) as "off". */
@@ -42,7 +55,9 @@ export class AppSettingsRepository {
   get(): AppSettingsEntity | undefined {
     const row = this.db
       .prepare(
-        "SELECT theme, chatZoom, uiScale, openWithAddPdf, openWithAddEpub, openWithAddMarkdown FROM AppSettings LIMIT 1",
+        `SELECT theme, chatZoom, uiScale, openWithAddPdf, openWithAddEpub, openWithAddMarkdown,
+                selectionTranslationProvider, selectionTranslationModelId
+         FROM AppSettings LIMIT 1`,
       )
       .get() as AppSettingsRow | undefined;
     if (!row) return undefined;
@@ -53,6 +68,8 @@ export class AppSettingsRepository {
       openWithAddPdf: toFlag(row.openWithAddPdf),
       openWithAddEpub: toFlag(row.openWithAddEpub),
       openWithAddMarkdown: toFlag(row.openWithAddMarkdown),
+      selectionTranslationProvider: toProvider(row.selectionTranslationProvider),
+      selectionTranslationModelId: row.selectionTranslationModelId ?? "",
     };
   }
 
@@ -60,16 +77,21 @@ export class AppSettingsRepository {
   update(patch: AppSettingsInput): void {
     this.db
       .prepare(
-        `INSERT INTO AppSettings (rowid, theme, chatZoom, uiScale, openWithAddPdf, openWithAddEpub, openWithAddMarkdown)
+        `INSERT INTO AppSettings (rowid, theme, chatZoom, uiScale, openWithAddPdf, openWithAddEpub, openWithAddMarkdown, selectionTranslationProvider, selectionTranslationModelId)
          VALUES (1, COALESCE(@theme, 'light'), COALESCE(@chatZoom, 100), COALESCE(@uiScale, ${UI_SCALE_DEFAULT}),
-                 COALESCE(@openWithAddPdf, 0), COALESCE(@openWithAddEpub, 0), COALESCE(@openWithAddMarkdown, 0))
+                 COALESCE(@openWithAddPdf, 0), COALESCE(@openWithAddEpub, 0), COALESCE(@openWithAddMarkdown, 0),
+                 COALESCE(@selectionTranslationProvider, 'google'), COALESCE(@selectionTranslationModelId, ''))
          ON CONFLICT(rowid) DO UPDATE SET
            theme              = COALESCE(@theme,             AppSettings.theme),
            chatZoom           = COALESCE(@chatZoom,          AppSettings.chatZoom),
            uiScale            = COALESCE(@uiScale,           AppSettings.uiScale),
            openWithAddPdf     = COALESCE(@openWithAddPdf,    AppSettings.openWithAddPdf),
            openWithAddEpub    = COALESCE(@openWithAddEpub,   AppSettings.openWithAddEpub),
-           openWithAddMarkdown = COALESCE(@openWithAddMarkdown, AppSettings.openWithAddMarkdown)`,
+           openWithAddMarkdown = COALESCE(@openWithAddMarkdown, AppSettings.openWithAddMarkdown),
+           selectionTranslationProvider =
+             COALESCE(@selectionTranslationProvider, AppSettings.selectionTranslationProvider),
+           selectionTranslationModelId =
+             COALESCE(@selectionTranslationModelId, AppSettings.selectionTranslationModelId)`,
       )
       .run({
         theme: patch.theme ?? null,
@@ -79,6 +101,8 @@ export class AppSettingsRepository {
         openWithAddEpub: patch.openWithAddEpub === undefined ? null : patch.openWithAddEpub ? 1 : 0,
         openWithAddMarkdown:
           patch.openWithAddMarkdown === undefined ? null : patch.openWithAddMarkdown ? 1 : 0,
+        selectionTranslationProvider: patch.selectionTranslationProvider ?? null,
+        selectionTranslationModelId: patch.selectionTranslationModelId ?? null,
       });
   }
 }

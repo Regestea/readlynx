@@ -8,7 +8,7 @@ import { seedDatabase } from "../../src/infrastructure/db/seed/seedDatabase.ts";
 import type { CleanupEventType, CreateReadingBookPayload, CreateTranslatedBookPayload, SaveDocumentPayload, UpdateBookPayload } from "../../src/infrastructure/db/entities/types.ts";
 import type { AiModel, CustomInstructionEntity, TranslationEntity, TranslationMethod } from "../../src/infrastructure/db/entities/index.ts";
 import type { ReaderViewer } from "../../src/infrastructure/db/entities/index.ts";
-import type { ReadingStateInput, ReaderSettingsInput } from "../../src/infrastructure/db/repositories/index.ts";
+import type { AppSettingsInput, ReadingStateInput, ReaderSettingsInput } from "../../src/infrastructure/db/repositories/index.ts";
 import type { BookListItem } from "../../src/infrastructure/db/entities/types.ts";
 import {
   AiModelRepository,
@@ -401,7 +401,7 @@ const handlers: Record<string, (payload: unknown) => unknown> = {
   },
   "get-app-settings": () => appSettings.get() ?? null,
   "update-app-settings": (payload) => {
-    appSettings.update(payload as { theme?: string; chatZoom?: number });
+    appSettings.update(payload as AppSettingsInput);
     return appSettings.get() ?? null;
   },
   "ai-models-list": () => aiModels.list(),

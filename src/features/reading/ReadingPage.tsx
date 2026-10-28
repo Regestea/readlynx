@@ -9,8 +9,9 @@ import { Markdown } from "../../components/markdown/Markdown";
 import { AiChatPanel } from "../../components/aiChat/AiChatPanel";
 import type { BookSourceType } from "../../infrastructure/db/entities";
 import { TranslationSettingsPanel, TranslationToggle } from "./translation/TranslationPanel";
+import { useSelectionTranslation } from "./translation/useSelectionTranslation";
 import { useTranslation } from "./translation/useTranslation";
-import { ocrLanguagesLabel } from "./translation/languages";
+import { languageLabel, NO_LANGUAGE, ocrLanguagesLabel } from "./translation/languages";
 import {
   epubUnitKey,
   mdUnitKey,
@@ -166,6 +167,18 @@ export function ReadingPage({ bookId, tabId, onBack, active = true, onTitleChang
   /** Saved AI models, so the "copy with AI" menu can offer a picker; the
    *  default is the pick when the reader does not choose one. */
   const aiModels = useAiModelList();
+
+  /** One-off translation of the current text selection. The provider is
+   *  chosen in Settings; the output language is the toolbar's target. */
+  const selectionTranslation = useSelectionTranslation({
+    models: translation.models,
+    targetLang: translation.settings.targetLang,
+  });
+  const selectionTranslationLabel = languageLabel(translation.settings.targetLang);
+  const onTranslateSelection =
+    translation.settings.targetLang === NO_LANGUAGE
+      ? undefined
+      : selectionTranslation.translateSelection;
 
   /** Chapter list for the Manage translations dialog, read from the viewer's
    *  parsed table of contents only when the dialog is opened. */
@@ -1136,6 +1149,8 @@ export function ReadingPage({ bookId, tabId, onBack, active = true, onTitleChang
                     onActivity();
                   }}
                   onAskAi={setAiContext}
+                  onTranslateSelection={onTranslateSelection}
+                  selectionTranslationLabel={selectionTranslationLabel}
                 />
               ) : markdownSourceError ? (
                 <div className={styles.state} role="alert">
@@ -1154,6 +1169,8 @@ export function ReadingPage({ bookId, tabId, onBack, active = true, onTitleChang
                   settingsBookId={bookId}
                   className={styles.translationBody}
                   onAskAi={setAiContext}
+                  onTranslateSelection={onTranslateSelection}
+                  selectionTranslationLabel={selectionTranslationLabel}
                   scrollHostRef={originalMarkdownScrollRef}
                 />
               )}
@@ -1163,7 +1180,7 @@ export function ReadingPage({ bookId, tabId, onBack, active = true, onTitleChang
               <div className={styles.translationStage}>
                 {translation.markdown ? (
                   <>
-                    <Markdown content={translation.markdown} toolbar rawHtml={false} settingsBookId={bookId} className={styles.translationBody} onAskAi={setAiContext} toolbarExtra={toolbarExtra} scrollHostRef={translationScrollRef} />
+                    <Markdown content={translation.markdown} toolbar rawHtml={false} settingsBookId={bookId} className={styles.translationBody} onAskAi={setAiContext} onTranslateSelection={onTranslateSelection} selectionTranslationLabel={selectionTranslationLabel} toolbarExtra={toolbarExtra} scrollHostRef={translationScrollRef} />
                     {(translation.markdownLoading || translation.imagesPending) && (
                       <div className={styles.markdownLoading} role="status" aria-label="Loading translation">
                         <Loader2 size={20} strokeWidth={2} className={styles.spinner} />

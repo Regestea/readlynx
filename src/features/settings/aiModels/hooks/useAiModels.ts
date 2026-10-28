@@ -5,6 +5,12 @@ function getDb() {
   return window.readlynx?.db;
 }
 
+/** Tells other mounted model pickers (chat, selection translation) that the
+ *  saved list changed, so their selects do not keep a stale copy. */
+function notifyModelsChanged() {
+  window.dispatchEvent(new Event("readlynx:ai-models-changed"));
+}
+
 /** CRUD over the saved AI models, backed by the SQLite `AiModels` table. */
 export function useAiModels() {
   const [models, setModels] = useState<AiModel[]>([]);
@@ -37,16 +43,19 @@ export function useAiModels() {
   const addModel = async (model: AiModel) => {
     await getDb()?.createAiModel(model);
     setModels((prev) => [...prev, { ...model, IsDefault: prev.length === 0 || model.IsDefault }]);
+    notifyModelsChanged();
   };
 
   const updateModel = async (model: AiModel) => {
     await getDb()?.updateAiModel(model);
     setModels((prev) => prev.map((m) => (m.Id === model.Id ? model : m)));
+    notifyModelsChanged();
   };
 
   const deleteModel = async (id: string) => {
     await getDb()?.deleteAiModel(id);
     setModels((prev) => prev.filter((m) => m.Id !== id));
+    notifyModelsChanged();
   };
 
   /** Marks a model as the default (clearing the flag on the others). */
@@ -54,6 +63,7 @@ export function useAiModels() {
     const ok = await getDb()?.setDefaultAiModel(id);
     if (ok) {
       setModels((prev) => prev.map((m) => ({ ...m, IsDefault: m.Id === id })));
+      notifyModelsChanged();
     }
   };
 

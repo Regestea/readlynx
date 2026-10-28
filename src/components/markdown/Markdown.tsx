@@ -17,8 +17,13 @@ import tableStyles from "../ui/Table/Table.module.css";
 import { FontFamilySelect } from "../FontFamilySelect/FontFamilySelect";
 import { ColorPickerPanel } from "../ui/ColorPickerPanel/ColorPickerPanel";
 import { AiSelectionBubble } from "../AiSelectionBubble/AiSelectionBubble";
+import {
+  SelectionTranslationAction,
+  SelectionTranslationPanel,
+} from "../SelectionTranslation/SelectionTranslation";
 import { useReaderSettings } from "../../hooks/useReaderSettings.ts";
-import { getSelectionEndRect } from "../../shared/selection";
+import type { SelectionTranslationResult } from "../../shared/selectionTranslation";
+import { getSelectionEndRect, getSelectionStartRect } from "../../shared/selection";
 import { enterReaderFullscreen, exitReaderFullscreen, popoverOpen } from "../../shared/readerFullscreen";
 import { getTextDir, textAlignForDir } from "../../shared/document/direction";
 import { MermaidDiagram } from "./MermaidDiagram";
@@ -447,6 +452,11 @@ interface MarkdownProps {
   /** When provided, a floating "Ask AI" bubble appears next to text
    *  selections inside the book and hands the selected text to the host. */
   onAskAi?: (text: string) => void;
+  /** When provided, a translation circle appears at the start of a text
+   *  selection and opens a small result popover. */
+  onTranslateSelection?: (text: string) => Promise<SelectionTranslationResult>;
+  /** Human-readable output language shown in the translation popover. */
+  selectionTranslationLabel?: string;
   /** Extra controls rendered at the start of the reader toolbar — e.g. the
    *  reading view's page/chapter indicator and prev/next navigation. */
   toolbarExtra?: ReactNode;
@@ -462,6 +472,8 @@ export function Markdown({
   rawHtml = true,
   settingsBookId,
   onAskAi,
+  onTranslateSelection,
+  selectionTranslationLabel = "",
   toolbarExtra,
   scrollHostRef,
 }: MarkdownProps) {
@@ -493,14 +505,28 @@ export function Markdown({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [spacerHeight, setSpacerHeight] = useState(0);
   const [aiSelection, setAiSelection] = useState<{ x: number; y: number; text: string } | null>(null);
+  /** Circle at the start of the selection (opens the translation popover). */
+  const [translateSelection, setTranslateSelection] = useState<{
+    x: number;
+    y: number;
+    text: string;
+  } | null>(null);
+  /** Popover state lives apart from the selection bubble: selecting/copying
+   *  text inside the popover must not unmount it. */
+  const [translationPanel, setTranslationPanel] = useState<{
+    x: number;
+    y: number;
+    text: string;
+  } | null>(null);
   const hostRef = useRef<HTMLDivElement>(null);
   const colorsWrapRef = useRef<HTMLDivElement>(null);
 
   /** Shows the floating "Ask AI" bubble next to the end of a text selection
-   *  inside this document — only after the mouse button is released, never
-   *  while dragging. Hides it when the selection is cleared or moves outside. */
+   *  and the translation circle next to its start — only after the mouse
+   *  button is released, never while dragging. Hides them when the selection
+   *  is cleared or moves outside. */
   useEffect(() => {
-    if (!onAskAi) return;
+    if (!onAskAi && !onTranslateSelection) return;
     const host = hostRef.current;
     let selecting = false;
     let showTimer: number | undefined;
@@ -510,11 +536,13 @@ export function Markdown({
       const text = sel?.toString().trim() ?? "";
       if (!sel || sel.isCollapsed || !text || text.length < 2) {
         setAiSelection(null);
+        setTranslateSelection(null);
         return null;
       }
       const anchor = sel.anchorNode;
       if (!anchor || !host?.contains(anchor)) {
         setAiSelection(null);
+        setTranslateSelection(null);
         return null;
       }
       return sel;
@@ -523,26 +551,51 @@ export function Markdown({
     const compute = () => {
       const sel = getSelectionInHost();
       if (!sel) return;
-      // Anchor the bubble to the end of the selection's last line.
-      const endRect = getSelectionEndRect(sel);
-      if (!endRect) {
-        setAiSelection(null);
-        return;
+      const text = sel.toString().trim();
+
+      // The AI bubble anchors to the end of the selection's last line.
+      if (onAskAi) {
+        const endRect = getSelectionEndRect(sel);
+        if (!endRect) {
+          setAiSelection(null);
+        } else {
+          const bubbleWidth = 48;
+          const rightOfEnd = endRect.right + 8;
+          const x =
+            rightOfEnd + bubbleWidth <= window.innerWidth - 8
+              ? rightOfEnd
+              : Math.max(8, endRect.left - bubbleWidth - 8);
+          const y = Math.max(8, Math.min(endRect.top - 20, window.innerHeight - bubbleWidth));
+          setAiSelection({ x, y, text });
+        }
       }
-      const bubbleWidth = 48;
-      const rightOfEnd = endRect.right + 8;
-      const x =
-        rightOfEnd + bubbleWidth <= window.innerWidth - 8
-          ? rightOfEnd
-          : Math.max(8, endRect.left - bubbleWidth - 8);
-      const y = Math.max(8, Math.min(endRect.top - 20, window.innerHeight - bubbleWidth));
-      setAiSelection({ x, y, text: sel.toString().trim() });
+
+      // The translation circle sits just before the first character; it flips
+      // to the right of that character at the viewport edge.
+      if (onTranslateSelection) {
+        const startRect = getSelectionStartRect(sel);
+        if (!startRect) {
+          setTranslateSelection(null);
+        } else {
+          const bubbleWidth = 48;
+          const startLeft = startRect.left - bubbleWidth;
+          const x = Math.min(
+            Math.max(8, startLeft >= 8 ? startLeft : startRect.right + 8),
+            window.innerWidth - bubbleWidth,
+          );
+          const y = Math.max(8, Math.min(startRect.top - 20, window.innerHeight - bubbleWidth));
+          setTranslateSelection({ x, y, text });
+        }
+      }
     };
 
     const onDown = (event: MouseEvent) => {
       const target = event.target as Node;
       selecting = Boolean(host && target && host.contains(target));
-      if (selecting) setAiSelection(null);
+      if (selecting) {
+        setAiSelection(null);
+        setTranslateSelection(null);
+      }
     };
     const onUp = () => {
       if (!selecting) return;
@@ -560,6 +613,7 @@ export function Markdown({
     /** Right-clicking inside the document with no text selection hands the
      *  whole document to the AI chat instead of opening the native menu. */
     const onContextMenu = (event: MouseEvent) => {
+      if (!onAskAi) return;
       const target = event.target as Node;
       if (!host || !target || !host.contains(target)) return;
       const sel = window.getSelection();
@@ -579,7 +633,7 @@ export function Markdown({
       document.removeEventListener("contextmenu", onContextMenu);
       if (showTimer) window.clearTimeout(showTimer);
     };
-  }, [onAskAi, content]);
+  }, [onAskAi, onTranslateSelection, content]);
 
   const exitFullscreen = useCallback(() => {
     setIsFullscreen(false);
@@ -843,6 +897,24 @@ export function Markdown({
           y={aiSelection.y}
           text={aiSelection.text}
           onAsk={onAskAi}
+        />
+      )}
+      {translateSelection && onTranslateSelection && (
+        <SelectionTranslationAction
+          x={translateSelection.x}
+          y={translateSelection.y}
+          label={selectionTranslationLabel}
+          onOpen={() => setTranslationPanel(translateSelection)}
+        />
+      )}
+      {translationPanel && onTranslateSelection && (
+        <SelectionTranslationPanel
+          x={translationPanel.x}
+          y={translationPanel.y}
+          text={translationPanel.text}
+          label={selectionTranslationLabel}
+          onTranslate={onTranslateSelection}
+          onClose={() => setTranslationPanel(null)}
         />
       )}
     </>
