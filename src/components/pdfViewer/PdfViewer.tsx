@@ -65,6 +65,22 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
   import.meta.url,
 ).toString();
 
+/** Runtime assets pdf.js fetches itself instead of bundling them: the wasm
+ *  decoders (JPEG 2000 / JBIG2), CMaps, the standard fonts, and ICC profiles.
+ *  Vite mirrors the pdfjs-dist folders into `public/pdfjs/` (see
+ *  vite.config.ts), so these resolve next to the page in dev and inside the
+ *  packaged `dist`. `wasmUrl` matters most: without it pdf.js warns and
+ *  *skips* every JPX image, leaving the page with text and holes where the
+ *  figures should be. */
+const pdfjsAssetUrl = (dir: string) => new URL(`pdfjs/${dir}/`, document.baseURI).toString();
+const PDFJS_RUNTIME_ASSETS = {
+  cMapUrl: pdfjsAssetUrl("cmaps"),
+  cMapPacked: true,
+  standardFontDataUrl: pdfjsAssetUrl("standard_fonts"),
+  wasmUrl: pdfjsAssetUrl("wasm"),
+  iccUrl: pdfjsAssetUrl("iccs"),
+};
+
 /** Imperative handle for hosts that need to peek at the rendered page (e.g.
  *  reading-mode translation captures the canvas for OCR / AI vision). */
 export interface PdfViewerHandle {
@@ -922,7 +938,7 @@ function PdfViewerInner({
         }
         if (cancelled) return;
 
-        const loadTask = pdfjsLib.getDocument({ data });
+        const loadTask = pdfjsLib.getDocument({ data, ...PDFJS_RUNTIME_ASSETS });
         loadTaskRef.current = loadTask;
         const nextDoc = await loadTask.promise;
         if (cancelled) {
