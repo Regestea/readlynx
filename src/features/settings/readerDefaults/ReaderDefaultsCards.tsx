@@ -1,4 +1,4 @@
-import { BookOpen, FileText, ScrollText } from "lucide-react";
+import { BookOpen, FileText, ScrollText, FileCode } from "lucide-react";
 import { Card } from "../../../components/ui/Card/Card";
 import { Button } from "../../../components/ui/Button/Button";
 import { Checkbox } from "../../../components/ui/Checkbox/Checkbox";
@@ -213,6 +213,118 @@ export function TranslationDefaultsCard() {
       <div className={styles.footer}>
         <Button variant="ghost" onClick={defaults.reset}>
           Reset translation defaults
+        </Button>
+      </div>
+    </Card>
+  );
+}
+
+/** Global defaults for the original Markdown source files (books whose
+ *  source type is Markdown). Shares the same viewer key as translations,
+ *  so these settings also apply to the translated-text view. */
+export function MarkdownDefaultsCard() {
+  const defaults = useReaderDefaults("markdown");
+
+  return (
+    <Card className={styles.section}>
+      <div className={styles.sectionHead}>
+        <div className={styles.sectionTitleRow}>
+          <span className={styles.sectionIcon} aria-hidden="true">
+            <FileCode size={16} strokeWidth={1.8} />
+          </span>
+          <h2 className={styles.sectionTitle}>Markdown defaults</h2>
+        </div>
+        <p className={styles.sectionDesc}>
+          Starting zoom, font and colors for newly added Markdown books. Changing a book inside its
+          reader keeps winning over these defaults. Note: these settings are shared with the
+          translation view since both use the Markdown reader.
+        </p>
+      </div>
+
+      <div className={styles.grid}>
+        <div className={styles.field}>
+          <span className={styles.fieldLabel}>Font family</span>
+          <span className={styles.fieldHint}>Empty = the reader default font.</span>
+          <FontFamilySelect
+            value={defaults.fontFamily}
+            onSelect={(value) => defaults.setValues({ fontFamily: value })}
+            defaultLabel="Reader font"
+          />
+        </div>
+
+        <div className={styles.field}>
+          <span className={styles.fieldLabel}>Zoom</span>
+          <span className={styles.fieldHint}>Text size for new Markdown books.</span>
+          <ZoomField
+            value={defaults.zoomPct}
+            onChange={(zoomPct) => defaults.setValues({ zoomPct })}
+          />
+        </div>
+      </div>
+
+      <div className={styles.grid}>
+        <DefaultColorField
+          label="Background color"
+          hint="Empty = follow the app theme."
+          value={defaults.customBg}
+          onChange={(customBg) => defaults.setValues({ customBg })}
+        />
+        <DefaultColorField
+          label="Text color"
+          hint="Empty = follow the app theme."
+          value={defaults.customText}
+          onChange={(customText) => defaults.setValues({ customText })}
+        />
+        <DefaultColorField
+          label="Code block background"
+          hint="Empty = follow the theme card."
+          value={defaults.codeBackground}
+          onChange={(codeBackground) => defaults.setValues({ codeBackground })}
+        />
+        <DefaultColorField
+          label="Diagram background"
+          hint="Empty = follow the theme card."
+          value={defaults.diagramBackground}
+          onChange={(diagramBackground) => defaults.setValues({ diagramBackground })}
+        />
+      </div>
+
+      <div className={styles.subsection}>
+        <h3 className={styles.subsectionTitle}>Code blocks & diagrams</h3>
+        <p className={styles.subsectionDesc}>
+          Card backgrounds for fenced code blocks and Mermaid diagrams.
+          Empty follows the theme card. Per-book changes in the reader toolbar
+          keep winning over these defaults.
+        </p>
+
+        <div className={styles.preview}>
+          <div className={styles.previewCard}>
+            <span className={styles.previewLabel}>Code preview</span>
+            <div className={styles.previewBody}>
+              <Code
+                code={CODE_PREVIEW}
+                language="typescript"
+                themeOverride={defaults.codeTheme}
+                background={defaults.codeBackground}
+              />
+            </div>
+          </div>
+          <div className={styles.previewCard}>
+            <span className={styles.previewLabel}>Diagram preview</span>
+            <div className={styles.previewBody}>
+              <MermaidDiagram
+                chart={DIAGRAM_PREVIEW}
+                themeOverride={defaults.diagramTheme}
+                background={defaults.diagramBackground}
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className={styles.footer}>
+        <Button variant="ghost" onClick={defaults.reset}>
+          Reset Markdown defaults
         </Button>
       </div>
     </Card>

@@ -4,6 +4,7 @@ import { FileImportCard } from "./fileImport/FileImportCard.tsx";
 import { SelectionTranslationCard } from "./selectionTranslation/SelectionTranslationCard.tsx";
 import {
   EpubDefaultsCard,
+  MarkdownDefaultsCard,
   PdfDefaultsCard,
   TranslationDefaultsCard,
 } from "./readerDefaults/ReaderDefaultsCards.tsx";
@@ -27,6 +28,7 @@ export function SettingsPage() {
       <AiModelsSection />
       <FileImportCard />
       <EpubDefaultsCard />
+      <MarkdownDefaultsCard />
       <TranslationDefaultsCard />
       <PdfDefaultsCard />
       <UpdatesSection />
